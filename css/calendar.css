@@ -1,0 +1,23 @@
+.calendar-card { overflow: hidden; }
+.calendar-head { display: grid; grid-template-columns: 72px repeat(5, minmax(145px,1fr)); border-bottom: 1px solid var(--border); background: #fbfcfd; }
+.calendar-head > div { padding: 12px 9px; border-left: 1px solid var(--border); text-align: center; font-size: .82rem; font-weight: 760; }
+.calendar-head > div:first-child { border-left: 0; }
+.calendar-scroll { overflow: auto; max-height: calc(100vh - 260px); min-height: 520px; }
+.calendar-body { display: grid; grid-template-columns: 72px repeat(5, minmax(145px,1fr)); min-width: 850px; position: relative; }
+.time-ruler { position: relative; background: #fbfcfd; border-right: 1px solid var(--border); }
+.time-label { position: absolute; left: 8px; transform: translateY(-50%); font-size: .72rem; color: var(--muted); }
+.day-column { position: relative; border-right: 1px solid var(--border); background-image: linear-gradient(to bottom, rgba(197,208,217,.62) 1px, transparent 1px), linear-gradient(to bottom, rgba(219,226,232,.45) 1px, transparent 1px); background-size: 100% 60px, 100% 30px; }
+.day-column:last-child { border-right: 0; }
+.session-block { position: absolute; left: 5px; right: 5px; border-radius: 8px; padding: 6px 7px; border: 1px solid transparent; overflow: hidden; font-size: .76rem; line-height: 1.23; box-shadow: 0 2px 5px rgba(18,40,54,.10); text-align: left; }
+.session-block:hover { filter: brightness(.98); z-index: 5; }
+.session-block.pt { background: var(--pt-soft); border-color: #b7d8e4; color: #123f53; }
+.session-block.al { background: var(--al-soft); border-color: #d1c4ec; color: #47396d; }
+.session-block.has-conflict { box-shadow: inset 4px 0 0 var(--danger), 0 2px 6px rgba(18,40,54,.12); }
+.session-block.is-dimmed { opacity: .28; }
+.session-block strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-block small { color: inherit; opacity: .88; display: block; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.calendar-legend { display: flex; gap: 14px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8rem; }
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 5px; }
+.legend-dot.pt { background: var(--pt); }
+.legend-dot.al { background: var(--al); }
+.legend-conflict { width: 4px; height: 12px; background: var(--danger); display: inline-block; margin-right: 5px; border-radius: 2px; }

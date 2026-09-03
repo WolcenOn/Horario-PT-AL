@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Horario PT / AL</title>
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/layout.css">
+  <link rel="stylesheet" href="./css/calendar.css">
+</head>
+<body>
+  <a class="skip-link" href="#mainContent">Saltar al contenido</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegación principal">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">PA</div>
+        <div>
+          <strong>Horario PT / AL</strong>
+          <small>Planificación educativa</small>
+        </div>
+      </div>
+      <nav class="nav-list">
+        <button class="nav-item is-active" data-view="calendar" type="button">📅 <span>Horario semanal</span></button>
+        <button class="nav-item" data-view="students" type="button">👤 <span>Alumnos</span></button>
+        <button class="nav-item" data-view="professionals" type="button">🧑‍🏫 <span>Profesionales</span></button>
+        <button class="nav-item" data-view="groups" type="button">👥 <span>Grupos</span></button>
+        <button class="nav-item" data-view="sessions" type="button">🕒 <span>Sesiones</span></button>
+        <button class="nav-item" data-view="alerts" type="button">⚠️ <span>Conflictos</span></button>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="resetDemoBtn" class="button button-ghost button-full" type="button">Restaurar datos de ejemplo</button>
+        <small>Los datos se guardan en este navegador.</small>
+      </div>
+    </aside>
+
+    <main id="mainContent" class="main-content" tabindex="-1">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Organización semanal</p>
+          <h1 id="pageTitle">Horario semanal</h1>
+        </div>
+        <div class="topbar-actions">
+          <div class="service-filter" role="group" aria-label="Filtrar por servicio">
+            <button type="button" data-service-filter="ALL" class="is-active">Todos</button>
+            <button type="button" data-service-filter="PT">PT</button>
+            <button type="button" data-service-filter="AL">AL</button>
+          </div>
+          <button id="primaryActionBtn" class="button button-primary" type="button">+ Nueva sesión</button>
+        </div>
+      </header>
+
+      <section id="summaryStrip" class="summary-strip" aria-label="Indicadores principales"></section>
+      <section id="viewRoot" class="view-root"></section>
+    </main>
+  </div>
+
+  <div id="modalRoot"></div>
+  <div id="toastRoot" class="toast-root" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
