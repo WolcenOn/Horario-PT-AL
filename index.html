@@ -11,11 +11,11 @@
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Saltar al contenido</a>
-  <div class="app-shell">
-    <aside class="sidebar" aria-label="Navegación principal">
+  <div id="appShell" class="app-shell">
+    <aside id="sidebar" class="sidebar" aria-label="Navegación principal">
       <div class="brand">
         <div class="brand-mark" aria-hidden="true">PA</div>
-        <div>
+        <div class="brand-copy">
           <strong>Horario PT / AL</strong>
           <small>Planificación educativa</small>
         </div>
@@ -29,6 +29,11 @@
         <button class="nav-item" data-view="alerts" type="button">⚠️ <span>Conflictos</span></button>
       </nav>
       <div class="sidebar-footer">
+        <div class="sidebar-data-actions">
+          <button id="exportDataBtn" class="button button-ghost button-full" type="button">⬇ Exportar / compartir</button>
+          <button id="importDataBtn" class="button button-ghost button-full" type="button">⬆ Importar horario</button>
+          <input id="importDataInput" class="hidden" type="file" accept="application/json,.json">
+        </div>
         <button id="resetDemoBtn" class="button button-ghost button-full" type="button">Restaurar datos de ejemplo</button>
         <small>Los datos se guardan en este navegador.</small>
       </div>
@@ -36,9 +41,12 @@
 
     <main id="mainContent" class="main-content" tabindex="-1">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Organización semanal</p>
-          <h1 id="pageTitle">Horario semanal</h1>
+        <div class="topbar-title">
+          <button id="sidebarToggleBtn" class="icon-button sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Ocultar menú lateral">☰</button>
+          <div>
+            <p class="eyebrow">Organización semanal</p>
+            <h1 id="pageTitle">Horario semanal</h1>
+          </div>
         </div>
         <div class="topbar-actions">
           <div class="service-filter" role="group" aria-label="Filtrar por servicio">
