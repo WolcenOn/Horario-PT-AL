@@ -30,6 +30,19 @@
 .metric strong { font-size: 1.06rem; }
 .metric.is-danger { border-color: #e5b9bb; }
 .metric.is-warning { border-color: #ead9a2; }
+.pending-overview { grid-column: 1 / -1; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 10px 12px 11px; min-width: 0; }
+.pending-overview-heading { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 8px; }
+.pending-overview-heading strong { display: block; font-size: .86rem; }
+.pending-overview-heading small { display: block; margin-top: 2px; font-size: .72rem; }
+.pending-student-list { display: flex; gap: 7px; overflow-x: auto; padding: 1px 1px 4px; scrollbar-width: thin; }
+.pending-student-chip { flex: 0 0 auto; min-width: 174px; max-width: 250px; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-muted); }
+.pending-student-name { min-width: 0; font-size: .79rem; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pending-values { display: flex; gap: 5px; flex: 0 0 auto; }
+.pending-service { display: inline-flex; gap: 4px; align-items: baseline; padding: 3px 6px; border-radius: 7px; font-size: .7rem; white-space: nowrap; }
+.pending-service.pt { background: var(--pt-soft); color: #154c65; }
+.pending-service.al { background: var(--al-soft); color: #4d4074; }
+.pending-service b { font-size: .67rem; letter-spacing: .02em; }
+.pending-all-complete { padding: 7px 9px; border-radius: 8px; background: var(--success-soft); color: var(--success); font-size: .79rem; font-weight: 700; }
 .view-root { min-height: 480px; }
 
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
@@ -69,4 +82,6 @@
   .service-filter { width: 100%; }
   .service-filter button { flex: 1; }
   .summary-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .pending-overview-heading small { display: none; }
+  .pending-student-chip { min-width: 158px; }
 }
