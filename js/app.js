@@ -10,7 +10,7 @@ import { ensureSeedData, loadDemoData } from './seed.js';
 import { deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, saveGroup, saveProfessional, saveSession, saveStudent } from './repository.js';
 import { put } from './db.js';
 import { downloadSharePackage, importShareFile } from './sharing.js';
-import { formatDuration } from './utils.js';
+import { escapeHtml, formatDuration } from './utils.js';
 import { showToast } from './ui.js';
 
 const viewRoot = document.querySelector('#viewRoot');
@@ -56,11 +56,45 @@ async function refresh({ toast } = {}) {
 
 function renderSummary() {
   const incomplete = [...derived.hoursMap.values()].filter(hours => deriveStudentStatus(hours, derived.conflictStudents.has(hours.studentId)) !== 'Completo').length;
+  const studentMap = new Map(state.students.map(student => [student.id, student]));
+  const pendingStudents = [...derived.hoursMap.values()]
+    .filter(hours => hours.ptPending > 0 || hours.alPending > 0)
+    .map(hours => ({ hours, student: studentMap.get(hours.studentId) }))
+    .filter(item => item.student)
+    .sort((a, b) => {
+      const pendingA = Math.max(0, a.hours.ptPending) + Math.max(0, a.hours.alPending);
+      const pendingB = Math.max(0, b.hours.ptPending) + Math.max(0, b.hours.alPending);
+      return pendingB - pendingA || `${a.student.apellidos || ''} ${a.student.nombre || ''}`.localeCompare(`${b.student.apellidos || ''} ${b.student.nombre || ''}`, 'es');
+    });
+
+  const pendingMarkup = pendingStudents.length
+    ? `<div class="pending-student-list" aria-label="Alumnos con horas pendientes">
+        ${pendingStudents.map(({ student, hours }) => `
+          <div class="pending-student-chip">
+            <span class="pending-student-name">${escapeHtml(`${student.nombre || ''} ${student.apellidos || ''}`.trim())}</span>
+            <span class="pending-values">
+              ${hours.ptPending > 0 ? `<span class="pending-service pt"><b>PT</b> ${formatDuration(hours.ptPending)}</span>` : ''}
+              ${hours.alPending > 0 ? `<span class="pending-service al"><b>AL</b> ${formatDuration(hours.alPending)}</span>` : ''}
+            </span>
+          </div>`).join('')}
+      </div>`
+    : `<div class="pending-all-complete">✓ No hay alumnos con horas PT/AL pendientes.</div>`;
+
   summaryStrip.innerHTML = `
     <div class="metric ${derived.totals.ptPending > 0 ? 'is-warning':''}"><span>PT pendiente</span><strong>${formatSignedPending(derived.totals.ptPending)}</strong></div>
     <div class="metric ${derived.totals.alPending > 0 ? 'is-warning':''}"><span>AL pendiente</span><strong>${formatSignedPending(derived.totals.alPending)}</strong></div>
     <div class="metric ${derived.conflicts.length ? 'is-danger':''}"><span>Conflictos / avisos</span><strong>${derived.conflicts.length}</strong></div>
-    <div class="metric ${incomplete ? 'is-warning':''}"><span>Alumnos no completos</span><strong>${incomplete}</strong></div>`;
+    <div class="metric ${incomplete ? 'is-warning':''}"><span>Alumnos no completos</span><strong>${incomplete}</strong></div>
+    <div class="pending-overview">
+      <div class="pending-overview-heading">
+        <div>
+          <strong>Horas pendientes por alumno</strong>
+          <small>Ordenado por mayor necesidad pendiente. Se actualiza al mover o editar sesiones.</small>
+        </div>
+        <span class="badge ${pendingStudents.length ? 'badge-warning' : 'badge-success'}">${pendingStudents.length} pendiente${pendingStudents.length === 1 ? '' : 's'}</span>
+      </div>
+      ${pendingMarkup}
+    </div>`;
 }
 
 function renderCurrentView() {
