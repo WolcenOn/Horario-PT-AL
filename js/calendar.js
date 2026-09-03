@@ -33,7 +33,8 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, onEditSe
 
       return `<button class="session-block ${group.tipo.toLowerCase()} ${conflictSessionIds.has(session.id) ? 'has-conflict' : ''} ${dimmed ? 'is-dimmed' : ''}" style="top:${top}px;height:${blockHeight}px" data-session-id="${session.id}" type="button" title="Arrastrar para mover · Pulsar para editar ${escapeHtml(group.nombre)}">
         <strong>${conflictSessionIds.has(session.id) ? '⚠ ' : ''}${escapeHtml(group.nombre)}</strong>
-        <small>${session.inicio}–${session.fin} · ${escapeHtml(professional?.nombre || 'Sin profesional')}</small>
+        <small class="session-time">${session.inicio}–${session.fin}</small>
+        <small>${escapeHtml(professional?.nombre || 'Sin profesional')}</small>
         <small>${escapeHtml(students.join(', '))}</small>
         ${session.aula ? `<small>${escapeHtml(session.aula)}</small>` : ''}
       </button>`;
@@ -49,7 +50,7 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, onEditSe
       <span><i class="legend-dot pt"></i>PT</span>
       <span><i class="legend-dot al"></i>AL</span>
       <span><i class="legend-conflict"></i>Conflicto / advertencia</span>
-      <span>Arrastra una sesión para cambiarla de día u hora · ajuste de 15 min.</span>
+      <span>Arrastra una sesión: verás su posición y horario exactos antes de soltar · ajuste de 15 min.</span>
     </div>
   </section>`;
 
@@ -77,12 +78,13 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, onEditSe
       pointerId: event.pointerId,
       block,
       session,
+      duration: sessionEnd - sessionStart,
       startX: event.clientX,
       startY: event.clientY,
-      duration: sessionEnd - sessionStart,
       active: false,
       preview: null,
-      ghost: null
+      previewEl: null,
+      targetColumn: null
     };
     block.setPointerCapture?.(event.pointerId);
   };
@@ -95,13 +97,13 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, onEditSe
     if (!drag.active) startDrag(drag, groupMap);
     event.preventDefault();
     autoScrollCalendar(scroller, event.clientY);
-    positionGhost(drag.ghost, event.clientX, event.clientY);
 
     root.querySelectorAll('.day-column.is-drop-target').forEach(column => column.classList.remove('is-drop-target'));
     const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.day-column');
     if (!target || !root.contains(target)) {
       drag.preview = null;
-      updateGhostTime(drag.ghost, null);
+      drag.targetColumn = null;
+      removeDropPreview(drag);
       return;
     }
 
@@ -117,7 +119,8 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, onEditSe
       inicio: minutesToTime(nextStart),
       fin: minutesToTime(nextEnd)
     };
-    updateGhostTime(drag.ghost, drag.preview);
+    drag.targetColumn = target;
+    renderDropPreview(drag, groupMap, start, nextStart);
   };
 
   root.onpointerup = async event => {
@@ -147,23 +150,32 @@ function startDrag(drag, groupMap) {
   drag.active = true;
   drag.block.classList.add('is-drag-source');
   const group = groupMap.get(drag.session.groupId);
-  const ghost = document.createElement('div');
-  ghost.className = `calendar-drag-ghost ${(group?.tipo || 'PT').toLowerCase()}`;
-  ghost.innerHTML = `<strong>${escapeHtml(group?.nombre || 'Sesión')}</strong><small data-drag-time>${drag.session.inicio}–${drag.session.fin}</small>`;
-  document.body.appendChild(ghost);
-  drag.ghost = ghost;
+  drag.block.setAttribute('aria-label', `Moviendo ${group?.nombre || 'sesión'}`);
 }
 
-function positionGhost(ghost, clientX, clientY) {
-  if (!ghost) return;
-  ghost.style.left = `${Math.min(window.innerWidth - 200, Math.max(8, clientX + 14))}px`;
-  ghost.style.top = `${Math.min(window.innerHeight - 80, Math.max(8, clientY + 14))}px`;
+function renderDropPreview(drag, groupMap, calendarStart, nextStart) {
+  if (!drag.targetColumn || !drag.preview) return;
+  const group = groupMap.get(drag.session.groupId);
+  const top = (nextStart - calendarStart) * CALENDAR_PX_PER_MINUTE;
+  const previewHeight = Math.max(28, drag.duration * CALENDAR_PX_PER_MINUTE);
+
+  if (!drag.previewEl) {
+    drag.previewEl = document.createElement('div');
+    drag.previewEl.className = `calendar-drop-preview ${(group?.tipo || 'PT').toLowerCase()}`;
+  }
+
+  if (drag.previewEl.parentElement !== drag.targetColumn) drag.targetColumn.appendChild(drag.previewEl);
+  drag.previewEl.style.top = `${top}px`;
+  drag.previewEl.style.height = `${previewHeight}px`;
+  drag.previewEl.innerHTML = `
+    <strong>${escapeHtml(group?.nombre || 'Sesión')}</strong>
+    <span class="drop-preview-time"><b>${drag.preview.inicio}</b><i>→</i><b>${drag.preview.fin}</b></span>
+  `;
 }
 
-function updateGhostTime(ghost, preview) {
-  const label = ghost?.querySelector('[data-drag-time]');
-  if (!label) return;
-  label.textContent = preview ? `${preview.inicio}–${preview.fin}` : 'Suelta sobre un día del calendario';
+function removeDropPreview(drag) {
+  drag.previewEl?.remove();
+  drag.previewEl = null;
 }
 
 function autoScrollCalendar(scroller, clientY) {
@@ -176,6 +188,7 @@ function autoScrollCalendar(scroller, clientY) {
 
 function cleanupDrag(root, drag) {
   drag.block?.classList.remove('is-drag-source');
-  drag.ghost?.remove();
+  drag.block?.removeAttribute('aria-label');
+  removeDropPreview(drag);
   root.querySelectorAll('.day-column.is-drop-target').forEach(column => column.classList.remove('is-drop-target'));
 }
