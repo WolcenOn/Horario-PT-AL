@@ -26,6 +26,7 @@
         <button class="nav-item" data-view="professionals" type="button">🧑‍🏫 <span>Profesionales</span></button>
         <button class="nav-item" data-view="groups" type="button">👥 <span>Grupos</span></button>
         <button class="nav-item" data-view="sessions" type="button">🕒 <span>Sesiones</span></button>
+        <button class="nav-item" data-view="classSchedules" type="button">🏫 <span>Horarios de aula</span></button>
         <button class="nav-item" data-view="alerts" type="button">⚠️ <span>Conflictos</span></button>
       </nav>
       <div class="sidebar-footer">
@@ -35,6 +36,7 @@
           <input id="importDataInput" class="hidden" type="file" accept="application/json,.json">
         </div>
         <button id="resetDemoBtn" class="button button-ghost button-full" type="button">Restaurar datos de ejemplo</button>
+        <button id="clearAllDataBtn" class="button button-ghost button-full sidebar-danger" type="button">Vaciar todos los datos</button>
         <small>Los datos se guardan en este navegador.</small>
       </div>
     </aside>
@@ -49,6 +51,10 @@
           </div>
         </div>
         <div class="topbar-actions">
+          <div id="calendarPrintActions" class="print-actions" role="group" aria-label="Imprimir horario por especialidad">
+            <button id="printPTBtn" class="button" type="button">🖨 PT</button>
+            <button id="printALBtn" class="button" type="button">🖨 AL</button>
+          </div>
           <div class="service-filter" role="group" aria-label="Filtrar por servicio">
             <button type="button" data-service-filter="ALL" class="is-active">Todos</button>
             <button type="button" data-service-filter="PT">PT</button>
