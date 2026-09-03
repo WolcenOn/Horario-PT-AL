@@ -11,6 +11,8 @@
 .nav-item:hover, .nav-item.is-active { color: white; background: rgba(255,255,255,.11); }
 .sidebar-footer { margin-top: auto; display: grid; gap: 10px; padding: 10px 3px 0; }
 .sidebar-footer .button { border-color: rgba(255,255,255,.2); color: white; }
+.sidebar-footer .sidebar-danger { border-color: rgba(255,174,174,.42); color: #ffd3d3; }
+.sidebar-footer .sidebar-danger:hover { background: rgba(166,61,64,.24); border-color: rgba(255,174,174,.65); }
 .sidebar-footer small { color: rgba(255,255,255,.57); line-height: 1.4; }
 .sidebar-data-actions { display: grid; gap: 7px; }
 
@@ -19,7 +21,9 @@
 .topbar-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .sidebar-toggle { flex: 0 0 auto; font-size: 1.05rem; }
 .eyebrow { font-size: .75rem; text-transform: uppercase; color: var(--muted); letter-spacing: .09em; margin-bottom: 4px; font-weight: 750; }
-.topbar-actions { display: flex; align-items: center; gap: 10px; }
+.topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.print-actions { display: inline-flex; gap: 6px; }
+.print-actions .button { min-height: 40px; padding-inline: 10px; }
 .service-filter { display: inline-flex; background: #e9eef2; border-radius: 10px; padding: 3px; }
 .service-filter button { border: 0; background: transparent; color: #566572; min-height: 34px; padding: 6px 12px; border-radius: 8px; font-weight: 750; }
 .service-filter button.is-active { background: white; color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
@@ -49,6 +53,8 @@
 .toolbar-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .search-input { min-width: 260px; border: 1px solid var(--border-strong); border-radius: 9px; padding: 9px 11px; background: white; }
 .select-compact { border: 1px solid var(--border-strong); border-radius: 9px; padding: 9px 10px; background: white; }
+.class-schedule-help { display: flex; gap: 10px; align-items: baseline; padding: 11px 16px; border-bottom: 1px solid var(--border); background: #fbfcfd; font-size: .78rem; color: var(--muted); }
+.class-schedule-help strong { color: var(--text); white-space: nowrap; }
 
 .status-line { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .name-cell strong { display: block; }
@@ -79,9 +85,10 @@
   .main-content { padding: 16px 14px 28px; }
   .topbar { gap: 12px; }
   .topbar-actions { align-items: stretch; }
-  .service-filter { width: 100%; }
-  .service-filter button { flex: 1; }
+  .print-actions, .service-filter { width: 100%; }
+  .print-actions .button, .service-filter button { flex: 1; }
   .summary-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .pending-overview-heading small { display: none; }
   .pending-student-chip { min-width: 158px; }
+  .class-schedule-help { align-items: flex-start; flex-direction: column; }
 }
