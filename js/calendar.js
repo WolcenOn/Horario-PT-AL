@@ -1,9 +1,10 @@
 import { CALENDAR_PX_PER_MINUTE, DAYS, DEFAULT_CALENDAR_END, DEFAULT_CALENDAR_START } from './constants.js';
+import { classDayEntries, classEntriesForInterval, studentNamesForClass } from './class-schedules.js';
 import { escapeHtml, fullName, minutesToTime, timeToMinutes } from './utils.js';
 
 const DRAG_SNAP_MINUTES = 15;
 
-export function renderCalendar(root, { state, serviceFilter, conflicts, onEditSession, onMoveSession }) {
+export function renderCalendar(root, { state, serviceFilter, conflicts, selectedSessionId, onSelectSession, onEditSession, onMoveSession, onOpenClassSchedules }) {
   const groupMap = new Map(state.groups.map(group => [group.id, group]));
   const professionalMap = new Map(state.professionals.map(professional => [professional.id, professional]));
   const studentMap = new Map(state.students.map(student => [student.id, student]));
@@ -30,8 +31,9 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, onEditSe
       const excluded = new Set(session.excludedStudentIds || []);
       const students = (group.studentIds || []).filter(id => !excluded.has(id)).map(id => fullName(studentMap.get(id))).filter(Boolean);
       const dimmed = serviceFilter !== 'ALL' && group.tipo !== serviceFilter;
+      const selected = selectedSessionId === session.id;
 
-      return `<button class="session-block ${group.tipo.toLowerCase()} ${conflictSessionIds.has(session.id) ? 'has-conflict' : ''} ${dimmed ? 'is-dimmed' : ''}" style="top:${top}px;height:${blockHeight}px" data-session-id="${session.id}" type="button" title="Arrastrar para mover · Pulsar para editar ${escapeHtml(group.nombre)}">
+      return `<button class="session-block ${group.tipo.toLowerCase()} ${conflictSessionIds.has(session.id) ? 'has-conflict' : ''} ${dimmed ? 'is-dimmed' : ''} ${selected ? 'is-selected' : ''}" style="top:${top}px;height:${blockHeight}px" data-session-id="${session.id}" type="button" title="Arrastrar para mover · Pulsar para consultar horario ordinario">
         <strong>${conflictSessionIds.has(session.id) ? '⚠ ' : ''}${escapeHtml(group.nombre)}</strong>
         <small class="session-time">${session.inicio}–${session.fin}</small>
         <small>${escapeHtml(professional?.nombre || 'Sin profesional')}</small>
@@ -50,15 +52,20 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, onEditSe
       <span><i class="legend-dot pt"></i>PT</span>
       <span><i class="legend-dot al"></i>AL</span>
       <span><i class="legend-conflict"></i>Conflicto / advertencia</span>
-      <span>Arrastra una sesión: verás su posición y horario exactos antes de soltar · ajuste de 15 min.</span>
+      <span>Pulsa una sesión para consultar las materias de sus alumnos · arrastra para moverla.</span>
     </div>
-  </section>`;
+  </section>
+  ${renderClassReferencePanel(state, selectedSessionId, groupMap)}`;
 
   let suppressClickUntil = 0;
   root.onclick = event => {
     if (Date.now() < suppressClickUntil) return;
+    const editSelected = event.target.closest('[data-reference-edit]');
+    const manageSchedules = event.target.closest('[data-reference-manage]');
+    if (editSelected) { onEditSession(editSelected.dataset.referenceEdit); return; }
+    if (manageSchedules) { onOpenClassSchedules(); return; }
     const block = event.target.closest('[data-session-id]');
-    if (block) onEditSession(block.dataset.sessionId);
+    if (block) onSelectSession(block.dataset.sessionId);
   };
 
   const scroller = root.querySelector('.calendar-scroll');
@@ -120,7 +127,7 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, onEditSe
       fin: minutesToTime(nextEnd)
     };
     drag.targetColumn = target;
-    renderDropPreview(drag, groupMap, start, nextStart);
+    renderDropPreview(drag, groupMap, state, start, nextStart);
   };
 
   root.onpointerup = async event => {
@@ -146,6 +153,55 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, onEditSe
   };
 }
 
+function renderClassReferencePanel(state, selectedSessionId, groupMap) {
+  if (!selectedSessionId) {
+    return `<section class="card class-reference-panel is-empty">
+      <div><strong>Horario ordinario de referencia</strong><span>Pulsa una sesión del calendario para ver qué materias tienen sus alumnos en esa franja y durante el resto de ese día.</span></div>
+    </section>`;
+  }
+
+  const session = state.sessions.find(item => item.id === selectedSessionId);
+  const group = session ? groupMap.get(session.groupId) : null;
+  if (!session || !group) return '';
+  const excluded = new Set(session.excludedStudentIds || []);
+  const studentIds = (group.studentIds || []).filter(id => !excluded.has(id));
+  const studentMap = new Map(state.students.map(student => [student.id, student]));
+  const classGroups = [...new Set(studentIds.map(id => studentMap.get(id)?.grupoClase?.trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' }));
+
+  const rows = classGroups.map(grupoClase => {
+    const dayEntries = classDayEntries(state.classSchedules || [], grupoClase, session.dia);
+    const overlaps = new Set(classEntriesForInterval(state.classSchedules || [], grupoClase, session.dia, session.inicio, session.fin).map(entry => entry.id));
+    const names = studentNamesForClass(state, studentIds, grupoClase);
+    const schedule = dayEntries.length
+      ? dayEntries.map(entry => `<div class="class-subject-slot ${overlaps.has(entry.id) ? 'is-overlap' : ''}">
+          <span>${escapeHtml(entry.inicio)}–${escapeHtml(entry.fin)}</span>
+          <strong>${escapeHtml(entry.materia)}</strong>
+          ${entry.aula ? `<small>${escapeHtml(entry.aula)}</small>` : ''}
+        </div>`).join('')
+      : `<div class="class-schedule-missing">Sin horario cargado para ${escapeHtml(dayLabel(session.dia))}.</div>`;
+    return `<div class="class-reference-row">
+      <div class="class-reference-meta"><strong>${escapeHtml(grupoClase)}</strong><small>${escapeHtml(names.join(', ') || 'Alumnos del grupo')}</small></div>
+      <div class="class-day-strip">${schedule}</div>
+    </div>`;
+  }).join('');
+
+  return `<section class="card class-reference-panel">
+    <div class="class-reference-header">
+      <div>
+        <span class="eyebrow">Referencia del aula ordinaria</span>
+        <h2>${escapeHtml(group.nombre)} · ${escapeHtml(dayLabel(session.dia))} ${escapeHtml(session.inicio)}–${escapeHtml(session.fin)}</h2>
+        <small>Las materias que coinciden con la sesión aparecen destacadas. Sirven como apoyo para decidir la mejor franja; no bloquean el horario automáticamente.</small>
+      </div>
+      <div class="button-row">
+        <button class="button" type="button" data-reference-manage>Gestionar horarios de aula</button>
+        <button class="button button-primary" type="button" data-reference-edit="${session.id}">Editar sesión</button>
+      </div>
+    </div>
+    ${classGroups.length ? `<div class="class-reference-list">${rows}</div>` : `<div class="class-schedule-missing wide">Los alumnos de esta sesión no tienen “Grupo / clase ordinaria” indicado en su ficha.</div>`}
+  </section>`;
+}
+
 function startDrag(drag, groupMap) {
   drag.active = true;
   drag.block.classList.add('is-drag-source');
@@ -153,11 +209,12 @@ function startDrag(drag, groupMap) {
   drag.block.setAttribute('aria-label', `Moviendo ${group?.nombre || 'sesión'}`);
 }
 
-function renderDropPreview(drag, groupMap, calendarStart, nextStart) {
+function renderDropPreview(drag, groupMap, state, calendarStart, nextStart) {
   if (!drag.targetColumn || !drag.preview) return;
   const group = groupMap.get(drag.session.groupId);
   const top = (nextStart - calendarStart) * CALENDAR_PX_PER_MINUTE;
   const previewHeight = Math.max(28, drag.duration * CALENDAR_PX_PER_MINUTE);
+  const classContext = candidateClassContext(state, group, drag.session, drag.preview);
 
   if (!drag.previewEl) {
     drag.previewEl = document.createElement('div');
@@ -170,7 +227,25 @@ function renderDropPreview(drag, groupMap, calendarStart, nextStart) {
   drag.previewEl.innerHTML = `
     <strong>${escapeHtml(group?.nombre || 'Sesión')}</strong>
     <span class="drop-preview-time"><b>${drag.preview.inicio}</b><i>→</i><b>${drag.preview.fin}</b></span>
+    ${classContext ? `<small class="drop-preview-context">${escapeHtml(classContext)}</small>` : ''}
   `;
+}
+
+function candidateClassContext(state, group, session, preview) {
+  if (!group) return '';
+  const excluded = new Set(session.excludedStudentIds || []);
+  const studentMap = new Map(state.students.map(student => [student.id, student]));
+  const classGroups = [...new Set((group.studentIds || [])
+    .filter(id => !excluded.has(id))
+    .map(id => studentMap.get(id)?.grupoClase?.trim())
+    .filter(Boolean))];
+  if (!classGroups.length) return 'Sin grupo ordinario indicado';
+
+  return classGroups.map(grupoClase => {
+    const entries = classEntriesForInterval(state.classSchedules || [], grupoClase, preview.dia, preview.inicio, preview.fin);
+    const subjects = [...new Set(entries.map(entry => entry.materia).filter(Boolean))];
+    return `${grupoClase}: ${subjects.length ? subjects.join(' / ') : 'sin horario cargado'}`;
+  }).join(' · ');
 }
 
 function removeDropPreview(drag) {
@@ -191,4 +266,8 @@ function cleanupDrag(root, drag) {
   drag.block?.removeAttribute('aria-label');
   removeDropPreview(drag);
   root.querySelectorAll('.day-column.is-drop-target').forEach(column => column.classList.remove('is-drop-target'));
+}
+
+function dayLabel(dayId) {
+  return DAYS.find(day => day.id === dayId)?.label || dayId || '';
 }
