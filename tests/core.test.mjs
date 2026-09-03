@@ -5,10 +5,11 @@ import { calculateStudentHours, totalsFromHours } from '../js/hours.js';
 import { detectConflicts } from '../js/conflicts.js';
 import { demoData } from '../js/seed.js';
 import { createSharePackage, validateSharePackage } from '../js/sharing.js';
+import { classEntriesForInterval } from '../js/class-schedules.js';
 
 const students=[
-  {id:'a',nombre:'Ana',apellidos:'Uno',horasPTObjetivoMin:90,horasALObjetivoMin:45,restricciones:[]},
-  {id:'b',nombre:'Beto',apellidos:'Dos',horasPTObjetivoMin:0,horasALObjetivoMin:0,restricciones:[]}
+  {id:'a',nombre:'Ana',apellidos:'Uno',grupoClase:'4ºA',horasPTObjetivoMin:90,horasALObjetivoMin:45,restricciones:[]},
+  {id:'b',nombre:'Beto',apellidos:'Dos',grupoClase:'4ºA',horasPTObjetivoMin:0,horasALObjetivoMin:0,restricciones:[]}
 ];
 const professionals=[
   {id:'p1',nombre:'PT Uno',tipo:'PT',disponibilidad:{lunes:[{inicio:'09:00',fin:'14:00'}]}},
@@ -78,20 +79,39 @@ test('los datos demo cubren el volumen y casos intencionados de la Fase 1',()=>{
   assert.ok(conflicts.some(c=>c.type==='student-restriction'));
 });
 
-test('genera y valida un archivo compartible completo',()=>{
+test('genera y valida un archivo compartible con horarios de aula',()=>{
   const demo=demoData();
-  const payload=createSharePackage(demo);
+  const state={...demo,classSchedules:[{id:'cl1',grupoClase:'4ºA',dia:'lunes',inicio:'09:00',fin:'09:45',materia:'Matemáticas'}]};
+  const payload=createSharePackage(state);
   assert.equal(payload.format,'horario-pt-al');
-  assert.equal(payload.schemaVersion,1);
+  assert.equal(payload.schemaVersion,2);
   const validated=validateSharePackage(payload);
   assert.equal(validated.students.length,20);
   assert.equal(validated.groups.length,8);
   assert.equal(validated.sessions.length,demo.sessions.length);
+  assert.equal(validated.classSchedules.length,1);
+});
+
+test('mantiene compatibilidad con archivos compartidos versión 1',()=>{
+  const demo=demoData();
+  const payload={format:'horario-pt-al',schemaVersion:1,data:{students:demo.students,professionals:demo.professionals,groups:demo.groups,sessions:demo.sessions}};
+  const validated=validateSharePackage(payload);
+  assert.deepEqual(validated.classSchedules,[]);
 });
 
 test('rechaza archivos compartidos con referencias rotas',()=>{
   const demo=demoData();
-  const payload=createSharePackage(demo);
+  const payload=createSharePackage({...demo,classSchedules:[]});
   payload.data.groups[0].studentIds.push('alumno_inexistente');
   assert.throws(()=>validateSharePackage(payload),/alumno inexistente/i);
+});
+
+test('localiza la materia ordinaria que coincide con una sesión',()=>{
+  const entries=[
+    {id:'c1',grupoClase:'4ºA',dia:'lunes',inicio:'09:00',fin:'09:45',materia:'Lengua'},
+    {id:'c2',grupoClase:'4ºA',dia:'lunes',inicio:'09:45',fin:'10:30',materia:'Matemáticas'},
+    {id:'c3',grupoClase:'4ºA',dia:'martes',inicio:'09:00',fin:'09:45',materia:'Inglés'}
+  ];
+  const matches=classEntriesForInterval(entries,'4ºA','lunes','09:30','10:00');
+  assert.deepEqual(matches.map(entry=>entry.id),['c1','c2']);
 });
