@@ -1,0 +1,25 @@
+{
+  "name": "horario-pt-al-mvp",
+  "version": "1.0.0",
+  "description": "Aplicación web para organizar horarios de Pedagogía Terapéutica (PT) y Audición y Lenguaje (AL) en centros educativos.",
+  "homepage": "https://wolcenon.github.io/Horario-PT-AL/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WolcenOn/Horario-PT-AL.git"
+  },
+  "license": "MIT",
+  "author": "WolcenOn",
+  "keywords": [
+    "educacion",
+    "horarios",
+    "pedagogia-terapeutica",
+    "audicion-lenguaje",
+    "indexeddb"
+  ],
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}
