@@ -3,8 +3,9 @@ import { replaceCoreData } from './db.js';
 import { timeToMinutes } from './utils.js';
 
 const FORMAT = 'horario-pt-al';
-const SCHEMA_VERSION = 1;
-const CORE_KEYS = ['students', 'professionals', 'groups', 'sessions'];
+const SCHEMA_VERSION = 2;
+const REQUIRED_KEYS = ['students', 'professionals', 'groups', 'sessions'];
+const SHARE_KEYS = [...REQUIRED_KEYS, 'classSchedules'];
 
 export function createSharePackage(state) {
   return {
@@ -12,7 +13,7 @@ export function createSharePackage(state) {
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     app: 'Horario PT / AL',
-    data: Object.fromEntries(CORE_KEYS.map(key => [key, structuredClone(state[key] || [])]))
+    data: Object.fromEntries(SHARE_KEYS.map(key => [key, structuredClone(state[key] || [])]))
   };
 }
 
@@ -44,7 +45,8 @@ export async function importShareFile(file) {
     students: data.students.length,
     professionals: data.professionals.length,
     groups: data.groups.length,
-    sessions: data.sessions.length
+    sessions: data.sessions.length,
+    classSchedules: data.classSchedules.length
   };
 }
 
@@ -60,11 +62,19 @@ export function validateSharePackage(payload) {
     throw new Error('El archivo fue creado con una versión más nueva de la aplicación.');
   }
 
-  const data = payload.data && typeof payload.data === 'object' ? payload.data : payload;
-  for (const key of CORE_KEYS) {
-    if (!Array.isArray(data[key])) throw new Error(`Falta la colección "${key}" en el archivo.`);
-    assertUniqueIds(data[key], key);
+  const source = payload.data && typeof payload.data === 'object' ? payload.data : payload;
+  for (const key of REQUIRED_KEYS) {
+    if (!Array.isArray(source[key])) throw new Error(`Falta la colección "${key}" en el archivo.`);
   }
+
+  const data = {
+    students: source.students,
+    professionals: source.professionals,
+    groups: source.groups,
+    sessions: source.sessions,
+    classSchedules: Array.isArray(source.classSchedules) ? source.classSchedules : []
+  };
+  for (const key of SHARE_KEYS) assertUniqueIds(data[key], key);
 
   const studentIds = new Set(data.students.map(item => item.id));
   const professionalMap = new Map(data.professionals.map(item => [item.id, item]));
@@ -104,12 +114,16 @@ export function validateSharePackage(payload) {
     }
   }
 
-  return {
-    students: structuredClone(data.students),
-    professionals: structuredClone(data.professionals),
-    groups: structuredClone(data.groups),
-    sessions: structuredClone(data.sessions)
-  };
+  for (const entry of data.classSchedules) {
+    if (typeof entry.grupoClase !== 'string' || !entry.grupoClase.trim()) throw new Error(`La franja de aula ${entry.id} no tiene grupo/clase.`);
+    if (!validDays.has(entry.dia)) throw new Error(`La franja de aula ${entry.id} tiene un día no válido.`);
+    if (typeof entry.materia !== 'string' || !entry.materia.trim()) throw new Error(`La franja de aula ${entry.id} no tiene materia.`);
+    const start = timeToMinutes(entry.inicio);
+    const end = timeToMinutes(entry.fin);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) throw new Error(`La franja de aula ${entry.id} tiene un horario no válido.`);
+  }
+
+  return Object.fromEntries(SHARE_KEYS.map(key => [key, structuredClone(data[key])]));
 }
 
 function assertUniqueIds(items, label) {
