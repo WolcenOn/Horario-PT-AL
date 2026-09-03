@@ -1,16 +1,17 @@
 import { getAll, put, remove } from './db.js';
 
 export async function loadState() {
-  const [students, professionals, groups, sessions] = await Promise.all([
-    getAll('students'), getAll('professionals'), getAll('groups'), getAll('sessions')
+  const [students, professionals, groups, sessions, classSchedules] = await Promise.all([
+    getAll('students'), getAll('professionals'), getAll('groups'), getAll('sessions'), getAll('classSchedules')
   ]);
-  return { students, professionals, groups, sessions };
+  return { students, professionals, groups, sessions, classSchedules };
 }
 
 export const saveStudent = student => put('students', student);
 export const saveProfessional = professional => put('professionals', professional);
 export const saveGroup = group => put('groups', group);
 export const saveSession = session => put('sessions', session);
+export const saveClassSchedule = entry => put('classSchedules', entry);
 
 export async function deleteStudent(studentId, state) {
   const affectedGroups = state.groups.filter(g => (g.studentIds || []).includes(studentId));
@@ -36,3 +37,4 @@ export async function deleteGroup(groupId, state) {
 }
 
 export const deleteSession = sessionId => remove('sessions', sessionId);
+export const deleteClassSchedule = entryId => remove('classSchedules', entryId);
