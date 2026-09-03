@@ -2,14 +2,16 @@ import { renderStudents, openStudentForm } from './alumnos.js';
 import { renderProfessionals, openProfessionalForm } from './profesionales.js';
 import { renderGroups, openGroupForm } from './grupos.js';
 import { renderSessions, openSessionForm } from './sesiones.js';
+import { renderClassSchedules, openClassScheduleForm } from './class-schedules.js';
 import { renderCalendar } from './calendar.js';
 import { renderAlerts } from './alerts.js';
 import { calculateStudentHours, deriveStudentStatus, totalsFromHours } from './hours.js';
 import { conflictStudentIds, detectConflicts } from './conflicts.js';
 import { ensureSeedData, loadDemoData } from './seed.js';
-import { deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, saveGroup, saveProfessional, saveSession, saveStudent } from './repository.js';
-import { put } from './db.js';
+import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, saveClassSchedule, saveGroup, saveProfessional, saveSession, saveStudent } from './repository.js';
+import { put, resetDatabase } from './db.js';
 import { downloadSharePackage, importShareFile } from './sharing.js';
+import { printCalendar } from './print.js';
 import { escapeHtml, formatDuration } from './utils.js';
 import { showToast } from './ui.js';
 
@@ -20,20 +22,28 @@ const summaryStrip = document.querySelector('#summaryStrip');
 const appShell = document.querySelector('#appShell');
 const sidebarToggleBtn = document.querySelector('#sidebarToggleBtn');
 const importDataInput = document.querySelector('#importDataInput');
+const calendarPrintActions = document.querySelector('#calendarPrintActions');
 
 let currentView = 'calendar';
 let serviceFilter = localStorage.getItem('horario-service-filter') || 'ALL';
-let state = { students:[], professionals:[], groups:[], sessions:[] };
+let state = { students:[], professionals:[], groups:[], sessions:[], classSchedules:[] };
 let derived = {};
+let selectedSessionId = null;
 
 const VIEW_TITLES = {
-  calendar:'Horario semanal', students:'Alumnos', professionals:'Profesionales', groups:'Grupos', sessions:'Sesiones', alerts:'Conflictos'
+  calendar:'Horario semanal',
+  students:'Alumnos',
+  professionals:'Profesionales',
+  groups:'Grupos',
+  sessions:'Sesiones',
+  classSchedules:'Horarios de aula',
+  alerts:'Conflictos'
 };
 
 async function init() {
   try {
     applyInitialSidebarState();
-    await ensureSeedData();
+    if (localStorage.getItem('horario-user-cleared') !== 'true') await ensureSeedData();
     bindGlobalEvents();
     await refresh();
   } catch (error) {
@@ -44,6 +54,7 @@ async function init() {
 
 async function refresh({ toast } = {}) {
   state = await loadState();
+  if (selectedSessionId && !state.sessions.some(session => session.id === selectedSessionId)) selectedSessionId = null;
   const hoursMap = calculateStudentHours(state.students, state.groups, state.sessions);
   const conflicts = detectConflicts(state);
   const conflictStudents = conflictStudentIds(conflicts);
@@ -101,14 +112,30 @@ function renderCurrentView() {
   pageTitle.textContent = VIEW_TITLES[currentView];
   document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === currentView));
   document.querySelectorAll('[data-service-filter]').forEach(button => button.classList.toggle('is-active', button.dataset.serviceFilter === serviceFilter));
-  primaryActionBtn.textContent = ({ students:'+ Nuevo alumno', professionals:'+ Nuevo profesional', groups:'+ Nuevo grupo' }[currentView] || '+ Nueva sesión');
+  calendarPrintActions?.classList.toggle('hidden', currentView !== 'calendar');
+
+  const actionLabels = {
+    students:'+ Nuevo alumno',
+    professionals:'+ Nuevo profesional',
+    groups:'+ Nuevo grupo',
+    classSchedules:'+ Nueva franja'
+  };
+  primaryActionBtn.textContent = actionLabels[currentView] || '+ Nueva sesión';
 
   const common = { state, serviceFilter, ...derived };
-  if (currentView === 'calendar') renderCalendar(viewRoot, { ...common, onEditSession: editSession, onMoveSession: moveSession });
+  if (currentView === 'calendar') renderCalendar(viewRoot, {
+    ...common,
+    selectedSessionId,
+    onSelectSession: selectSession,
+    onEditSession: editSession,
+    onMoveSession: moveSession,
+    onOpenClassSchedules: openClassSchedulesView
+  });
   if (currentView === 'students') renderStudents(viewRoot, { ...common, conflictStudentIds: derived.conflictStudents, onEdit: editStudent, onDelete: removeStudent });
   if (currentView === 'professionals') renderProfessionals(viewRoot, { ...common, onEdit: editProfessional, onDelete: removeProfessional });
   if (currentView === 'groups') renderGroups(viewRoot, { ...common, onEdit: editGroup, onDelete: removeGroup });
   if (currentView === 'sessions') renderSessions(viewRoot, { ...common, onEdit: editSession, onDelete: removeSession });
+  if (currentView === 'classSchedules') renderClassSchedules(viewRoot, { ...common, onEdit: editClassSchedule, onDelete: removeClassSchedule });
   if (currentView === 'alerts') renderAlerts(viewRoot, common);
 }
 
@@ -131,12 +158,16 @@ function bindGlobalEvents() {
     if (currentView === 'students') return editStudent();
     if (currentView === 'professionals') return editProfessional();
     if (currentView === 'groups') return editGroup();
+    if (currentView === 'classSchedules') return editClassSchedule();
     return editSession();
   });
 
+  document.querySelector('#printPTBtn').addEventListener('click', () => printServiceCalendar('PT'));
+  document.querySelector('#printALBtn').addEventListener('click', () => printServiceCalendar('AL'));
+
   document.querySelector('#exportDataBtn').addEventListener('click', () => {
     downloadSharePackage(state);
-    showToast('Horario exportado. Puedes enviar el archivo JSON a otra persona.');
+    showToast('Horario exportado. Incluye también los horarios ordinarios de las clases.');
   });
 
   document.querySelector('#importDataBtn').addEventListener('click', () => importDataInput.click());
@@ -144,11 +175,13 @@ function bindGlobalEvents() {
     const [file] = importDataInput.files || [];
     importDataInput.value = '';
     if (!file) return;
-    if (!confirm('Importar este horario sustituirá los alumnos, profesionales, grupos y sesiones actuales de este navegador. ¿Continuar?')) return;
+    if (!confirm('Importar este horario sustituirá los alumnos, profesionales, grupos, sesiones y horarios de aula actuales de este navegador. ¿Continuar?')) return;
     try {
       const counts = await importShareFile(file);
+      localStorage.setItem('horario-user-cleared', 'true');
+      selectedSessionId = null;
       currentView = 'calendar';
-      await refresh({ toast:`Horario importado: ${counts.students} alumnos, ${counts.groups} grupos y ${counts.sessions} sesiones.` });
+      await refresh({ toast:`Horario importado: ${counts.students} alumnos, ${counts.groups} grupos, ${counts.sessions} sesiones y ${counts.classSchedules} franjas de aula.` });
     } catch (error) {
       console.error(error);
       showToast(error.message || 'No se pudo importar el horario.', 'error');
@@ -157,9 +190,29 @@ function bindGlobalEvents() {
 
   document.querySelector('#resetDemoBtn').addEventListener('click', async () => {
     if (!confirm('Se sustituirán los datos actuales por los datos de ejemplo. ¿Continuar?')) return;
+    localStorage.removeItem('horario-user-cleared');
+    selectedSessionId = null;
     await loadDemoData();
     await refresh({ toast:'Datos de ejemplo restaurados.' });
   });
+
+  document.querySelector('#clearAllDataBtn').addEventListener('click', async () => {
+    const accepted = confirm('Se eliminarán TODOS los alumnos, profesionales, grupos, sesiones y horarios de aula de este navegador. Esta acción no se puede deshacer. Si quieres conservar una copia, cancela y usa “Exportar / compartir”. ¿Vaciar ahora?');
+    if (!accepted) return;
+    await resetDatabase();
+    localStorage.setItem('horario-user-cleared', 'true');
+    selectedSessionId = null;
+    currentView = 'calendar';
+    await refresh({ toast:'Todos los datos han sido eliminados. La aplicación está lista para empezar desde cero.' });
+  });
+}
+
+function printServiceCalendar(serviceType) {
+  try {
+    printCalendar(state, serviceType);
+  } catch (error) {
+    showToast(error.message || 'No se pudo abrir la impresión.', 'error');
+  }
 }
 
 function applyInitialSidebarState() {
@@ -173,6 +226,16 @@ function setSidebarCollapsed(collapsed, persist = true) {
   sidebarToggleBtn.setAttribute('aria-expanded', String(!collapsed));
   sidebarToggleBtn.setAttribute('aria-label', collapsed ? 'Mostrar menú lateral' : 'Ocultar menú lateral');
   if (persist) localStorage.setItem('horario-sidebar-collapsed', String(collapsed));
+}
+
+function selectSession(id) {
+  selectedSessionId = id;
+  renderCurrentView();
+}
+
+function openClassSchedulesView() {
+  currentView = 'classSchedules';
+  renderCurrentView();
 }
 
 function editStudent(id) {
@@ -197,7 +260,19 @@ function editGroup(id) {
 
 function editSession(id) {
   const session = id ? state.sessions.find(item => item.id === id) : null;
-  openSessionForm(session, { state, onSave: async value => { await saveSession(value); await refresh({ toast: session ? 'Sesión actualizada.' : 'Sesión creada.' }); } });
+  openSessionForm(session, { state, onSave: async value => {
+    await saveSession(value);
+    selectedSessionId = value.id;
+    await refresh({ toast: session ? 'Sesión actualizada.' : 'Sesión creada.' });
+  } });
+}
+
+function editClassSchedule(id) {
+  const entry = id ? state.classSchedules.find(item => item.id === id) : null;
+  openClassScheduleForm(entry, { state, onSave: async value => {
+    await saveClassSchedule(value);
+    await refresh({ toast: entry ? 'Franja de aula actualizada.' : 'Franja de aula creada.' });
+  } });
 }
 
 async function moveSession(id, patch) {
@@ -225,6 +300,7 @@ async function moveSession(id, patch) {
   }
 
   await saveSession(candidate);
+  selectedSessionId = id;
   const warnings = newConflicts.filter(conflict => conflict.severity !== 'grave').length;
   const conflictCount = newConflicts.length;
   const toast = conflictCount
@@ -255,7 +331,17 @@ async function removeGroup(id) {
 async function removeSession(id) {
   const session = state.sessions.find(item => item.id === id);if(!session)return;
   if(!confirm(`¿Eliminar la sesión del ${session.dia} ${session.inicio}–${session.fin}?`))return;
-  await deleteSession(id);await refresh({toast:'Sesión eliminada.'});
+  await deleteSession(id);
+  if (selectedSessionId === id) selectedSessionId = null;
+  await refresh({toast:'Sesión eliminada.'});
+}
+
+async function removeClassSchedule(id) {
+  const entry = state.classSchedules.find(item => item.id === id);
+  if (!entry) return;
+  if (!confirm(`¿Eliminar ${entry.materia} de ${entry.grupoClase} (${entry.inicio}–${entry.fin})?`)) return;
+  await deleteClassSchedule(id);
+  await refresh({ toast:'Franja de aula eliminada.' });
 }
 
 function formatSignedPending(value) {
