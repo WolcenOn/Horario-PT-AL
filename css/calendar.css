@@ -14,7 +14,9 @@
 .session-block.pt { background: var(--pt-soft); border-color: #b7d8e4; color: #123f53; }
 .session-block.al { background: var(--al-soft); border-color: #d1c4ec; color: #47396d; }
 .session-block.has-conflict { box-shadow: inset 4px 0 0 var(--danger), 0 2px 6px rgba(18,40,54,.12); }
+.session-block.is-selected { z-index: 7; box-shadow: 0 0 0 3px rgba(36,91,122,.24), 0 5px 15px rgba(18,40,54,.18); }
 .session-block.is-dimmed { opacity: .28; }
+.session-block.is-selected.is-dimmed { opacity: .72; }
 .session-block.is-drag-source { opacity: .18; transform: scale(.985); }
 .session-block strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .session-block small { color: inherit; opacity: .88; display: block; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -27,6 +29,7 @@
 .drop-preview-time { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; padding: 3px 7px; border-radius: 999px; background: rgba(255,255,255,.82); box-shadow: 0 1px 3px rgba(18,40,54,.08); font-size: .79rem; line-height: 1; }
 .drop-preview-time b { font-size: .82rem; }
 .drop-preview-time i { font-style: normal; opacity: .65; }
+.drop-preview-context { display: block; margin-top: 5px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,.72); font-size: .67rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @keyframes dropPreviewIn { from { opacity: .55; transform: scale(.985); } to { opacity: 1; transform: scale(1); } }
 
 .calendar-legend { display: flex; gap: 14px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8rem; flex-wrap: wrap; }
@@ -34,3 +37,31 @@
 .legend-dot.pt { background: var(--pt); }
 .legend-dot.al { background: var(--al); }
 .legend-conflict { width: 4px; height: 12px; background: var(--danger); display: inline-block; margin-right: 5px; border-radius: 2px; }
+
+.class-reference-panel { margin-top: 14px; overflow: hidden; }
+.class-reference-panel.is-empty { padding: 13px 16px; color: var(--muted); border-style: dashed; box-shadow: none; }
+.class-reference-panel.is-empty strong { color: var(--text); margin-right: 8px; }
+.class-reference-panel.is-empty span { font-size: .82rem; }
+.class-reference-header { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 15px 17px; border-bottom: 1px solid var(--border); }
+.class-reference-header h2 { margin: 0 0 4px; font-size: 1rem; }
+.class-reference-header small { display: block; line-height: 1.4; max-width: 760px; }
+.class-reference-list { display: grid; }
+.class-reference-row { display: grid; grid-template-columns: minmax(145px, .8fr) minmax(0, 4fr); gap: 12px; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+.class-reference-row:last-child { border-bottom: 0; }
+.class-reference-meta { min-width: 0; }
+.class-reference-meta strong, .class-reference-meta small { display: block; }
+.class-reference-meta small { margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.class-day-strip { display: flex; gap: 6px; overflow-x: auto; padding: 2px 1px 4px; }
+.class-subject-slot { flex: 0 0 auto; min-width: 105px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); }
+.class-subject-slot > span, .class-subject-slot > strong, .class-subject-slot > small { display: block; }
+.class-subject-slot > span { color: var(--muted); font-size: .68rem; }
+.class-subject-slot > strong { margin-top: 2px; font-size: .76rem; }
+.class-subject-slot > small { margin-top: 2px; font-size: .66rem; }
+.class-subject-slot.is-overlap { border-color: #d6a24a; background: #fff5d9; box-shadow: inset 0 0 0 1px rgba(214,162,74,.2); }
+.class-schedule-missing { color: var(--muted); font-size: .77rem; padding: 8px 10px; border-radius: 7px; background: var(--surface-muted); }
+.class-schedule-missing.wide { margin: 14px; }
+
+@media (max-width: 820px) {
+  .class-reference-header { align-items: flex-start; flex-direction: column; }
+  .class-reference-row { grid-template-columns: 1fr; }
+}
