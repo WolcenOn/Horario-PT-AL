@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatDuration, overlapInterval, timeToMinutes } from '../js/utils.js';
-import { calculateStudentHours } from '../js/hours.js';
+import { calculateStudentHours, totalsFromHours } from '../js/hours.js';
 import { detectConflicts } from '../js/conflicts.js';
+import { demoData } from '../js/seed.js';
+import { createSharePackage, validateSharePackage } from '../js/sharing.js';
 
 const students=[
   {id:'a',nombre:'Ana',apellidos:'Uno',horasPTObjetivoMin:90,horasALObjetivoMin:45,restricciones:[]},
@@ -59,9 +61,6 @@ test('detecta conflicto de profesional',()=>{
   assert.ok(conflicts.some(c=>c.type==='professional-overlap'));
 });
 
-import { demoData } from '../js/seed.js';
-import { totalsFromHours } from '../js/hours.js';
-
 test('los datos demo cubren el volumen y casos intencionados de la Fase 1',()=>{
   const demo=demoData();
   assert.equal(demo.students.length,20);
@@ -77,4 +76,22 @@ test('los datos demo cubren el volumen y casos intencionados de la Fase 1',()=>{
   assert.ok(conflicts.some(c=>c.type==='student-overlap'));
   assert.ok(conflicts.some(c=>c.type==='professional-overlap'));
   assert.ok(conflicts.some(c=>c.type==='student-restriction'));
+});
+
+test('genera y valida un archivo compartible completo',()=>{
+  const demo=demoData();
+  const payload=createSharePackage(demo);
+  assert.equal(payload.format,'horario-pt-al');
+  assert.equal(payload.schemaVersion,1);
+  const validated=validateSharePackage(payload);
+  assert.equal(validated.students.length,20);
+  assert.equal(validated.groups.length,8);
+  assert.equal(validated.sessions.length,demo.sessions.length);
+});
+
+test('rechaza archivos compartidos con referencias rotas',()=>{
+  const demo=demoData();
+  const payload=createSharePackage(demo);
+  payload.data.groups[0].studentIds.push('alumno_inexistente');
+  assert.throws(()=>validateSharePackage(payload),/alumno inexistente/i);
 });
