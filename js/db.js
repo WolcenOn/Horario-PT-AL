@@ -1,6 +1,6 @@
 const DB_NAME = 'HorarioPTAL';
-const DB_VERSION = 1;
-export const STORES = ['students', 'professionals', 'groups', 'sessions', 'settings'];
+const DB_VERSION = 2;
+export const STORES = ['students', 'professionals', 'groups', 'sessions', 'classSchedules', 'settings'];
 
 let dbPromise;
 
@@ -78,12 +78,12 @@ export async function bulkPut(storeName, values) {
   });
 }
 
-export async function replaceCoreData({ students, professionals, groups, sessions }) {
+export async function replaceCoreData({ students, professionals, groups, sessions, classSchedules = [] }) {
   const db = await openDatabase();
-  const storeNames = ['students', 'professionals', 'groups', 'sessions'];
+  const storeNames = ['students', 'professionals', 'groups', 'sessions', 'classSchedules'];
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeNames, 'readwrite');
-    const valuesByStore = { students, professionals, groups, sessions };
+    const valuesByStore = { students, professionals, groups, sessions, classSchedules };
 
     for (const storeName of storeNames) {
       const store = tx.objectStore(storeName);
