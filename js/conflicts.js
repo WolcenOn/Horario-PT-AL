@@ -1,4 +1,5 @@
 import { fullName, minutesToTime, overlapInterval, timeToMinutes } from './utils.js';
+import { externalBlockOverlap } from './professional-availability.js';
 
 export function detectConflicts({ students, professionals, groups, sessions }) {
   const studentMap = new Map(students.map(s => [s.id, s]));
@@ -45,6 +46,13 @@ export function detectConflicts({ students, professionals, groups, sessions }) {
       });
       if (hasDayAvailability && !inside) {
         conflicts.push(makeConflict('professional-availability', 'aviso', [item.id], [], [professional.id], `${professional.nombre} no está disponible el ${item.dia} de ${item.inicio} a ${item.fin}.`));
+      }
+      const external = externalBlockOverlap(professional, item.dia, item.inicio, item.fin);
+      if (external) {
+        conflicts.push(makeConflict(
+          'professional-external-center', 'grave', [item.id], [], [professional.id],
+          `${professional.nombre} está en ${external.centro} el ${item.dia} de ${external.inicio} a ${external.fin}.`
+        ));
       }
     }
 
