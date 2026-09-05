@@ -37,6 +37,7 @@ export const saveSchoolSettings = settings => put('settings', normalizeSchoolSet
 export const saveAutomationSettings = settings => put('settings', normalizeAutomationSettings(settings));
 export const saveCenterPlanningSettings = settings => put('settings', normalizeCenterPlanningSettings(settings));
 export const replaceSessions = sessions => replaceStoreData('sessions', sessions);
+export const replaceClassSchedules = entries => replaceStoreData('classSchedules', entries);
 export const replaceClassSubjectSchedule = (grupoClase, materia, entries) => replaceClassSubjectData(grupoClase, materia, entries);
 
 export async function deleteStudent(studentId, state) {
