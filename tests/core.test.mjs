@@ -190,6 +190,7 @@ test('el gestor automático indica lo que falta antes de habilitarse',()=>{
   const state={students:[],professionals:[],groups:[],sessions:[],classSchedules:[],schoolSettings:null,automationSettings:null};
   const report=buildReadinessReport(state,state.automationSettings);
   assert.equal(report.ready,false);
+  assert.ok(report.items.some(item=>!item.ok&&item.id==='schoolStructure'));
   assert.ok(report.items.some(item=>!item.ok&&item.id==='students'));
   assert.ok(report.items.some(item=>!item.ok&&item.id==='groups'));
   assert.ok(report.items.some(item=>!item.ok&&item.id==='courseRules'));
@@ -210,7 +211,7 @@ test('la configuración automática prefiere una materia de prioridad baja',()=>
     students:[student],professionals:[professional],groups:[group],
     sessions:[{id:'ses',groupId:'g',professionalId:'p',dia:'lunes',inicio:'10:00',fin:'10:45'}],
     classSchedules,
-    schoolSettings:{id:'school',recesses:{infantil:{inicio:'',fin:''},primaria:{inicio:'11:00',fin:'11:30'}}},
+    schoolSettings:{id:'school',structure:{configured:true,defaultLines:1,courseLines:{}},recesses:{infantil:{inicio:'',fin:''},primaria:{inicio:'11:00',fin:'11:30'}}},
     automationSettings
   };
   const readiness=buildReadinessReport(state,automationSettings);
