@@ -1,10 +1,11 @@
 import { DAYS, SERVICE_TYPES } from './constants.js';
 import { put, replaceCoreData } from './db.js';
 import { normalizeSchoolSettings, validateSchoolSettings } from './education.js';
+import { normalizeAutomationSettings } from './automation-core.js';
 import { timeToMinutes } from './utils.js';
 
 const FORMAT = 'horario-pt-al';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const REQUIRED_KEYS = ['students', 'professionals', 'groups', 'sessions'];
 const ARRAY_SHARE_KEYS = [...REQUIRED_KEYS, 'classSchedules'];
 
@@ -16,7 +17,8 @@ export function createSharePackage(state) {
     app: 'Horario PT / AL',
     data: {
       ...Object.fromEntries(ARRAY_SHARE_KEYS.map(key => [key, structuredClone(state[key] || [])])),
-      schoolSettings: structuredClone(normalizeSchoolSettings(state.schoolSettings))
+      schoolSettings: structuredClone(normalizeSchoolSettings(state.schoolSettings)),
+      automationSettings: structuredClone(normalizeAutomationSettings(state.automationSettings))
     }
   };
 }
@@ -46,6 +48,7 @@ export async function importShareFile(file) {
   const data = validateSharePackage(payload);
   await replaceCoreData(data);
   await put('settings', data.schoolSettings);
+  await put('settings', data.automationSettings);
   return {
     students: data.students.length,
     professionals: data.professionals.length,
@@ -78,7 +81,8 @@ export function validateSharePackage(payload) {
     groups: source.groups,
     sessions: source.sessions,
     classSchedules: Array.isArray(source.classSchedules) ? source.classSchedules : [],
-    schoolSettings: validateSchoolSettings(source.schoolSettings || normalizeSchoolSettings())
+    schoolSettings: validateSchoolSettings(source.schoolSettings || normalizeSchoolSettings()),
+    automationSettings: normalizeAutomationSettings(source.automationSettings)
   };
   for (const key of ARRAY_SHARE_KEYS) assertUniqueIds(data[key], key);
 
@@ -131,7 +135,8 @@ export function validateSharePackage(payload) {
 
   return {
     ...Object.fromEntries(ARRAY_SHARE_KEYS.map(key => [key, structuredClone(data[key])])),
-    schoolSettings: structuredClone(data.schoolSettings)
+    schoolSettings: structuredClone(data.schoolSettings),
+    automationSettings: structuredClone(data.automationSettings)
   };
 }
 
