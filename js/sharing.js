@@ -2,10 +2,11 @@ import { DAYS, SERVICE_TYPES } from './constants.js';
 import { put, replaceCoreData } from './db.js';
 import { normalizeSchoolSettings, validateSchoolSettings } from './education.js';
 import { normalizeAutomationSettings } from './automation-core.js';
+import { normalizeCenterPlanningSettings, PROFESSIONAL_TYPES } from './center-planning.js';
 import { timeToMinutes } from './utils.js';
 
 const FORMAT = 'horario-pt-al';
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 const REQUIRED_KEYS = ['students', 'professionals', 'groups', 'sessions'];
 const ARRAY_SHARE_KEYS = [...REQUIRED_KEYS, 'classSchedules'];
 
@@ -18,7 +19,8 @@ export function createSharePackage(state) {
     data: {
       ...Object.fromEntries(ARRAY_SHARE_KEYS.map(key => [key, structuredClone(state[key] || [])])),
       schoolSettings: structuredClone(normalizeSchoolSettings(state.schoolSettings)),
-      automationSettings: structuredClone(normalizeAutomationSettings(state.automationSettings))
+      automationSettings: structuredClone(normalizeAutomationSettings(state.automationSettings)),
+      centerPlanningSettings: structuredClone(normalizeCenterPlanningSettings(state.centerPlanningSettings))
     }
   };
 }
@@ -49,6 +51,7 @@ export async function importShareFile(file) {
   await replaceCoreData(data);
   await put('settings', data.schoolSettings);
   await put('settings', data.automationSettings);
+  await put('settings', data.centerPlanningSettings);
   return {
     students: data.students.length,
     professionals: data.professionals.length,
@@ -82,7 +85,8 @@ export function validateSharePackage(payload) {
     sessions: source.sessions,
     classSchedules: Array.isArray(source.classSchedules) ? source.classSchedules : [],
     schoolSettings: validateSchoolSettings(source.schoolSettings || normalizeSchoolSettings()),
-    automationSettings: normalizeAutomationSettings(source.automationSettings)
+    automationSettings: normalizeAutomationSettings(source.automationSettings),
+    centerPlanningSettings: normalizeCenterPlanningSettings(source.centerPlanningSettings)
   };
   for (const key of ARRAY_SHARE_KEYS) assertUniqueIds(data[key], key);
 
@@ -92,8 +96,8 @@ export function validateSharePackage(payload) {
   const validDays = new Set(DAYS.map(day => day.id));
 
   for (const professional of data.professionals) {
-    if (!SERVICE_TYPES.includes(professional.tipo)) {
-      throw new Error(`El profesional ${professional.id} tiene un tipo PT/AL no válido.`);
+    if (!PROFESSIONAL_TYPES.includes(professional.tipo)) {
+      throw new Error(`El profesional ${professional.id} tiene un tipo profesional no válido.`);
     }
   }
 
@@ -131,12 +135,14 @@ export function validateSharePackage(payload) {
     const start = timeToMinutes(entry.inicio);
     const end = timeToMinutes(entry.fin);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) throw new Error(`La franja de aula ${entry.id} tiene un horario no válido.`);
+    if (entry.professionalId && !professionalMap.has(entry.professionalId)) throw new Error(`La franja de aula ${entry.id} referencia un docente inexistente.`);
   }
 
   return {
     ...Object.fromEntries(ARRAY_SHARE_KEYS.map(key => [key, structuredClone(data[key])])),
     schoolSettings: structuredClone(data.schoolSettings),
-    automationSettings: structuredClone(data.automationSettings)
+    automationSettings: structuredClone(data.automationSettings),
+    centerPlanningSettings: structuredClone(data.centerPlanningSettings)
   };
 }
 
