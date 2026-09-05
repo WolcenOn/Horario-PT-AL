@@ -12,10 +12,11 @@ export function renderClassSchedules(root, { state, onEdit }) {
   const classGroups = knownClassGroups(state);
   const structureReady = schoolStructureConfigured(state.schoolSettings);
   const configuredGroups = configuredClassGroups(state.schoolSettings);
+  const professionalMap = new Map((state.professionals || []).map(professional => [professional.id, professional]));
   const weeklySubjects = groupWeeklySubjects(state.classSchedules || []);
   const rows = weeklySubjects.map(item => {
     const slots = item.entries.map(entry => `<span class="weekly-summary-slot"><b>${escapeHtml(shortDayLabel(entry.dia))}</b> ${escapeHtml(entry.inicio)}–${escapeHtml(entry.fin)}</span>`).join('');
-    const teachers = [...new Set(item.entries.map(entry => entry.docente).filter(Boolean))];
+    const teachers = [...new Set(item.entries.map(entry => professionalMap.get(entry.professionalId)?.nombre || entry.docente).filter(Boolean))];
     const rooms = [...new Set(item.entries.map(entry => entry.aula).filter(Boolean))];
     const searchText = `${item.grupoClase} ${item.materia} ${teachers.join(' ')} ${rooms.join(' ')} ${item.entries.map(entry => `${dayLabel(entry.dia)} ${entry.inicio} ${entry.fin}`).join(' ')}`.toLowerCase();
     return `<tr data-class-group="${escapeHtml(item.grupoClase)}" data-search-row="${escapeHtml(searchText)}">
@@ -54,12 +55,12 @@ export function renderClassSchedules(root, { state, onEdit }) {
     </section>`}
     <section class="card">
       <div class="card-header">
-        <div><h2>Horarios ordinarios por asignatura</h2><small>Cada fila reúne todas las franjas semanales de una asignatura dentro de una clase.</small></div>
+        <div><h2>Horarios ordinarios por asignatura</h2><small>Cada fila reúne todas las franjas semanales de una asignatura dentro de una clase y puede quedar enlazada a un profesor real.</small></div>
         <span class="badge badge-neutral">${state.classSchedules.length} franjas · ${weeklySubjects.length} asignaturas</span>
       </div>
       <div class="class-schedule-help">
         <strong>Edición semanal</strong>
-        <span>Elige una clase configurada y una asignatura fija, y añade todas sus sesiones de lunes a viernes en una sola ventana. Puedes poner varias franjas el mismo día.</span>
+        <span>Elige una clase, una asignatura fija y el docente. Después añade todas sus sesiones de lunes a viernes en una sola ventana.</span>
       </div>
       <div class="table-wrap"><table>
         <thead><tr><th>Clase</th><th>Asignatura</th><th>Franjas semanales</th><th>Docente</th><th>Aula</th><th>Acciones</th></tr></thead>
@@ -103,12 +104,12 @@ export function openClassScheduleForm(entry, { state, onSave }) {
     bodyHtml: `<div class="weekly-schedule-editor">
       <div class="weekly-schedule-intro">
         <strong>Define toda la semana de una asignatura</strong>
-        <span>Selecciona la clase y la asignatura. Después añade una o varias franjas en cada día que corresponda.</span>
+        <span>Selecciona la clase, la asignatura y el docente. Después añade una o varias franjas en cada día que corresponda.</span>
       </div>
       <div class="form-grid weekly-schedule-top">
-        <div class="form-field"><label for="grupoClase">Grupo / clase ordinaria *</label><select id="grupoClase" name="grupoClase" required>${classGroups.length ? classGroups.map(group => `<option value="${escapeHtml(group)}" ${group === initialGroup ? 'selected' : ''}>${escapeHtml(group)}</option>`).join('') : '<option value="">No hay clases disponibles</option>'}</select><span class="field-hint">Las clases proceden de la estructura del colegio. Los nombres antiguos que ya existieran se conservan para no perder datos.</span></div>
+        <div class="form-field"><label for="grupoClase">Grupo / clase ordinaria *</label><select id="grupoClase" name="grupoClase" required>${classGroups.length ? classGroups.map(group => `<option value="${escapeHtml(group)}" ${group === initialGroup ? 'selected' : ''}>${escapeHtml(group)}</option>`).join('') : '<option value="">No hay clases disponibles</option>'}</select><span class="field-hint">Las clases proceden de la estructura del colegio.</span></div>
         <div class="form-field"><label for="materia">Asignatura *</label><select id="materia" name="materia" required></select><span class="field-hint">Catálogo fijo según la etapa para evitar nombres duplicados o variantes.</span></div>
-        <div class="form-field"><label for="docente">Docente</label><input id="docente" name="docente" placeholder="Opcional"></div>
+        <div class="form-field"><label for="professionalId">Docente</label><select id="professionalId" name="professionalId"></select><span class="field-hint">Los profesores que tengan esta clase/asignatura en su perfil aparecerán primero.</span></div>
         <div class="form-field"><label for="aula">Aula</label><input id="aula" name="aula" placeholder="Opcional"></div>
       </div>
       <div class="weekly-day-list" id="weeklyDayList">
@@ -122,7 +123,9 @@ export function openClassScheduleForm(entry, { state, onSave }) {
     onOpen: form => {
       const groupSelect = form.elements.grupoClase;
       const subjectSelect = form.elements.materia;
+      const professionalSelect = form.elements.professionalId;
       let preferredSubject = selection?.materia || '';
+      let legacyTeacher = '';
 
       const addSlot = (dayId, existingEntry = {}) => {
         const container = form.querySelector(`[data-day-slots="${dayId}"]`);
@@ -139,6 +142,21 @@ export function openClassScheduleForm(entry, { state, onSave }) {
         updateDayCount(form, dayId);
       };
 
+      const refreshTeachers = (entries = []) => {
+        const selectedId = entries.find(item => item.professionalId)?.professionalId || professionalSelect.value;
+        legacyTeacher = entries.find(item => !item.professionalId && item.docente)?.docente || legacyTeacher;
+        const group = groupSelect.value;
+        const subject = subjectSelect.value;
+        const active = (state.professionals || []).filter(professional => professional.activo !== false);
+        const matching = active.filter(professional => (professional.teachingAssignments || []).some(item => normalizeClassGroup(item.grupoClase) === normalizeClassGroup(group) && normalizeSubject(item.materia) === normalizeSubject(subject)));
+        const matchingIds = new Set(matching.map(item => item.id));
+        const ordered = [...matching, ...active.filter(item => !matchingIds.has(item.id)).sort((a,b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'))];
+        professionalSelect.innerHTML = `<option value="">Sin docente enlazado</option>${legacyTeacher && !selectedId ? `<option value="__legacy__">${escapeHtml(legacyTeacher)} · dato existente</option>` : ''}${ordered.map(professional => `<option value="${professional.id}">${escapeHtml(professional.nombre)}${matchingIds.has(professional.id) ? ' · asignado en perfil' : ''}</option>`).join('')}`;
+        if (selectedId && ordered.some(item => item.id === selectedId)) professionalSelect.value = selectedId;
+        else if (legacyTeacher) professionalSelect.value = '__legacy__';
+        else if (matching.length === 1) professionalSelect.value = matching[0].id;
+      };
+
       const loadPair = () => {
         const grupoClase = groupSelect.value;
         const materia = subjectSelect.value;
@@ -149,10 +167,9 @@ export function openClassScheduleForm(entry, { state, onSave }) {
           entries.filter(item => item.dia === day.id).forEach(item => addSlot(day.id, item));
           updateDayCount(form, day.id);
         }
-        const teachers = [...new Set(entries.map(item => item.docente).filter(Boolean))];
+        refreshTeachers(entries);
         const rooms = [...new Set(entries.map(item => item.aula).filter(Boolean))];
         const notes = [...new Set(entries.map(item => item.observaciones).filter(Boolean))];
-        form.elements.docente.value = teachers[0] || '';
         form.elements.aula.value = rooms[0] || '';
         form.elements.observaciones.value = notes[0] || '';
       };
@@ -186,7 +203,12 @@ export function openClassScheduleForm(entry, { state, onSave }) {
       const validSubjects = subjectsForClassGroup(state, grupoClase);
       if (!validSubjects.includes(materia)) { setModalMessage(message, 'Selecciona una asignatura válida del catálogo.'); return false; }
 
-      const docente = data.get('docente')?.trim() || '';
+      const selectedProfessionalId = data.get('professionalId') || '';
+      const professional = (state.professionals || []).find(item => item.id === selectedProfessionalId);
+      const existingEntries = entriesForClassSubject(state.classSchedules || [], grupoClase, materia);
+      const legacyTeacher = existingEntries.find(item => !item.professionalId && item.docente)?.docente || '';
+      const professionalId = selectedProfessionalId === '__legacy__' ? '' : selectedProfessionalId;
+      const docente = professional?.nombre || (selectedProfessionalId === '__legacy__' ? legacyTeacher : '');
       const aula = data.get('aula')?.trim() || '';
       const observaciones = data.get('observaciones')?.trim() || '';
       const entries = [];
@@ -220,6 +242,7 @@ export function openClassScheduleForm(entry, { state, onSave }) {
           dia:day.id,
           inicio:item.inicio,
           fin:item.fin,
+          professionalId,
           docente,
           aula,
           observaciones
