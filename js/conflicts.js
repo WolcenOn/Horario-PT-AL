@@ -1,7 +1,7 @@
 import { fullName, minutesToTime, overlapInterval, timeToMinutes } from './utils.js';
 import { externalBlockOverlap } from './professional-availability.js';
 
-export function detectConflicts({ students, professionals, groups, sessions }) {
+export function detectConflicts({ students = [], professionals = [], groups = [], sessions = [], classSchedules = [] }) {
   const studentMap = new Map(students.map(s => [s.id, s]));
   const professionalMap = new Map(professionals.map(p => [p.id, p]));
   const groupMap = new Map(groups.map(g => [g.id, g]));
@@ -21,6 +21,13 @@ export function detectConflicts({ students, professionals, groups, sessions }) {
       endMin: timeToMinutes(session.fin)
     };
   });
+
+  const resolvedClasses = classSchedules.map(entry => ({
+    ...entry,
+    professionalId:entry.professionalId || '',
+    startMin:timeToMinutes(entry.inicio),
+    endMin:timeToMinutes(entry.fin)
+  }));
 
   for (const item of resolved) {
     if (!item.group) {
@@ -72,17 +79,38 @@ export function detectConflicts({ students, professionals, groups, sessions }) {
     }
   }
 
+  for (const entry of resolvedClasses) {
+    if (!entry.professionalId) continue;
+    const professional = professionalMap.get(entry.professionalId);
+    if (!professional) {
+      conflicts.push(makeConflict('class-teacher-integrity', 'grave', [entry.id], [], [entry.professionalId], `${entry.grupoClase} · ${entry.materia} referencia un docente inexistente.`));
+      continue;
+    }
+    const external = externalBlockOverlap(professional, entry.dia, entry.inicio, entry.fin);
+    if (external) {
+      conflicts.push(makeConflict(
+        'class-teacher-external-center', 'grave', [entry.id], [], [professional.id],
+        `${professional.nombre} figura en ${entry.grupoClase} · ${entry.materia}, pero está en ${external.centro} el ${entry.dia} de ${external.inicio} a ${external.fin}.`
+      ));
+    }
+  }
+
   for (const professional of professionals) {
     if (!professional.maxWeeklyMinutes) continue;
-    const assigned = resolved
+    const supportAssigned = resolved
       .filter(item => item.professionalId === professional.id && Number.isFinite(item.startMin) && Number.isFinite(item.endMin) && item.endMin > item.startMin)
       .reduce((sum, item) => sum + (item.endMin - item.startMin), 0);
+    const classAssigned = resolvedClasses
+      .filter(item => item.professionalId === professional.id && Number.isFinite(item.startMin) && Number.isFinite(item.endMin) && item.endMin > item.startMin)
+      .reduce((sum, item) => sum + (item.endMin - item.startMin), 0);
+    const responsibilityMinutes = (professional.responsibilities || []).reduce((sum, item) => sum + Math.max(0, Number(item.weeklyMinutes) || 0), 0);
+    const assigned = supportAssigned + classAssigned + responsibilityMinutes;
     if (assigned > professional.maxWeeklyMinutes) {
       conflicts.push(makeConflict(
         'professional-max-hours', 'aviso',
-        resolved.filter(item => item.professionalId === professional.id).map(item => item.id),
+        [...resolved.filter(item => item.professionalId === professional.id).map(item => item.id), ...resolvedClasses.filter(item => item.professionalId === professional.id).map(item => item.id)],
         [], [professional.id],
-        `${professional.nombre} supera su máximo semanal configurado (${assigned} min asignados frente a ${professional.maxWeeklyMinutes} min).`
+        `${professional.nombre} supera su máximo semanal configurado (${assigned} min modelados frente a ${professional.maxWeeklyMinutes} min).`
       ));
     }
   }
@@ -111,6 +139,36 @@ export function detectConflicts({ students, professionals, groups, sessions }) {
           `${fullName(student) || 'Un alumno'} aparece simultáneamente en ${a.group?.nombre || a.id} y ${b.group?.nombre || b.id} el ${a.dia} de ${minutesToTime(overlap.start)} a ${minutesToTime(overlap.end)}.`
         ));
       }
+    }
+  }
+
+  const linkedClasses = resolvedClasses.filter(item => item.professionalId && Number.isFinite(item.startMin) && Number.isFinite(item.endMin));
+  for (let i = 0; i < linkedClasses.length; i++) {
+    for (let j = i + 1; j < linkedClasses.length; j++) {
+      const a = linkedClasses[i];
+      const b = linkedClasses[j];
+      if (a.dia !== b.dia || a.professionalId !== b.professionalId) continue;
+      const overlap = overlapInterval(a.startMin, a.endMin, b.startMin, b.endMin);
+      if (!overlap) continue;
+      const professional = professionalMap.get(a.professionalId);
+      conflicts.push(makeConflict(
+        'class-teacher-overlap', 'grave', [a.id, b.id], [], [a.professionalId],
+        `${professional?.nombre || 'Un docente'} aparece simultáneamente en ${a.grupoClase} · ${a.materia} y ${b.grupoClase} · ${b.materia} el ${a.dia} de ${minutesToTime(overlap.start)} a ${minutesToTime(overlap.end)}.`
+      ));
+    }
+  }
+
+  for (const support of resolved) {
+    if (!support.professionalId || !Number.isFinite(support.startMin) || !Number.isFinite(support.endMin)) continue;
+    for (const classroom of linkedClasses) {
+      if (support.professionalId !== classroom.professionalId || support.dia !== classroom.dia) continue;
+      const overlap = overlapInterval(support.startMin, support.endMin, classroom.startMin, classroom.endMin);
+      if (!overlap) continue;
+      const professional = professionalMap.get(support.professionalId);
+      conflicts.push(makeConflict(
+        'support-class-teacher-overlap', 'grave', [support.id, classroom.id], [], [support.professionalId],
+        `${professional?.nombre || 'Un docente'} aparece simultáneamente en ${support.group?.nombre || 'PT/AL'} y ${classroom.grupoClase} · ${classroom.materia} el ${support.dia} de ${minutesToTime(overlap.start)} a ${minutesToTime(overlap.end)}.`
+      ));
     }
   }
 
