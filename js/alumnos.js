@@ -1,5 +1,6 @@
 import { deriveStudentStatus } from './hours.js';
-import { COURSE_OPTIONS } from './education.js';
+import { COURSE_OPTIONS, classesForCourse, normalizeSchoolSettings, schoolStructureConfigured } from './education.js';
+import { get } from './db.js';
 import { escapeHtml, fullName, minutesParts, targetFromParts, uid, formatDuration } from './utils.js';
 import { showModal, setModalMessage } from './ui.js';
 
@@ -30,8 +31,10 @@ export function renderStudents(root, { state, hoursMap, conflictStudentIds, onEd
   };
 }
 
-export function openStudentForm(student, { onSave }) {
+export async function openStudentForm(student, { onSave }) {
   const current = student || { activo:true, restricciones:[] };
+  const schoolSettings = normalizeSchoolSettings(await get('settings', 'school'));
+  const structureReady = schoolStructureConfigured(schoolSettings);
   const pt = minutesParts(current.horasPTObjetivoMin || 0);
   const al = minutesParts(current.horasALObjetivoMin || 0);
   showModal({
@@ -40,26 +43,47 @@ export function openStudentForm(student, { onSave }) {
       <div class="form-field"><label for="nombre">Nombre *</label><input id="nombre" name="nombre" required value="${escapeHtml(current.nombre || '')}"></div>
       <div class="form-field"><label for="apellidos">Apellidos *</label><input id="apellidos" name="apellidos" required value="${escapeHtml(current.apellidos || '')}"></div>
       <div class="form-field"><label for="curso">Curso *</label><select id="curso" name="curso" required>${courseOptionsHtml(current.curso)}</select><span class="field-hint">Selecciona el curso para evitar variantes de escritura y poder aplicar correctamente el recreo de Infantil o Primaria.</span></div>
-      <div class="form-field"><label for="grupoClase">Grupo / clase ordinaria</label><input id="grupoClase" name="grupoClase" value="${escapeHtml(current.grupoClase || '')}" placeholder="4ºA"></div>
+      <div class="form-field"><label for="grupoClase">Grupo / clase ordinaria${structureReady ? ' *' : ''}</label><select id="grupoClase" name="grupoClase" ${structureReady ? 'required' : ''}></select><span id="classGroupHint" class="field-hint">${structureReady ? 'Se muestran las clases definidas en la estructura del colegio.' : 'Configura primero las clases del colegio desde “Horarios de aula” para poder seleccionarlas.'}</span></div>
       <div class="form-field full"><label for="tutor">Tutor/a</label><input id="tutor" name="tutor" value="${escapeHtml(current.tutor || '')}"></div>
       <fieldset><legend>Objetivo semanal PT</legend><div class="duration-pair"><div class="form-field"><label for="ptHours">Horas</label><input id="ptHours" name="ptHours" type="number" min="0" max="40" value="${pt.hours}"></div><div class="form-field"><label for="ptMinutes">Minutos</label><input id="ptMinutes" name="ptMinutes" type="number" min="0" max="59" value="${pt.minutes}"></div></div></fieldset>
       <fieldset><legend>Objetivo semanal AL</legend><div class="duration-pair"><div class="form-field"><label for="alHours">Horas</label><input id="alHours" name="alHours" type="number" min="0" max="40" value="${al.hours}"></div><div class="form-field"><label for="alMinutes">Minutos</label><input id="alMinutes" name="alMinutes" type="number" min="0" max="59" value="${al.minutes}"></div></div></fieldset>
       <div class="form-field full"><label for="observaciones">Observaciones</label><textarea id="observaciones" name="observaciones">${escapeHtml(current.observaciones || '')}</textarea></div>
       <div class="form-field full"><label><input name="activo" type="checkbox" ${current.activo !== false ? 'checked' : ''}> Alumno activo</label></div>
     </div>`,
+    onOpen: form => {
+      const refreshClassGroups = () => {
+        const course = form.elements.curso.value;
+        const groups = classesForCourse(schoolSettings, course);
+        const existing = current.grupoClase?.trim() || '';
+        const legacy = existing && !groups.includes(existing) ? `<option value="${escapeHtml(existing)}">${escapeHtml(existing)} · dato existente</option>` : '';
+        form.elements.grupoClase.innerHTML = `<option value="">${structureReady ? 'Selecciona una clase…' : 'Sin estructura configurada'}</option>${legacy}${groups.map(group => `<option value="${escapeHtml(group)}">${escapeHtml(group)}</option>`).join('')}`;
+        if (existing && (groups.includes(existing) || legacy)) form.elements.grupoClase.value = existing;
+        else if (!student && groups.length === 1) form.elements.grupoClase.value = groups[0];
+      };
+      form.elements.curso.addEventListener('change', refreshClassGroups);
+      refreshClassGroups();
+    },
     onSubmit: async (data, form, message) => {
       const nombre = data.get('nombre')?.trim();
       const apellidos = data.get('apellidos')?.trim();
       const curso = data.get('curso')?.trim();
+      const grupoClase = data.get('grupoClase')?.trim() || '';
       const ptMin = targetFromParts(data.get('ptHours'), data.get('ptMinutes'));
       const alMin = targetFromParts(data.get('alHours'), data.get('alMinutes'));
       if (!nombre || !apellidos) { setModalMessage(message, 'Nombre y apellidos son obligatorios.'); return false; }
       if (!curso) { setModalMessage(message, 'Selecciona el curso del alumno.'); return false; }
+      if (structureReady) {
+        const validGroups = classesForCourse(schoolSettings, curso);
+        if (!grupoClase || !validGroups.includes(grupoClase)) {
+          setModalMessage(message, 'Selecciona una clase válida para el curso del alumno según la estructura del colegio.');
+          return false;
+        }
+      }
       if (!Number.isFinite(ptMin) || !Number.isFinite(alMin)) { setModalMessage(message, 'Las horas objetivo deben ser valores válidos y no negativos.'); return false; }
       await onSave({
         ...current,
         id: current.id || uid('alu'), nombre, apellidos,
-        curso, grupoClase: data.get('grupoClase')?.trim(), tutor: data.get('tutor')?.trim(),
+        curso, grupoClase, tutor: data.get('tutor')?.trim(),
         horasPTObjetivoMin: ptMin, horasALObjetivoMin: alMin,
         observaciones: data.get('observaciones')?.trim(), activo: data.get('activo') === 'on',
         restricciones: current.restricciones || []
