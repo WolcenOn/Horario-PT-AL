@@ -1,16 +1,18 @@
 import { get, getAll, put, remove, replaceClassSubjectData, replaceStoreData } from './db.js';
 import { normalizeSchoolSettings } from './education.js';
 import { normalizeAutomationSettings } from './automation-core.js';
+import { normalizeCenterPlanningSettings } from './center-planning.js';
 
 export async function loadState() {
-  const [students, professionals, groups, sessions, classSchedules, schoolSettings, automationSettings] = await Promise.all([
+  const [students, professionals, groups, sessions, classSchedules, schoolSettings, automationSettings, centerPlanningSettings] = await Promise.all([
     getAll('students'),
     getAll('professionals'),
     getAll('groups'),
     getAll('sessions'),
     getAll('classSchedules'),
     get('settings', 'school'),
-    get('settings', 'automation')
+    get('settings', 'automation'),
+    get('settings', 'centerPlanning')
   ]);
   return {
     students,
@@ -19,7 +21,8 @@ export async function loadState() {
     sessions,
     classSchedules,
     schoolSettings: normalizeSchoolSettings(schoolSettings),
-    automationSettings: normalizeAutomationSettings(automationSettings)
+    automationSettings: normalizeAutomationSettings(automationSettings),
+    centerPlanningSettings: normalizeCenterPlanningSettings(centerPlanningSettings)
   };
 }
 
@@ -32,6 +35,7 @@ export const saveClassSchedule = entry => entry?.__weeklyBatch
   : put('classSchedules', entry);
 export const saveSchoolSettings = settings => put('settings', normalizeSchoolSettings(settings));
 export const saveAutomationSettings = settings => put('settings', normalizeAutomationSettings(settings));
+export const saveCenterPlanningSettings = settings => put('settings', normalizeCenterPlanningSettings(settings));
 export const replaceSessions = sessions => replaceStoreData('sessions', sessions);
 export const replaceClassSubjectSchedule = (grupoClase, materia, entries) => replaceClassSubjectData(grupoClase, materia, entries);
 
