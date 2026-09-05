@@ -4,12 +4,14 @@ import { renderGroups, openGroupForm } from './grupos.js';
 import { renderSessions, openSessionForm } from './sesiones.js';
 import { renderClassSchedules, openClassScheduleForm } from './class-schedules.js';
 import { openRecessSettingsForm } from './recess-settings.js';
+import { renderAutomationManager } from './automation-view.js';
+import { buildReadinessReport, generateAutomaticProposal } from './automation-core.js';
 import { renderCalendar } from './calendar.js';
 import { renderAlerts } from './alerts.js';
 import { calculateStudentHours, deriveStudentStatus, totalsFromHours } from './hours.js';
 import { conflictStudentIds, detectConflicts } from './conflicts.js';
 import { ensureSeedData, loadDemoData } from './seed.js';
-import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, saveClassSchedule, saveGroup, saveProfessional, saveSchoolSettings, saveSession, saveStudent } from './repository.js';
+import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, replaceSessions, saveAutomationSettings, saveClassSchedule, saveGroup, saveProfessional, saveSchoolSettings, saveSession, saveStudent } from './repository.js';
 import { put, resetDatabase } from './db.js';
 import { downloadSharePackage, importShareFile } from './sharing.js';
 import { printCalendar } from './print.js';
@@ -24,12 +26,15 @@ const appShell = document.querySelector('#appShell');
 const sidebarToggleBtn = document.querySelector('#sidebarToggleBtn');
 const importDataInput = document.querySelector('#importDataInput');
 const calendarPrintActions = document.querySelector('#calendarPrintActions');
+const serviceFilterControl = document.querySelector('.service-filter');
+const automationNavBadge = document.querySelector('#automationNavBadge');
 
 let currentView = 'calendar';
 let serviceFilter = localStorage.getItem('horario-service-filter') || 'ALL';
-let state = { students:[], professionals:[], groups:[], sessions:[], classSchedules:[], schoolSettings:null };
+let state = { students:[], professionals:[], groups:[], sessions:[], classSchedules:[], schoolSettings:null, automationSettings:null };
 let derived = {};
 let selectedSessionId = null;
+let autoProposal = null;
 
 const VIEW_TITLES = {
   calendar:'Horario semanal',
@@ -38,6 +43,7 @@ const VIEW_TITLES = {
   groups:'Grupos',
   sessions:'Sesiones',
   classSchedules:'Horarios de aula',
+  automation:'Configuración automática',
   alerts:'Conflictos'
 };
 
@@ -62,6 +68,7 @@ async function refresh({ toast } = {}) {
   const totals = totalsFromHours(hoursMap);
   derived = { hoursMap, conflicts, conflictStudents, totals };
   renderSummary();
+  updateAutomationBadge();
   renderCurrentView();
   if (toast) showToast(toast);
 }
@@ -109,11 +116,24 @@ function renderSummary() {
     </div>`;
 }
 
+function updateAutomationBadge() {
+  if (!automationNavBadge) return;
+  const readiness = buildReadinessReport(state, state.automationSettings);
+  const missing = readiness.items.filter(item => !item.ok).length;
+  automationNavBadge.textContent = readiness.ready ? '✓' : String(missing);
+  automationNavBadge.classList.toggle('is-ready', readiness.ready);
+  automationNavBadge.title = readiness.ready ? 'Configuración automática preparada' : `${missing} apartado(s) pendientes para la configuración automática`;
+  automationNavBadge.setAttribute('aria-label', automationNavBadge.title);
+}
+
 function renderCurrentView() {
   pageTitle.textContent = VIEW_TITLES[currentView];
   document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === currentView));
   document.querySelectorAll('[data-service-filter]').forEach(button => button.classList.toggle('is-active', button.dataset.serviceFilter === serviceFilter));
   calendarPrintActions?.classList.toggle('hidden', currentView !== 'calendar');
+  summaryStrip.classList.toggle('hidden', currentView === 'automation');
+  serviceFilterControl?.classList.toggle('hidden', currentView === 'automation');
+  primaryActionBtn.classList.toggle('hidden', currentView === 'automation');
 
   const actionLabels = {
     students:'+ Nuevo alumno',
@@ -137,6 +157,17 @@ function renderCurrentView() {
   if (currentView === 'groups') renderGroups(viewRoot, { ...common, onEdit: editGroup, onDelete: removeGroup });
   if (currentView === 'sessions') renderSessions(viewRoot, { ...common, onEdit: editSession, onDelete: removeSession });
   if (currentView === 'classSchedules') renderClassSchedules(viewRoot, { ...common, onEdit: editClassSchedule, onDelete: removeClassSchedule });
+  if (currentView === 'automation') renderAutomationManager(viewRoot, {
+    ...common,
+    automationSettings:state.automationSettings,
+    proposal:autoProposal,
+    onSaveSettings:saveAutomaticSettings,
+    onGenerate:generateAutomaticSchedule,
+    onApplyProposal:applyAutomaticProposal,
+    onDiscardProposal:discardAutomaticProposal,
+    onNavigate:navigateFromAutomation,
+    onEditRecesses:editRecessSettings
+  });
   if (currentView === 'alerts') renderAlerts(viewRoot, common);
 }
 
@@ -169,7 +200,7 @@ function bindGlobalEvents() {
 
   document.querySelector('#exportDataBtn').addEventListener('click', () => {
     downloadSharePackage(state);
-    showToast('Horario exportado. Incluye horarios de aula y recreos del centro.');
+    showToast('Horario exportado. Incluye horarios de aula, recreos y reglas de configuración automática.');
   });
 
   document.querySelector('#importDataBtn').addEventListener('click', () => importDataInput.click());
@@ -177,11 +208,12 @@ function bindGlobalEvents() {
     const [file] = importDataInput.files || [];
     importDataInput.value = '';
     if (!file) return;
-    if (!confirm('Importar este horario sustituirá los alumnos, profesionales, grupos, sesiones, horarios de aula y recreos actuales de este navegador. ¿Continuar?')) return;
+    if (!confirm('Importar este horario sustituirá los alumnos, profesionales, grupos, sesiones, horarios de aula, recreos y reglas automáticas actuales. ¿Continuar?')) return;
     try {
       const counts = await importShareFile(file);
       localStorage.setItem('horario-user-cleared', 'true');
       selectedSessionId = null;
+      autoProposal = null;
       currentView = 'calendar';
       await refresh({ toast:`Horario importado: ${counts.students} alumnos, ${counts.groups} grupos, ${counts.sessions} sesiones y ${counts.classSchedules} franjas de aula.` });
     } catch (error) {
@@ -191,19 +223,21 @@ function bindGlobalEvents() {
   });
 
   document.querySelector('#resetDemoBtn').addEventListener('click', async () => {
-    if (!confirm('Se sustituirán los datos actuales por los datos de ejemplo. También se borrarán los recreos configurados. ¿Continuar?')) return;
+    if (!confirm('Se sustituirán los datos actuales por los datos de ejemplo. También se borrarán recreos y reglas automáticas configuradas. ¿Continuar?')) return;
     localStorage.removeItem('horario-user-cleared');
     selectedSessionId = null;
+    autoProposal = null;
     await loadDemoData();
     await refresh({ toast:'Datos de ejemplo restaurados.' });
   });
 
   document.querySelector('#clearAllDataBtn').addEventListener('click', async () => {
-    const accepted = confirm('Se eliminarán TODOS los alumnos, profesionales, grupos, sesiones, horarios de aula y recreos de este navegador. Esta acción no se puede deshacer. Si quieres conservar una copia, cancela y usa “Exportar / compartir”. ¿Vaciar ahora?');
+    const accepted = confirm('Se eliminarán TODOS los alumnos, profesionales, grupos, sesiones, horarios de aula, recreos y reglas automáticas de este navegador. Esta acción no se puede deshacer. Si quieres conservar una copia, cancela y usa “Exportar / compartir”. ¿Vaciar ahora?');
     if (!accepted) return;
     await resetDatabase();
     localStorage.setItem('horario-user-cleared', 'true');
     selectedSessionId = null;
+    autoProposal = null;
     currentView = 'calendar';
     await refresh({ toast:'Todos los datos han sido eliminados. La aplicación está lista para empezar desde cero.' });
   });
@@ -220,8 +254,54 @@ function printServiceCalendar(serviceType) {
 function editRecessSettings() {
   openRecessSettingsForm(state.schoolSettings, { onSave: async value => {
     await saveSchoolSettings(value);
+    autoProposal = null;
     await refresh({ toast:'Recreos de Infantil y Primaria actualizados.' });
   } });
+}
+
+async function saveAutomaticSettings(value) {
+  await saveAutomationSettings(value);
+  autoProposal = null;
+  await refresh({ toast:'Prioridades y franjas de configuración automática guardadas.' });
+}
+
+function generateAutomaticSchedule() {
+  try {
+    autoProposal = generateAutomaticProposal(state, state.automationSettings);
+    renderCurrentView();
+    if (autoProposal.ok) {
+      showToast(`Propuesta calculada: ${autoProposal.moved.length} sesión(es) se recolocarían.`);
+    } else if (autoProposal.unresolved?.length) {
+      showToast(`No se ha encontrado una solución completa para ${autoProposal.unresolved.length} elemento(s).`, 'error');
+    } else {
+      showToast('Faltan datos por configurar antes de calcular una propuesta.', 'error');
+    }
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'No se pudo generar la propuesta automática.', 'error');
+  }
+}
+
+async function applyAutomaticProposal() {
+  if (!autoProposal?.ok) return;
+  const moved = autoProposal.moved.length;
+  const accepted = confirm(`Se aplicará la propuesta automática y se sustituirá la posición de las sesiones actuales. ${moved} sesión(es) cambiarán de día u hora. ¿Continuar?`);
+  if (!accepted) return;
+  await replaceSessions(autoProposal.sessions);
+  autoProposal = null;
+  selectedSessionId = null;
+  currentView = 'calendar';
+  await refresh({ toast:`Propuesta automática aplicada. ${moved} sesión(es) recolocadas.` });
+}
+
+function discardAutomaticProposal() {
+  autoProposal = null;
+  renderCurrentView();
+}
+
+function navigateFromAutomation(target) {
+  currentView = target;
+  renderCurrentView();
 }
 
 function applyInitialSidebarState() {
@@ -249,12 +329,20 @@ function openClassSchedulesView() {
 
 function editStudent(id) {
   const student = id ? state.students.find(item => item.id === id) : null;
-  openStudentForm(student, { onSave: async value => { await saveStudent(value); await refresh({ toast: student ? 'Alumno actualizado.' : 'Alumno creado.' }); } });
+  openStudentForm(student, { onSave: async value => {
+    await saveStudent(value);
+    autoProposal = null;
+    await refresh({ toast: student ? 'Alumno actualizado.' : 'Alumno creado.' });
+  } });
 }
 
 function editProfessional(id) {
   const professional = id ? state.professionals.find(item => item.id === id) : null;
-  openProfessionalForm(professional, { onSave: async value => { await saveProfessional(value); await refresh({ toast: professional ? 'Profesional actualizado.' : 'Profesional creado.' }); } });
+  openProfessionalForm(professional, { onSave: async value => {
+    await saveProfessional(value);
+    autoProposal = null;
+    await refresh({ toast: professional ? 'Profesional actualizado.' : 'Profesional creado.' });
+  } });
 }
 
 function editGroup(id) {
@@ -263,6 +351,7 @@ function editGroup(id) {
     await saveGroup(value);
     const linked = state.sessions.filter(session => session.groupId === value.id);
     await Promise.all(linked.map(session => put('sessions', { ...session, professionalId:value.professionalId })));
+    autoProposal = null;
     await refresh({ toast: group ? 'Grupo actualizado.' : 'Grupo creado.' });
   } });
 }
@@ -272,6 +361,7 @@ function editSession(id) {
   openSessionForm(session, { state, onSave: async value => {
     await saveSession(value);
     selectedSessionId = value.id;
+    autoProposal = null;
     await refresh({ toast: session ? 'Sesión actualizada.' : 'Sesión creada.' });
   } });
 }
@@ -280,6 +370,7 @@ function editClassSchedule(id) {
   const entry = id ? state.classSchedules.find(item => item.id === id) : null;
   openClassScheduleForm(entry, { state, onSave: async value => {
     await saveClassSchedule(value);
+    autoProposal = null;
     await refresh({ toast: entry ? 'Franja de aula actualizada.' : 'Franja de aula creada.' });
   } });
 }
@@ -310,6 +401,7 @@ async function moveSession(id, patch) {
 
   await saveSession(candidate);
   selectedSessionId = id;
+  autoProposal = null;
   const warnings = newConflicts.filter(conflict => conflict.severity !== 'grave').length;
   const conflictCount = newConflicts.length;
   const toast = conflictCount
@@ -321,20 +413,20 @@ async function moveSession(id, patch) {
 async function removeStudent(id) {
   const student = state.students.find(item => item.id === id); if(!student)return;
   if(!confirm(`¿Eliminar a ${student.nombre} ${student.apellidos}? También se retirará de los grupos en los que participa.`))return;
-  await deleteStudent(id,state); await refresh({toast:'Alumno eliminado.'});
+  await deleteStudent(id,state); autoProposal = null; await refresh({toast:'Alumno eliminado.'});
 }
 
 async function removeProfessional(id) {
   const professional = state.professionals.find(item => item.id === id);if(!professional)return;
   if(!confirm(`¿Eliminar al profesional ${professional.nombre}?`))return;
-  try{await deleteProfessional(id,state);await refresh({toast:'Profesional eliminado.'});}catch(error){showToast(error.message,'error');}
+  try{await deleteProfessional(id,state);autoProposal = null;await refresh({toast:'Profesional eliminado.'});}catch(error){showToast(error.message,'error');}
 }
 
 async function removeGroup(id) {
   const group = state.groups.find(item => item.id === id);if(!group)return;
   const count = state.sessions.filter(session => session.groupId === id).length;
   if(!confirm(`¿Eliminar el grupo ${group.nombre}? Se eliminarán también ${count} sesión(es) asociadas.`))return;
-  await deleteGroup(id,state);await refresh({toast:'Grupo y sesiones asociadas eliminados.'});
+  await deleteGroup(id,state);autoProposal = null;await refresh({toast:'Grupo y sesiones asociadas eliminados.'});
 }
 
 async function removeSession(id) {
@@ -342,6 +434,7 @@ async function removeSession(id) {
   if(!confirm(`¿Eliminar la sesión del ${session.dia} ${session.inicio}–${session.fin}?`))return;
   await deleteSession(id);
   if (selectedSessionId === id) selectedSessionId = null;
+  autoProposal = null;
   await refresh({toast:'Sesión eliminada.'});
 }
 
@@ -350,6 +443,7 @@ async function removeClassSchedule(id) {
   if (!entry) return;
   if (!confirm(`¿Eliminar ${entry.materia} de ${entry.grupoClase} (${entry.inicio}–${entry.fin})?`)) return;
   await deleteClassSchedule(id);
+  autoProposal = null;
   await refresh({ toast:'Franja de aula eliminada.' });
 }
 
