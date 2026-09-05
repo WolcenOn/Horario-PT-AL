@@ -1,14 +1,16 @@
-import { get, getAll, put, remove } from './db.js';
+import { get, getAll, put, remove, replaceStoreData } from './db.js';
 import { normalizeSchoolSettings } from './education.js';
+import { normalizeAutomationSettings } from './automation-core.js';
 
 export async function loadState() {
-  const [students, professionals, groups, sessions, classSchedules, schoolSettings] = await Promise.all([
+  const [students, professionals, groups, sessions, classSchedules, schoolSettings, automationSettings] = await Promise.all([
     getAll('students'),
     getAll('professionals'),
     getAll('groups'),
     getAll('sessions'),
     getAll('classSchedules'),
-    get('settings', 'school')
+    get('settings', 'school'),
+    get('settings', 'automation')
   ]);
   return {
     students,
@@ -16,7 +18,8 @@ export async function loadState() {
     groups,
     sessions,
     classSchedules,
-    schoolSettings: normalizeSchoolSettings(schoolSettings)
+    schoolSettings: normalizeSchoolSettings(schoolSettings),
+    automationSettings: normalizeAutomationSettings(automationSettings)
   };
 }
 
@@ -26,6 +29,8 @@ export const saveGroup = group => put('groups', group);
 export const saveSession = session => put('sessions', session);
 export const saveClassSchedule = entry => put('classSchedules', entry);
 export const saveSchoolSettings = settings => put('settings', normalizeSchoolSettings(settings));
+export const saveAutomationSettings = settings => put('settings', normalizeAutomationSettings(settings));
+export const replaceSessions = sessions => replaceStoreData('sessions', sessions);
 
 export async function deleteStudent(studentId, state) {
   const affectedGroups = state.groups.filter(g => (g.studentIds || []).includes(studentId));
