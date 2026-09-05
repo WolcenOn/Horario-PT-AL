@@ -1,11 +1,12 @@
 import { DAYS, SERVICE_TYPES } from './constants.js';
-import { replaceCoreData } from './db.js';
+import { put, replaceCoreData } from './db.js';
+import { normalizeSchoolSettings, validateSchoolSettings } from './education.js';
 import { timeToMinutes } from './utils.js';
 
 const FORMAT = 'horario-pt-al';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const REQUIRED_KEYS = ['students', 'professionals', 'groups', 'sessions'];
-const SHARE_KEYS = [...REQUIRED_KEYS, 'classSchedules'];
+const ARRAY_SHARE_KEYS = [...REQUIRED_KEYS, 'classSchedules'];
 
 export function createSharePackage(state) {
   return {
@@ -13,7 +14,10 @@ export function createSharePackage(state) {
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     app: 'Horario PT / AL',
-    data: Object.fromEntries(SHARE_KEYS.map(key => [key, structuredClone(state[key] || [])]))
+    data: {
+      ...Object.fromEntries(ARRAY_SHARE_KEYS.map(key => [key, structuredClone(state[key] || [])])),
+      schoolSettings: structuredClone(normalizeSchoolSettings(state.schoolSettings))
+    }
   };
 }
 
@@ -41,6 +45,7 @@ export async function importShareFile(file) {
   }
   const data = validateSharePackage(payload);
   await replaceCoreData(data);
+  await put('settings', data.schoolSettings);
   return {
     students: data.students.length,
     professionals: data.professionals.length,
@@ -72,9 +77,10 @@ export function validateSharePackage(payload) {
     professionals: source.professionals,
     groups: source.groups,
     sessions: source.sessions,
-    classSchedules: Array.isArray(source.classSchedules) ? source.classSchedules : []
+    classSchedules: Array.isArray(source.classSchedules) ? source.classSchedules : [],
+    schoolSettings: validateSchoolSettings(source.schoolSettings || normalizeSchoolSettings())
   };
-  for (const key of SHARE_KEYS) assertUniqueIds(data[key], key);
+  for (const key of ARRAY_SHARE_KEYS) assertUniqueIds(data[key], key);
 
   const studentIds = new Set(data.students.map(item => item.id));
   const professionalMap = new Map(data.professionals.map(item => [item.id, item]));
@@ -123,7 +129,10 @@ export function validateSharePackage(payload) {
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) throw new Error(`La franja de aula ${entry.id} tiene un horario no válido.`);
   }
 
-  return Object.fromEntries(SHARE_KEYS.map(key => [key, structuredClone(data[key])]));
+  return {
+    ...Object.fromEntries(ARRAY_SHARE_KEYS.map(key => [key, structuredClone(data[key])])),
+    schoolSettings: structuredClone(data.schoolSettings)
+  };
 }
 
 function assertUniqueIds(items, label) {
