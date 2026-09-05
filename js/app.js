@@ -5,13 +5,14 @@ import { renderSessions, openSessionForm } from './sesiones.js';
 import { renderClassSchedules, openClassScheduleForm } from './class-schedules.js';
 import { openRecessSettingsForm } from './recess-settings.js';
 import { renderAutomationManager } from './automation-view.js';
+import { renderCenterPlanning } from './center-planning-view.js';
 import { buildReadinessReport, generateAutomaticProposal } from './automation-core.js';
 import { renderCalendar } from './calendar.js';
 import { renderAlerts } from './alerts.js';
 import { calculateStudentHours, deriveStudentStatus, totalsFromHours } from './hours.js';
 import { conflictStudentIds, detectConflicts } from './conflicts.js';
 import { ensureSeedData, loadDemoData } from './seed.js';
-import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, replaceSessions, saveAutomationSettings, saveClassSchedule, saveGroup, saveProfessional, saveSchoolSettings, saveSession, saveStudent } from './repository.js';
+import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, replaceSessions, saveAutomationSettings, saveCenterPlanningSettings, saveClassSchedule, saveGroup, saveProfessional, saveSchoolSettings, saveSession, saveStudent } from './repository.js';
 import { put, resetDatabase } from './db.js';
 import { downloadSharePackage, importShareFile } from './sharing.js';
 import { printCalendar } from './print.js';
@@ -31,7 +32,7 @@ const automationNavBadge = document.querySelector('#automationNavBadge');
 
 let currentView = 'calendar';
 let serviceFilter = localStorage.getItem('horario-service-filter') || 'ALL';
-let state = { students:[], professionals:[], groups:[], sessions:[], classSchedules:[], schoolSettings:null, automationSettings:null };
+let state = { students:[], professionals:[], groups:[], sessions:[], classSchedules:[], schoolSettings:null, automationSettings:null, centerPlanningSettings:null };
 let derived = {};
 let selectedSessionId = null;
 let autoProposal = null;
@@ -39,10 +40,11 @@ let autoProposal = null;
 const VIEW_TITLES = {
   calendar:'Horario semanal',
   students:'Alumnos',
-  professionals:'Profesionales',
-  groups:'Grupos',
-  sessions:'Sesiones',
+  professionals:'Profesorado',
+  groups:'Grupos PT/AL',
+  sessions:'Sesiones PT/AL',
   classSchedules:'Horarios de aula',
+  centerPlanning:'Plan del centro',
   automation:'Configuración automática',
   alerts:'Conflictos'
 };
@@ -131,15 +133,16 @@ function renderCurrentView() {
   document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === currentView));
   document.querySelectorAll('[data-service-filter]').forEach(button => button.classList.toggle('is-active', button.dataset.serviceFilter === serviceFilter));
   calendarPrintActions?.classList.toggle('hidden', currentView !== 'calendar');
-  summaryStrip.classList.toggle('hidden', currentView === 'automation');
-  serviceFilterControl?.classList.toggle('hidden', currentView === 'automation');
-  primaryActionBtn.classList.toggle('hidden', currentView === 'automation');
+  const focusedConfigView = currentView === 'automation' || currentView === 'centerPlanning';
+  summaryStrip.classList.toggle('hidden', focusedConfigView);
+  serviceFilterControl?.classList.toggle('hidden', focusedConfigView);
+  primaryActionBtn.classList.toggle('hidden', focusedConfigView);
 
   const actionLabels = {
     students:'+ Nuevo alumno',
-    professionals:'+ Nuevo profesional',
+    professionals:'+ Nuevo profesor',
     groups:'+ Nuevo grupo',
-    classSchedules:'+ Nueva franja'
+    classSchedules:'+ Nueva asignatura semanal'
   };
   primaryActionBtn.textContent = actionLabels[currentView] || '+ Nueva sesión';
 
@@ -157,6 +160,12 @@ function renderCurrentView() {
   if (currentView === 'groups') renderGroups(viewRoot, { ...common, onEdit: editGroup, onDelete: removeGroup });
   if (currentView === 'sessions') renderSessions(viewRoot, { ...common, onEdit: editSession, onDelete: removeSession });
   if (currentView === 'classSchedules') renderClassSchedules(viewRoot, { ...common, onEdit: editClassSchedule, onDelete: removeClassSchedule });
+  if (currentView === 'centerPlanning') renderCenterPlanning(viewRoot, {
+    ...common,
+    centerPlanningSettings:state.centerPlanningSettings,
+    onSave:saveCenterPlanning,
+    onNavigate:navigateFromCenterPlanning
+  });
   if (currentView === 'automation') renderAutomationManager(viewRoot, {
     ...common,
     automationSettings:state.automationSettings,
@@ -200,7 +209,7 @@ function bindGlobalEvents() {
 
   document.querySelector('#exportDataBtn').addEventListener('click', () => {
     downloadSharePackage(state);
-    showToast('Horario exportado. Incluye horarios de aula, recreos y reglas de configuración automática.');
+    showToast('Proyecto exportado. Incluye horarios, estructura, recreos, profesorado, perfil curricular y reglas automáticas.');
   });
 
   document.querySelector('#importDataBtn').addEventListener('click', () => importDataInput.click());
@@ -208,14 +217,14 @@ function bindGlobalEvents() {
     const [file] = importDataInput.files || [];
     importDataInput.value = '';
     if (!file) return;
-    if (!confirm('Importar este horario sustituirá los alumnos, profesionales, grupos, sesiones, horarios de aula, recreos y reglas automáticas actuales. ¿Continuar?')) return;
+    if (!confirm('Importar este proyecto sustituirá alumnos, profesorado, grupos, sesiones, horarios de aula, recreos, planificación global y reglas automáticas actuales. ¿Continuar?')) return;
     try {
       const counts = await importShareFile(file);
       localStorage.setItem('horario-user-cleared', 'true');
       selectedSessionId = null;
       autoProposal = null;
       currentView = 'calendar';
-      await refresh({ toast:`Horario importado: ${counts.students} alumnos, ${counts.groups} grupos, ${counts.sessions} sesiones y ${counts.classSchedules} franjas de aula.` });
+      await refresh({ toast:`Proyecto importado: ${counts.students} alumnos, ${counts.groups} grupos, ${counts.sessions} sesiones y ${counts.classSchedules} franjas de aula.` });
     } catch (error) {
       console.error(error);
       showToast(error.message || 'No se pudo importar el horario.', 'error');
@@ -223,7 +232,7 @@ function bindGlobalEvents() {
   });
 
   document.querySelector('#resetDemoBtn').addEventListener('click', async () => {
-    if (!confirm('Se sustituirán los datos actuales por los datos de ejemplo. También se borrarán recreos y reglas automáticas configuradas. ¿Continuar?')) return;
+    if (!confirm('Se sustituirán los datos actuales por los datos de ejemplo. También se borrarán recreos, planificación global y reglas automáticas configuradas. ¿Continuar?')) return;
     localStorage.removeItem('horario-user-cleared');
     selectedSessionId = null;
     autoProposal = null;
@@ -232,7 +241,7 @@ function bindGlobalEvents() {
   });
 
   document.querySelector('#clearAllDataBtn').addEventListener('click', async () => {
-    const accepted = confirm('Se eliminarán TODOS los alumnos, profesionales, grupos, sesiones, horarios de aula, recreos y reglas automáticas de este navegador. Esta acción no se puede deshacer. Si quieres conservar una copia, cancela y usa “Exportar / compartir”. ¿Vaciar ahora?');
+    const accepted = confirm('Se eliminarán TODOS los alumnos, profesionales, grupos, sesiones, horarios de aula, recreos, planificación global y reglas automáticas de este navegador. Esta acción no se puede deshacer. Si quieres conservar una copia, cancela y usa “Exportar / compartir”. ¿Vaciar ahora?');
     if (!accepted) return;
     await resetDatabase();
     localStorage.setItem('horario-user-cleared', 'true');
@@ -263,6 +272,16 @@ async function saveAutomaticSettings(value) {
   await saveAutomationSettings(value);
   autoProposal = null;
   await refresh({ toast:'Prioridades y franjas de configuración automática guardadas.' });
+}
+
+async function saveCenterPlanning(value) {
+  await saveCenterPlanningSettings(value);
+  await refresh({ toast:value.mode === 'global' ? 'Planificación global del centro guardada.' : 'Modo Solo PT/AL guardado.' });
+}
+
+function navigateFromCenterPlanning(target) {
+  currentView = target;
+  renderCurrentView();
 }
 
 function generateAutomaticSchedule() {
@@ -338,10 +357,10 @@ function editStudent(id) {
 
 function editProfessional(id) {
   const professional = id ? state.professionals.find(item => item.id === id) : null;
-  openProfessionalForm(professional, { onSave: async value => {
+  openProfessionalForm(professional, { state, onSave: async value => {
     await saveProfessional(value);
     autoProposal = null;
-    await refresh({ toast: professional ? 'Profesional actualizado.' : 'Profesional creado.' });
+    await refresh({ toast: professional ? 'Profesorado actualizado.' : 'Profesional creado.' });
   } });
 }
 
