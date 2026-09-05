@@ -27,7 +27,9 @@ export const saveStudent = student => put('students', student);
 export const saveProfessional = professional => put('professionals', professional);
 export const saveGroup = group => put('groups', group);
 export const saveSession = session => put('sessions', session);
-export const saveClassSchedule = entry => put('classSchedules', entry);
+export const saveClassSchedule = entry => entry?.__weeklyBatch
+  ? replaceClassSubjectData(entry.grupoClase, entry.materia, entry.entries || [])
+  : put('classSchedules', entry);
 export const saveSchoolSettings = settings => put('settings', normalizeSchoolSettings(settings));
 export const saveAutomationSettings = settings => put('settings', normalizeAutomationSettings(settings));
 export const replaceSessions = sessions => replaceStoreData('sessions', sessions);
