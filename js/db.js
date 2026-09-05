@@ -91,6 +91,30 @@ export async function replaceStoreData(storeName, values) {
   });
 }
 
+export async function replaceClassSubjectData(grupoClase, materia, values) {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('classSchedules', 'readwrite');
+    const store = tx.objectStore('classSchedules');
+    const request = store.getAll();
+    const normalizedGroup = normalizeText(grupoClase);
+    const normalizedSubject = normalizeText(materia);
+
+    request.onsuccess = () => {
+      for (const entry of request.result || []) {
+        if (normalizeText(entry.grupoClase) === normalizedGroup && normalizeText(entry.materia) === normalizedSubject) {
+          store.delete(entry.id);
+        }
+      }
+      for (const value of values) store.put(value);
+    };
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('No se pudo sustituir el horario semanal de la asignatura.'));
+  });
+}
+
 export async function replaceCoreData({ students, professionals, groups, sessions, classSchedules = [] }) {
   const db = await openDatabase();
   const storeNames = ['students', 'professionals', 'groups', 'sessions', 'classSchedules'];
@@ -112,4 +136,8 @@ export async function replaceCoreData({ students, professionals, groups, session
 
 export async function resetDatabase() {
   for (const store of STORES) await clear(store);
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLocaleLowerCase('es');
 }
