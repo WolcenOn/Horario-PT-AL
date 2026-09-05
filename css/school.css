@@ -36,14 +36,43 @@
 .weekly-slot-row > span { color: var(--muted); font-weight: 800; }
 .weekly-slot-remove { width: 34px; height: 34px; color: var(--danger); }
 
+.school-structure-alert, .school-structure-summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 15px 17px; }
+.school-structure-alert { border-color: #e6c979; background: #fffaf0; }
+.school-structure-alert > div, .school-structure-summary > div:first-child { display: grid; gap: 4px; }
+.school-structure-alert span, .school-structure-summary span { color: var(--muted); font-size: .82rem; line-height: 1.4; }
+.school-structure-editor { display: grid; gap: 16px; }
+.school-structure-intro { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
+.school-structure-intro span { color: var(--muted); font-size: .84rem; line-height: 1.45; }
+.school-lines-selector { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: end; }
+.school-lines-summary { display: grid; gap: 2px; min-width: 130px; padding: 10px 13px; border-radius: 10px; background: var(--primary); color: white; }
+.school-lines-summary span { font-size: .72rem; opacity: .82; }
+.school-lines-summary strong { font-size: 1.15rem; }
+.school-course-lines { display: grid; gap: 8px; }
+.school-course-line-row { display: grid; grid-template-columns: minmax(155px, 1fr) 90px minmax(180px, 1.7fr); gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fbfcfd; }
+.school-course-line-name { display: grid; gap: 2px; }
+.school-course-line-name small { font-size: .72rem; }
+.form-field.compact { gap: 4px; }
+.form-field.compact select { min-height: 36px; padding: 6px 8px; }
+.school-class-preview { display: flex; gap: 5px; flex-wrap: wrap; }
+.school-class-preview.compact { justify-content: flex-end; max-width: 520px; }
+.school-class-chip { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; background: #eef4f7; border: 1px solid #d6e2e8; color: #365568; font-size: .74rem; font-weight: 750; white-space: nowrap; }
+.school-class-chip.more { background: var(--surface-muted); color: var(--muted); }
+.school-structure-note { margin: 0; }
+
 @media (max-width: 820px) {
   .recess-settings-grid { grid-template-columns: 1fr; }
   .session-student-list { font-size: .65rem; }
   .weekly-summary-slots { min-width: 210px; }
+  .school-structure-alert, .school-structure-summary { align-items: flex-start; flex-direction: column; }
+  .school-class-preview.compact { justify-content: flex-start; }
+  .school-course-line-row { grid-template-columns: minmax(130px, 1fr) 80px; }
+  .school-course-line-row .school-class-preview { grid-column: 1 / -1; }
 }
 
 @media (max-width: 620px) {
   .weekly-day-card > header { align-items: flex-start; }
   .weekly-slot-row { grid-template-columns: 1fr auto 1fr 34px; gap: 5px; }
   .weekly-slot-row input { min-width: 0; padding: 7px 5px; }
+  .school-lines-selector { grid-template-columns: 1fr; }
+  .school-course-line-row { grid-template-columns: 1fr 76px; }
 }
