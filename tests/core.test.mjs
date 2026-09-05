@@ -5,8 +5,9 @@ import { calculateStudentHours, totalsFromHours } from '../js/hours.js';
 import { detectConflicts } from '../js/conflicts.js';
 import { demoData } from '../js/seed.js';
 import { createSharePackage, validateSharePackage } from '../js/sharing.js';
-import { classEntriesForInterval } from '../js/class-schedules.js';
+import { classEntriesForInterval, entriesForClassSubject } from '../js/class-schedules.js';
 import { COURSE_OPTIONS, recessOverlaps, stageForCourse, validateSchoolSettings } from '../js/education.js';
+import { FIXED_SUBJECT_NAMES, subjectsForClassGroup } from '../js/subjects.js';
 import { buildReadinessReport, generateAutomaticProposal } from '../js/automation-core.js';
 
 const students=[
@@ -138,6 +139,26 @@ test('aplica recreos distintos para Infantil y Primaria',()=>{
   assert.equal(recessOverlaps(settings,'infantil','10:45','11:15'),true);
   assert.equal(recessOverlaps(settings,'primaria','10:45','11:15'),false);
   assert.equal(recessOverlaps(settings,'primaria','11:45','12:15'),true);
+});
+
+test('el catálogo de asignaturas usa nombres fijos según la etapa',()=>{
+  assert.ok(FIXED_SUBJECT_NAMES.includes('Matemáticas'));
+  assert.ok(FIXED_SUBJECT_NAMES.includes('Lengua Castellana y Literatura'));
+  assert.equal(new Set(FIXED_SUBJECT_NAMES).size,FIXED_SUBJECT_NAMES.length);
+  const primarySubjects=subjectsForClassGroup({students,classSchedules:[]},'4ºA');
+  assert.ok(primarySubjects.includes('Matemáticas'));
+  assert.ok(primarySubjects.includes('Educación Física'));
+  assert.equal(primarySubjects.includes('Crecimiento en Armonía'),false);
+});
+
+test('agrupa todas las franjas semanales de una clase y asignatura',()=>{
+  const entries=[
+    {id:'m2',grupoClase:'4ºA',dia:'miercoles',inicio:'10:00',fin:'10:45',materia:'Matemáticas'},
+    {id:'m1',grupoClase:'4ºA',dia:'lunes',inicio:'09:00',fin:'09:45',materia:'Matemáticas'},
+    {id:'l1',grupoClase:'4ºA',dia:'lunes',inicio:'10:00',fin:'10:45',materia:'Lengua Castellana y Literatura'}
+  ];
+  const math=entriesForClassSubject(entries,'4ºA','Matemáticas');
+  assert.deepEqual(math.map(entry=>entry.id),['m1','m2']);
 });
 
 test('el gestor automático indica lo que falta antes de habilitarse',()=>{
