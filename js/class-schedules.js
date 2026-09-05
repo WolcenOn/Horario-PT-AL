@@ -5,10 +5,10 @@ import { setModalMessage, showModal } from './ui.js';
 
 const dayOrder = new Map(DAYS.map((day, index) => [day.id, index]));
 
-export function renderClassSchedules(root, { state, onEdit, onDelete }) {
+export function renderClassSchedules(root, { state, onEdit }) {
   const classGroups = knownClassGroups(state);
   const weeklySubjects = groupWeeklySubjects(state.classSchedules || []);
-  const rows = weeklySubjects.map((item, index) => {
+  const rows = weeklySubjects.map(item => {
     const slots = item.entries.map(entry => `<span class="weekly-summary-slot"><b>${escapeHtml(shortDayLabel(entry.dia))}</b> ${escapeHtml(entry.inicio)}–${escapeHtml(entry.fin)}</span>`).join('');
     const teachers = [...new Set(item.entries.map(entry => entry.docente).filter(Boolean))];
     const rooms = [...new Set(item.entries.map(entry => entry.aula).filter(Boolean))];
@@ -19,7 +19,7 @@ export function renderClassSchedules(root, { state, onEdit, onDelete }) {
       <td><div class="weekly-summary-slots">${slots}</div></td>
       <td>${teachers.length ? escapeHtml(teachers.join(' / ')) : '—'}</td>
       <td>${rooms.length ? escapeHtml(rooms.join(' / ')) : '—'}</td>
-      <td class="table-actions"><button class="button" data-edit-week="${index}" type="button">Editar semana</button><button class="button button-danger" data-delete-week="${index}" type="button">Eliminar semana</button></td>
+      <td class="table-actions"><button class="button" data-edit-week="${item.entries[0]?.id || ''}" type="button">Editar semana</button></td>
     </tr>`;
   }).join('');
 
@@ -32,6 +32,7 @@ export function renderClassSchedules(root, { state, onEdit, onDelete }) {
           ${classGroups.map(group => `<option value="${escapeHtml(group)}">${escapeHtml(group)}</option>`).join('')}
         </select>
       </div>
+      <button class="button button-primary" type="button" data-new-week-subject>+ Asignatura semanal</button>
     </div>
     <section class="card">
       <div class="card-header">
@@ -62,19 +63,14 @@ export function renderClassSchedules(root, { state, onEdit, onDelete }) {
 
   root.onclick = event => {
     const edit = event.target.closest('[data-edit-week]');
-    const del = event.target.closest('[data-delete-week]');
-    if (edit) {
-      const item = weeklySubjects[Number(edit.dataset.editWeek)];
-      if (item) onEdit({ grupoClase:item.grupoClase, materia:item.materia });
-    }
-    if (del) {
-      const item = weeklySubjects[Number(del.dataset.deleteWeek)];
-      if (item) onDelete({ grupoClase:item.grupoClase, materia:item.materia, count:item.entries.length });
-    }
+    const add = event.target.closest('[data-new-week-subject]');
+    if (edit?.dataset.editWeek) onEdit(edit.dataset.editWeek);
+    if (add) onEdit();
   };
 }
 
-export function openWeeklyClassScheduleForm(selection, { state, onSave }) {
+export function openClassScheduleForm(entry, { state, onSave }) {
+  const selection = entry ? { grupoClase:entry.grupoClase, materia:entry.materia } : null;
   const classGroups = knownClassGroups(state);
   const initialGroup = selection?.grupoClase || classGroups[0] || '';
   showModal({
@@ -104,16 +100,16 @@ export function openWeeklyClassScheduleForm(selection, { state, onSave }) {
       const subjectSelect = form.elements.materia;
       let preferredSubject = selection?.materia || '';
 
-      const addSlot = (dayId, entry = {}) => {
+      const addSlot = (dayId, existingEntry = {}) => {
         const container = form.querySelector(`[data-day-slots="${dayId}"]`);
         if (!container) return;
         const existingRows = [...container.querySelectorAll('.weekly-slot-row')];
         const lastEnd = existingRows.at(-1)?.querySelector('[data-slot-end]')?.value;
-        const defaultStart = entry.inicio || lastEnd || '09:00';
-        const defaultEnd = entry.fin || minutesToTime(Math.min(23 * 60 + 59, timeToMinutes(defaultStart) + 45));
+        const defaultStart = existingEntry.inicio || lastEnd || '09:00';
+        const defaultEnd = existingEntry.fin || minutesToTime(Math.min(23 * 60 + 59, timeToMinutes(defaultStart) + 45));
         const row = document.createElement('div');
         row.className = 'weekly-slot-row';
-        if (entry.id) row.dataset.entryId = entry.id;
+        if (existingEntry.id) row.dataset.entryId = existingEntry.id;
         row.innerHTML = `<input type="time" data-slot-start aria-label="${escapeHtml(dayLabel(dayId))} inicio" value="${escapeHtml(defaultStart)}"><span>→</span><input type="time" data-slot-end aria-label="${escapeHtml(dayLabel(dayId))} fin" value="${escapeHtml(defaultEnd)}"><button class="icon-button weekly-slot-remove" type="button" data-remove-week-slot aria-label="Eliminar franja">✕</button>`;
         container.appendChild(row);
         updateDayCount(form, dayId);
@@ -126,15 +122,15 @@ export function openWeeklyClassScheduleForm(selection, { state, onSave }) {
         for (const day of DAYS) {
           const container = form.querySelector(`[data-day-slots="${day.id}"]`);
           if (container) container.innerHTML = '';
-          entries.filter(entry => entry.dia === day.id).forEach(entry => addSlot(day.id, entry));
+          entries.filter(item => item.dia === day.id).forEach(item => addSlot(day.id, item));
           updateDayCount(form, day.id);
         }
-        const teachers = [...new Set(entries.map(entry => entry.docente).filter(Boolean))];
-        const rooms = [...new Set(entries.map(entry => entry.aula).filter(Boolean))];
-        const notes = [...new Set(entries.map(entry => entry.observaciones).filter(Boolean))];
-        form.elements.docente.value = teachers.length === 1 ? teachers[0] : teachers[0] || '';
-        form.elements.aula.value = rooms.length === 1 ? rooms[0] : rooms[0] || '';
-        form.elements.observaciones.value = notes.length === 1 ? notes[0] : notes[0] || '';
+        const teachers = [...new Set(entries.map(item => item.docente).filter(Boolean))];
+        const rooms = [...new Set(entries.map(item => item.aula).filter(Boolean))];
+        const notes = [...new Set(entries.map(item => item.observaciones).filter(Boolean))];
+        form.elements.docente.value = teachers[0] || '';
+        form.elements.aula.value = rooms[0] || '';
+        form.elements.observaciones.value = notes[0] || '';
       };
 
       const refreshSubjects = () => {
@@ -150,9 +146,8 @@ export function openWeeklyClassScheduleForm(selection, { state, onSave }) {
         const remove = event.target.closest('[data-remove-week-slot]');
         if (add) addSlot(add.dataset.addWeekSlot);
         if (remove) {
-          const row = remove.closest('.weekly-slot-row');
           const dayId = remove.closest('[data-week-day]')?.dataset.weekDay;
-          row?.remove();
+          remove.closest('.weekly-slot-row')?.remove();
           if (dayId) updateDayCount(form, dayId);
         }
       });
@@ -194,13 +189,13 @@ export function openWeeklyClassScheduleForm(selection, { state, onSave }) {
             }
           }
         }
-        entries.push(...dayEntries.map(entry => ({
-          id:entry.id,
+        entries.push(...dayEntries.map(item => ({
+          id:item.id,
           grupoClase,
           materia,
           dia:day.id,
-          inicio:entry.inicio,
-          fin:entry.fin,
+          inicio:item.inicio,
+          fin:item.fin,
           docente,
           aula,
           observaciones
@@ -208,7 +203,7 @@ export function openWeeklyClassScheduleForm(selection, { state, onSave }) {
       }
 
       if (!entries.length) { setModalMessage(message, 'Añade al menos una franja semanal antes de guardar.'); return false; }
-      await onSave({ grupoClase, materia, entries });
+      await onSave({ __weeklyBatch:true, grupoClase, materia, entries });
       return true;
     }
   });
