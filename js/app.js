@@ -7,12 +7,13 @@ import { openRecessSettingsForm } from './recess-settings.js';
 import { renderAutomationManager } from './automation-view.js';
 import { renderCenterPlanning } from './center-planning-view.js';
 import { buildReadinessReport, generateAutomaticProposal } from './automation-core.js';
+import { generateGlobalProposal } from './global-scheduler.js';
 import { renderCalendar } from './calendar.js';
 import { renderAlerts } from './alerts.js';
 import { calculateStudentHours, deriveStudentStatus, totalsFromHours } from './hours.js';
 import { conflictStudentIds, detectConflicts } from './conflicts.js';
 import { ensureSeedData, loadDemoData } from './seed.js';
-import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, replaceSessions, saveAutomationSettings, saveCenterPlanningSettings, saveClassSchedule, saveGroup, saveProfessional, saveSchoolSettings, saveSession, saveStudent } from './repository.js';
+import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, replaceClassSchedules, replaceSessions, saveAutomationSettings, saveCenterPlanningSettings, saveClassSchedule, saveGroup, saveProfessional, saveSchoolSettings, saveSession, saveStudent } from './repository.js';
 import { put, resetDatabase } from './db.js';
 import { downloadSharePackage, importShareFile } from './sharing.js';
 import { printCalendar } from './print.js';
@@ -36,6 +37,7 @@ let state = { students:[], professionals:[], groups:[], sessions:[], classSchedu
 let derived = {};
 let selectedSessionId = null;
 let autoProposal = null;
+let globalProposal = null;
 
 const VIEW_TITLES = {
   calendar:'Horario semanal',
@@ -163,8 +165,12 @@ function renderCurrentView() {
   if (currentView === 'centerPlanning') renderCenterPlanning(viewRoot, {
     ...common,
     centerPlanningSettings:state.centerPlanningSettings,
+    globalProposal,
     onSave:saveCenterPlanning,
-    onNavigate:navigateFromCenterPlanning
+    onNavigate:navigateFromCenterPlanning,
+    onGenerateGlobal:generateGlobalSchedule,
+    onApplyGlobal:applyGlobalSchedule,
+    onDiscardGlobal:discardGlobalSchedule
   });
   if (currentView === 'automation') renderAutomationManager(viewRoot, {
     ...common,
@@ -223,6 +229,7 @@ function bindGlobalEvents() {
       localStorage.setItem('horario-user-cleared', 'true');
       selectedSessionId = null;
       autoProposal = null;
+      globalProposal = null;
       currentView = 'calendar';
       await refresh({ toast:`Proyecto importado: ${counts.students} alumnos, ${counts.groups} grupos, ${counts.sessions} sesiones y ${counts.classSchedules} franjas de aula.` });
     } catch (error) {
@@ -236,6 +243,7 @@ function bindGlobalEvents() {
     localStorage.removeItem('horario-user-cleared');
     selectedSessionId = null;
     autoProposal = null;
+    globalProposal = null;
     await loadDemoData();
     await refresh({ toast:'Datos de ejemplo restaurados.' });
   });
@@ -247,6 +255,7 @@ function bindGlobalEvents() {
     localStorage.setItem('horario-user-cleared', 'true');
     selectedSessionId = null;
     autoProposal = null;
+    globalProposal = null;
     currentView = 'calendar';
     await refresh({ toast:'Todos los datos han sido eliminados. La aplicación está lista para empezar desde cero.' });
   });
@@ -264,6 +273,7 @@ function editRecessSettings() {
   openRecessSettingsForm(state.schoolSettings, { onSave: async value => {
     await saveSchoolSettings(value);
     autoProposal = null;
+    globalProposal = null;
     await refresh({ toast:'Recreos de Infantil y Primaria actualizados.' });
   } });
 }
@@ -271,12 +281,53 @@ function editRecessSettings() {
 async function saveAutomaticSettings(value) {
   await saveAutomationSettings(value);
   autoProposal = null;
+  globalProposal = null;
   await refresh({ toast:'Prioridades y franjas de configuración automática guardadas.' });
 }
 
 async function saveCenterPlanning(value) {
   await saveCenterPlanningSettings(value);
+  globalProposal = null;
   await refresh({ toast:value.mode === 'global' ? 'Planificación global del centro guardada.' : 'Modo Solo PT/AL guardado.' });
+}
+
+async function generateGlobalSchedule(value) {
+  try {
+    await saveCenterPlanningSettings(value);
+    state = { ...state, centerPlanningSettings:value };
+    globalProposal = generateGlobalProposal(state, value);
+    renderCurrentView();
+    if (globalProposal.ok) {
+      showToast(`Propuesta global calculada: ${globalProposal.stats.classes} clases y ${globalProposal.stats.blocks} bloques lectivos.`);
+    } else if (globalProposal.unresolved?.length) {
+      showToast(`No se ha encontrado una solución completa para ${globalProposal.unresolved.length} bloque(s).`, 'error');
+    } else {
+      showToast('Faltan datos por configurar antes de generar el horario global.', 'error');
+    }
+  } catch (error) {
+    console.error(error);
+    globalProposal = null;
+    showToast(error.message || 'No se pudo generar la propuesta global.', 'error');
+  }
+}
+
+async function applyGlobalSchedule() {
+  if (!globalProposal?.ok) return;
+  const participating = new Set(globalProposal.readiness.participatingClasses.map(value => String(value || '').trim().toLocaleLowerCase('es')));
+  const preserved = (state.classSchedules || []).filter(entry => !participating.has(String(entry.grupoClase || '').trim().toLocaleLowerCase('es')));
+  const next = [...preserved, ...globalProposal.classSchedules];
+  const accepted = confirm(`La propuesta sustituirá el horario ordinario de ${globalProposal.stats.classes} clase(s) participantes con ${globalProposal.stats.blocks} bloques. Las clases sin currículo y las sesiones PT/AL se conservarán. ¿Aplicar?`);
+  if (!accepted) return;
+  await replaceClassSchedules(next);
+  globalProposal = null;
+  autoProposal = null;
+  currentView = 'classSchedules';
+  await refresh({ toast:'Propuesta global aplicada. Los horarios de aula se han actualizado y PT/AL se mantiene intacto.' });
+}
+
+function discardGlobalSchedule() {
+  globalProposal = null;
+  renderCurrentView();
 }
 
 function navigateFromCenterPlanning(target) {
@@ -308,6 +359,7 @@ async function applyAutomaticProposal() {
   if (!accepted) return;
   await replaceSessions(autoProposal.sessions);
   autoProposal = null;
+  globalProposal = null;
   selectedSessionId = null;
   currentView = 'calendar';
   await refresh({ toast:`Propuesta automática aplicada. ${moved} sesión(es) recolocadas.` });
@@ -351,6 +403,7 @@ function editStudent(id) {
   openStudentForm(student, { onSave: async value => {
     await saveStudent(value);
     autoProposal = null;
+    globalProposal = null;
     await refresh({ toast: student ? 'Alumno actualizado.' : 'Alumno creado.' });
   } });
 }
@@ -360,6 +413,7 @@ function editProfessional(id) {
   openProfessionalForm(professional, { state, onSave: async value => {
     await saveProfessional(value);
     autoProposal = null;
+    globalProposal = null;
     await refresh({ toast: professional ? 'Profesorado actualizado.' : 'Profesional creado.' });
   } });
 }
@@ -371,6 +425,7 @@ function editGroup(id) {
     const linked = state.sessions.filter(session => session.groupId === value.id);
     await Promise.all(linked.map(session => put('sessions', { ...session, professionalId:value.professionalId })));
     autoProposal = null;
+    globalProposal = null;
     await refresh({ toast: group ? 'Grupo actualizado.' : 'Grupo creado.' });
   } });
 }
@@ -381,6 +436,7 @@ function editSession(id) {
     await saveSession(value);
     selectedSessionId = value.id;
     autoProposal = null;
+    globalProposal = null;
     await refresh({ toast: session ? 'Sesión actualizada.' : 'Sesión creada.' });
   } });
 }
@@ -390,6 +446,7 @@ function editClassSchedule(id) {
   openClassScheduleForm(entry, { state, onSave: async value => {
     await saveClassSchedule(value);
     autoProposal = null;
+    globalProposal = null;
     await refresh({ toast: entry ? 'Franja de aula actualizada.' : 'Franja de aula creada.' });
   } });
 }
@@ -421,6 +478,7 @@ async function moveSession(id, patch) {
   await saveSession(candidate);
   selectedSessionId = id;
   autoProposal = null;
+  globalProposal = null;
   const warnings = newConflicts.filter(conflict => conflict.severity !== 'grave').length;
   const conflictCount = newConflicts.length;
   const toast = conflictCount
@@ -432,20 +490,20 @@ async function moveSession(id, patch) {
 async function removeStudent(id) {
   const student = state.students.find(item => item.id === id); if(!student)return;
   if(!confirm(`¿Eliminar a ${student.nombre} ${student.apellidos}? También se retirará de los grupos en los que participa.`))return;
-  await deleteStudent(id,state); autoProposal = null; await refresh({toast:'Alumno eliminado.'});
+  await deleteStudent(id,state); autoProposal = null; globalProposal = null; await refresh({toast:'Alumno eliminado.'});
 }
 
 async function removeProfessional(id) {
   const professional = state.professionals.find(item => item.id === id);if(!professional)return;
   if(!confirm(`¿Eliminar al profesional ${professional.nombre}?`))return;
-  try{await deleteProfessional(id,state);autoProposal = null;await refresh({toast:'Profesional eliminado.'});}catch(error){showToast(error.message,'error');}
+  try{await deleteProfessional(id,state);autoProposal = null;globalProposal = null;await refresh({toast:'Profesional eliminado.'});}catch(error){showToast(error.message,'error');}
 }
 
 async function removeGroup(id) {
   const group = state.groups.find(item => item.id === id);if(!group)return;
   const count = state.sessions.filter(session => session.groupId === id).length;
   if(!confirm(`¿Eliminar el grupo ${group.nombre}? Se eliminarán también ${count} sesión(es) asociadas.`))return;
-  await deleteGroup(id,state);autoProposal = null;await refresh({toast:'Grupo y sesiones asociadas eliminados.'});
+  await deleteGroup(id,state);autoProposal = null;globalProposal = null;await refresh({toast:'Grupo y sesiones asociadas eliminados.'});
 }
 
 async function removeSession(id) {
@@ -454,6 +512,7 @@ async function removeSession(id) {
   await deleteSession(id);
   if (selectedSessionId === id) selectedSessionId = null;
   autoProposal = null;
+  globalProposal = null;
   await refresh({toast:'Sesión eliminada.'});
 }
 
@@ -463,6 +522,7 @@ async function removeClassSchedule(id) {
   if (!confirm(`¿Eliminar ${entry.materia} de ${entry.grupoClase} (${entry.inicio}–${entry.fin})?`)) return;
   await deleteClassSchedule(id);
   autoProposal = null;
+  globalProposal = null;
   await refresh({ toast:'Franja de aula eliminada.' });
 }
 
