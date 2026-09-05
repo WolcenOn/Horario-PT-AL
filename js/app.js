@@ -3,12 +3,13 @@ import { renderProfessionals, openProfessionalForm } from './profesionales.js';
 import { renderGroups, openGroupForm } from './grupos.js';
 import { renderSessions, openSessionForm } from './sesiones.js';
 import { renderClassSchedules, openClassScheduleForm } from './class-schedules.js';
+import { openRecessSettingsForm } from './recess-settings.js';
 import { renderCalendar } from './calendar.js';
 import { renderAlerts } from './alerts.js';
 import { calculateStudentHours, deriveStudentStatus, totalsFromHours } from './hours.js';
 import { conflictStudentIds, detectConflicts } from './conflicts.js';
 import { ensureSeedData, loadDemoData } from './seed.js';
-import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, saveClassSchedule, saveGroup, saveProfessional, saveSession, saveStudent } from './repository.js';
+import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, saveClassSchedule, saveGroup, saveProfessional, saveSchoolSettings, saveSession, saveStudent } from './repository.js';
 import { put, resetDatabase } from './db.js';
 import { downloadSharePackage, importShareFile } from './sharing.js';
 import { printCalendar } from './print.js';
@@ -26,7 +27,7 @@ const calendarPrintActions = document.querySelector('#calendarPrintActions');
 
 let currentView = 'calendar';
 let serviceFilter = localStorage.getItem('horario-service-filter') || 'ALL';
-let state = { students:[], professionals:[], groups:[], sessions:[], classSchedules:[] };
+let state = { students:[], professionals:[], groups:[], sessions:[], classSchedules:[], schoolSettings:null };
 let derived = {};
 let selectedSessionId = null;
 
@@ -164,10 +165,11 @@ function bindGlobalEvents() {
 
   document.querySelector('#printPTBtn').addEventListener('click', () => printServiceCalendar('PT'));
   document.querySelector('#printALBtn').addEventListener('click', () => printServiceCalendar('AL'));
+  document.querySelector('#recessSettingsBtn').addEventListener('click', editRecessSettings);
 
   document.querySelector('#exportDataBtn').addEventListener('click', () => {
     downloadSharePackage(state);
-    showToast('Horario exportado. Incluye también los horarios ordinarios de las clases.');
+    showToast('Horario exportado. Incluye horarios de aula y recreos del centro.');
   });
 
   document.querySelector('#importDataBtn').addEventListener('click', () => importDataInput.click());
@@ -175,7 +177,7 @@ function bindGlobalEvents() {
     const [file] = importDataInput.files || [];
     importDataInput.value = '';
     if (!file) return;
-    if (!confirm('Importar este horario sustituirá los alumnos, profesionales, grupos, sesiones y horarios de aula actuales de este navegador. ¿Continuar?')) return;
+    if (!confirm('Importar este horario sustituirá los alumnos, profesionales, grupos, sesiones, horarios de aula y recreos actuales de este navegador. ¿Continuar?')) return;
     try {
       const counts = await importShareFile(file);
       localStorage.setItem('horario-user-cleared', 'true');
@@ -189,7 +191,7 @@ function bindGlobalEvents() {
   });
 
   document.querySelector('#resetDemoBtn').addEventListener('click', async () => {
-    if (!confirm('Se sustituirán los datos actuales por los datos de ejemplo. ¿Continuar?')) return;
+    if (!confirm('Se sustituirán los datos actuales por los datos de ejemplo. También se borrarán los recreos configurados. ¿Continuar?')) return;
     localStorage.removeItem('horario-user-cleared');
     selectedSessionId = null;
     await loadDemoData();
@@ -197,7 +199,7 @@ function bindGlobalEvents() {
   });
 
   document.querySelector('#clearAllDataBtn').addEventListener('click', async () => {
-    const accepted = confirm('Se eliminarán TODOS los alumnos, profesionales, grupos, sesiones y horarios de aula de este navegador. Esta acción no se puede deshacer. Si quieres conservar una copia, cancela y usa “Exportar / compartir”. ¿Vaciar ahora?');
+    const accepted = confirm('Se eliminarán TODOS los alumnos, profesionales, grupos, sesiones, horarios de aula y recreos de este navegador. Esta acción no se puede deshacer. Si quieres conservar una copia, cancela y usa “Exportar / compartir”. ¿Vaciar ahora?');
     if (!accepted) return;
     await resetDatabase();
     localStorage.setItem('horario-user-cleared', 'true');
@@ -213,6 +215,13 @@ function printServiceCalendar(serviceType) {
   } catch (error) {
     showToast(error.message || 'No se pudo abrir la impresión.', 'error');
   }
+}
+
+function editRecessSettings() {
+  openRecessSettingsForm(state.schoolSettings, { onSave: async value => {
+    await saveSchoolSettings(value);
+    await refresh({ toast:'Recreos de Infantil y Primaria actualizados.' });
+  } });
 }
 
 function applyInitialSidebarState() {
