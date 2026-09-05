@@ -1,6 +1,6 @@
 import { DAYS } from './constants.js';
 import { classEntriesForInterval } from './class-schedules.js';
-import { COURSE_OPTIONS, recessForStage, recessOverlaps, stageForCourse } from './education.js';
+import { COURSE_OPTIONS, classesForCourse, recessForStage, recessOverlaps, schoolStructureConfigured, stageForCourse } from './education.js';
 import { detectConflicts } from './conflicts.js';
 import { sessionDuration } from './hours.js';
 import { overlapInterval, timeToMinutes, minutesToTime } from './utils.js';
@@ -90,13 +90,26 @@ export function buildReadinessReport(state, settings) {
   const usedStudentIds = new Set(activeGroups.flatMap(group => group.studentIds || []));
   const usedStudents = (state.students || []).filter(student => usedStudentIds.has(student.id) && student.activo !== false);
 
-  const incompleteStudents = usedStudents.filter(student => !student.curso || !student.grupoClase || !COURSE_VALUES.has(student.curso));
+  const structureReady = schoolStructureConfigured(state.schoolSettings);
+  const structureItem = makeItem(
+    'schoolStructure', 'Estructura de clases del colegio', structureReady,
+    structureReady
+      ? 'Líneas generales y desdobles por curso configurados.'
+      : 'Falta definir cuántas líneas tiene el centro y los posibles desdobles de cada curso.',
+    'classSchedules'
+  );
+
+  const incompleteStudents = usedStudents.filter(student => {
+    if (!student.curso || !student.grupoClase || !COURSE_VALUES.has(student.curso)) return true;
+    if (!structureReady) return false;
+    return !classesForCourse(state.schoolSettings, student.curso).includes(student.grupoClase);
+  });
   const studentsItem = makeItem(
     'students', 'Alumnos', incompleteStudents.length === 0 && usedStudents.length > 0,
     usedStudents.length === 0
       ? 'No hay alumnos activos incluidos en grupos.'
       : incompleteStudents.length
-        ? `${incompleteStudents.length} alumno(s) necesitan curso normalizado y grupo/clase ordinaria.`
+        ? `${incompleteStudents.length} alumno(s) necesitan curso y una clase válida según la estructura del colegio.`
         : `${usedStudents.length} alumno(s) con curso y grupo ordinario completos.`,
     'students'
   );
@@ -193,7 +206,7 @@ export function buildReadinessReport(state, settings) {
     'automation'
   );
 
-  const items = [studentsItem, professionalsItem, groupsItem, sessionsItem, classSchedulesItem, recessItem, rulesItem];
+  const items = [structureItem, studentsItem, professionalsItem, groupsItem, sessionsItem, classSchedulesItem, recessItem, rulesItem];
   return { ready:items.every(item => item.ok), items, courses };
 }
 
