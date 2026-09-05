@@ -52,7 +52,7 @@ export function buildGlobalReadiness(state, rawSettings = state.centerPlanningSe
   const teacherResolution = resolveTeachers(state, settings, participatingClasses);
   items.push(item('teachers', 'Profesorado por clase y asignatura', teacherResolution.errors.length === 0, teacherResolution.errors.length
     ? `${teacherResolution.errors.length} asignación(es) necesitan exactamente un docente activo. Ej.: ${teacherResolution.errors.slice(0,3).join(', ')}${teacherResolution.errors.length > 3 ? '…' : ''}`
-    : `${teacherResolution.map.size} combinaciones clase/asignatura tienen un docente único.'));
+    : `${teacherResolution.map.size} combinaciones clase/asignatura tienen un docente único.`));
 
   const teacherIds = new Set([...teacherResolution.map.values()].map(prof => prof.id));
   const unavailable = [...teacherIds]
@@ -103,7 +103,7 @@ export function generateGlobalProposal(state, rawSettings = state.centerPlanning
   let best = { assigned:[], unresolved:tasks, score:-Infinity };
   const attempts = Math.min(32, Math.max(8, tasks.length));
   for (let attempt = 0; attempt < attempts; attempt++) {
-    const result = greedyAttempt(tasks, candidatesByTask, state, readiness.settings, attempt);
+    const result = greedyAttempt(tasks, candidatesByTask, readiness.settings, attempt);
     if (result.unresolved.length < best.unresolved.length || (result.unresolved.length === best.unresolved.length && result.score > best.score)) best = result;
     if (!result.unresolved.length) break;
   }
@@ -210,7 +210,7 @@ function buildCandidates(task, state, settings, generation) {
   return candidates;
 }
 
-function greedyAttempt(tasks, candidatesByTask, state, settings, attempt) {
+function greedyAttempt(tasks, candidatesByTask, settings, attempt) {
   const teacherTaskCount = new Map();
   for (const task of tasks) teacherTaskCount.set(task.teacher.id, (teacherTaskCount.get(task.teacher.id) || 0) + 1);
   const ordered = [...tasks].sort((a, b) => {
@@ -228,7 +228,8 @@ function greedyAttempt(tasks, candidatesByTask, state, settings, attempt) {
   for (const task of ordered) {
     const valid = (candidatesByTask.get(task.id) || [])
       .filter(candidate => !runtimeOverlap(task, candidate, assigned))
-      .map(candidate => ({ candidate, score:dynamicScore(task, candidate, assigned, settings, attempt) }))
+      .filter(candidate => sameSubjectDayCount(task, candidate, assigned) < settings.generation.maxSameSubjectPerDay)
+      .map(candidate => ({ candidate, score:dynamicScore(task, candidate, assigned, attempt) }))
       .sort((a, b) => b.score - a.score || a.candidate.start - b.candidate.start);
     if (!valid.length) {
       unresolved.push(task);
@@ -253,10 +254,9 @@ function greedyAttempt(tasks, candidatesByTask, state, settings, attempt) {
   return { assigned, unresolved, score };
 }
 
-function dynamicScore(task, candidate, assigned, settings, attempt) {
+function dynamicScore(task, candidate, assigned, attempt) {
   let score = candidate.baseScore;
-  const sameSubjectDay = assigned.filter(item => item.task.grupoClase === task.grupoClase && item.task.materia === task.materia && item.candidate.dia === candidate.dia).length;
-  if (sameSubjectDay >= settings.generation.maxSameSubjectPerDay) return -1000000;
+  const sameSubjectDay = sameSubjectDayCount(task, candidate, assigned);
   score -= sameSubjectDay * 120;
 
   const classDayMinutes = assigned
@@ -271,6 +271,10 @@ function dynamicScore(task, candidate, assigned, settings, attempt) {
 
   score += ((pseudoOrder(`${task.id}-${candidate.dia}-${candidate.inicio}`, attempt) % 100) / 1000);
   return score;
+}
+
+function sameSubjectDayCount(task, candidate, assigned) {
+  return assigned.filter(item => item.task.grupoClase === task.grupoClase && item.task.materia === task.materia && item.candidate.dia === candidate.dia).length;
 }
 
 function runtimeOverlap(task, candidate, assigned) {
@@ -355,7 +359,7 @@ function teacherSupportConflict(professionalId, dayId, start, end, state) {
   return false;
 }
 
-function ptalCompatibility(task, dayId, start, end, state, settings) {
+function ptalCompatibility(task, dayId, start, end, state) {
   const students = (state.students || []).filter(student => normalize(student.grupoClase) === normalize(task.grupoClase));
   if (!students.length) return { blocked:false, score:0, overlapCount:0 };
   const classStudentIds = new Set(students.map(student => student.id));
