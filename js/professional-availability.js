@@ -1,4 +1,4 @@
-import { overlapInterval, timeToMinutes } from './utils.js';
+import { minutesToTime, overlapInterval, timeToMinutes } from './utils.js';
 
 export function externalBlocksForDay(professional, dayId) {
   const blocks = professional?.bloqueosExternos?.[dayId];
@@ -50,8 +50,45 @@ export function normalizeExternalBlocks(value) {
   return result;
 }
 
+export function effectiveAvailability(baseAvailability, externalBlocks) {
+  const result = {};
+  for (const [dayId, rawIntervals] of Object.entries(baseAvailability || {})) {
+    let intervals = (Array.isArray(rawIntervals) ? rawIntervals : [])
+      .map(interval => ({ inicio:interval?.inicio || '', fin:interval?.fin || '' }))
+      .filter(isValidInterval);
+    const blocks = (externalBlocks?.[dayId] || []).filter(isValidExternalBlock)
+      .sort((a, b) => timeToMinutes(a.inicio) - timeToMinutes(b.inicio));
+
+    for (const block of blocks) {
+      const blockStart = timeToMinutes(block.inicio);
+      const blockEnd = timeToMinutes(block.fin);
+      const next = [];
+      for (const interval of intervals) {
+        const start = timeToMinutes(interval.inicio);
+        const end = timeToMinutes(interval.fin);
+        const overlap = overlapInterval(start, end, blockStart, blockEnd);
+        if (!overlap) {
+          next.push(interval);
+          continue;
+        }
+        if (blockStart > start) next.push({ inicio:minutesToTime(start), fin:minutesToTime(Math.min(blockStart, end)) });
+        if (blockEnd < end) next.push({ inicio:minutesToTime(Math.max(blockEnd, start)), fin:minutesToTime(end) });
+      }
+      intervals = next.filter(isValidInterval);
+    }
+    result[dayId] = intervals;
+  }
+  return result;
+}
+
 function isValidExternalBlock(block) {
   const start = timeToMinutes(block?.inicio);
   const end = timeToMinutes(block?.fin);
   return Boolean(String(block?.centro || '').trim()) && Number.isFinite(start) && Number.isFinite(end) && end > start;
+}
+
+function isValidInterval(interval) {
+  const start = timeToMinutes(interval?.inicio);
+  const end = timeToMinutes(interval?.fin);
+  return Number.isFinite(start) && Number.isFinite(end) && end > start;
 }
