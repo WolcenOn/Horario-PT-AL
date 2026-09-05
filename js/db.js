@@ -78,6 +78,19 @@ export async function bulkPut(storeName, values) {
   });
 }
 
+export async function replaceStoreData(storeName, values) {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    store.clear();
+    for (const value of values) store.put(value);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error(`No se pudo sustituir la colección ${storeName}.`));
+  });
+}
+
 export async function replaceCoreData({ students, professionals, groups, sessions, classSchedules = [] }) {
   const db = await openDatabase();
   const storeNames = ['students', 'professionals', 'groups', 'sessions', 'classSchedules'];
