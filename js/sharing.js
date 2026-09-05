@@ -6,7 +6,7 @@ import { normalizeCenterPlanningSettings, PROFESSIONAL_TYPES } from './center-pl
 import { timeToMinutes } from './utils.js';
 
 const FORMAT = 'horario-pt-al';
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 5;
 const REQUIRED_KEYS = ['students', 'professionals', 'groups', 'sessions'];
 const ARRAY_SHARE_KEYS = [...REQUIRED_KEYS, 'classSchedules'];
 
