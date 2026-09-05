@@ -6,10 +6,11 @@ import { detectConflicts } from '../js/conflicts.js';
 import { demoData } from '../js/seed.js';
 import { createSharePackage, validateSharePackage } from '../js/sharing.js';
 import { classEntriesForInterval } from '../js/class-schedules.js';
+import { COURSE_OPTIONS, recessOverlaps, stageForCourse, validateSchoolSettings } from '../js/education.js';
 
 const students=[
-  {id:'a',nombre:'Ana',apellidos:'Uno',grupoClase:'4ºA',horasPTObjetivoMin:90,horasALObjetivoMin:45,restricciones:[]},
-  {id:'b',nombre:'Beto',apellidos:'Dos',grupoClase:'4ºA',horasPTObjetivoMin:0,horasALObjetivoMin:0,restricciones:[]}
+  {id:'a',nombre:'Ana',apellidos:'Uno',curso:'4º',grupoClase:'4ºA',horasPTObjetivoMin:90,horasALObjetivoMin:45,restricciones:[]},
+  {id:'b',nombre:'Beto',apellidos:'Dos',curso:'4º',grupoClase:'4ºA',horasPTObjetivoMin:0,horasALObjetivoMin:0,restricciones:[]}
 ];
 const professionals=[
   {id:'p1',nombre:'PT Uno',tipo:'PT',disponibilidad:{lunes:[{inicio:'09:00',fin:'14:00'}]}},
@@ -79,17 +80,19 @@ test('los datos demo cubren el volumen y casos intencionados de la Fase 1',()=>{
   assert.ok(conflicts.some(c=>c.type==='student-restriction'));
 });
 
-test('genera y valida un archivo compartible con horarios de aula',()=>{
+test('genera y valida un archivo compartible con horarios de aula y recreos',()=>{
   const demo=demoData();
-  const state={...demo,classSchedules:[{id:'cl1',grupoClase:'4ºA',dia:'lunes',inicio:'09:00',fin:'09:45',materia:'Matemáticas'}]};
+  const schoolSettings={id:'school',recesses:{infantil:{inicio:'10:30',fin:'11:00'},primaria:{inicio:'11:30',fin:'12:00'}}};
+  const state={...demo,classSchedules:[{id:'cl1',grupoClase:'4ºA',dia:'lunes',inicio:'09:00',fin:'09:45',materia:'Matemáticas'}],schoolSettings};
   const payload=createSharePackage(state);
   assert.equal(payload.format,'horario-pt-al');
-  assert.equal(payload.schemaVersion,2);
+  assert.equal(payload.schemaVersion,3);
   const validated=validateSharePackage(payload);
   assert.equal(validated.students.length,20);
   assert.equal(validated.groups.length,8);
   assert.equal(validated.sessions.length,demo.sessions.length);
   assert.equal(validated.classSchedules.length,1);
+  assert.equal(validated.schoolSettings.recesses.primaria.inicio,'11:30');
 });
 
 test('mantiene compatibilidad con archivos compartidos versión 1',()=>{
@@ -97,6 +100,8 @@ test('mantiene compatibilidad con archivos compartidos versión 1',()=>{
   const payload={format:'horario-pt-al',schemaVersion:1,data:{students:demo.students,professionals:demo.professionals,groups:demo.groups,sessions:demo.sessions}};
   const validated=validateSharePackage(payload);
   assert.deepEqual(validated.classSchedules,[]);
+  assert.equal(validated.schoolSettings.id,'school');
+  assert.equal(validated.schoolSettings.recesses.primaria.inicio,'');
 });
 
 test('rechaza archivos compartidos con referencias rotas',()=>{
@@ -114,4 +119,18 @@ test('localiza la materia ordinaria que coincide con una sesión',()=>{
   ];
   const matches=classEntriesForInterval(entries,'4ºA','lunes','09:30','10:00');
   assert.deepEqual(matches.map(entry=>entry.id),['c1','c2']);
+});
+
+test('el selector de cursos cubre Infantil y toda Primaria',()=>{
+  assert.deepEqual(COURSE_OPTIONS.filter(option=>option.stage==='infantil').map(option=>option.value),['Infantil 3 años','Infantil 4 años','Infantil 5 años']);
+  assert.deepEqual(COURSE_OPTIONS.filter(option=>option.stage==='primaria').map(option=>option.value),['1º','2º','3º','4º','5º','6º']);
+  assert.equal(stageForCourse('Infantil 4 años'),'infantil');
+  assert.equal(stageForCourse('5º'),'primaria');
+});
+
+test('aplica recreos distintos para Infantil y Primaria',()=>{
+  const settings=validateSchoolSettings({id:'school',recesses:{infantil:{inicio:'10:30',fin:'11:00'},primaria:{inicio:'11:30',fin:'12:00'}}});
+  assert.equal(recessOverlaps(settings,'infantil','10:45','11:15'),true);
+  assert.equal(recessOverlaps(settings,'primaria','10:45','11:15'),false);
+  assert.equal(recessOverlaps(settings,'primaria','11:45','12:15'),true);
 });
