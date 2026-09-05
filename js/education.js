@@ -12,11 +12,18 @@ export const COURSE_OPTIONS = [
   { value:'6º', label:'6º Primaria', stage:'primaria' }
 ];
 
+export const MAX_SCHOOL_LINES = 6;
+
 export const DEFAULT_SCHOOL_SETTINGS = Object.freeze({
   id:'school',
   recesses:{
     infantil:{ inicio:'', fin:'' },
     primaria:{ inicio:'', fin:'' }
+  },
+  structure:{
+    configured:false,
+    defaultLines:1,
+    courseLines:{}
   }
 });
 
@@ -27,8 +34,69 @@ export function normalizeSchoolSettings(value) {
     recesses:{
       infantil:normalizeRecess(source.recesses?.infantil),
       primaria:normalizeRecess(source.recesses?.primaria)
-    }
+    },
+    structure:normalizeSchoolStructure(source.structure)
   };
+}
+
+export function normalizeSchoolStructure(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const defaultLines = clampLines(source.defaultLines || 1);
+  const courseLines = {};
+  for (const course of COURSE_OPTIONS) {
+    if (source.courseLines?.[course.value] != null) {
+      courseLines[course.value] = clampLines(source.courseLines[course.value]);
+    }
+  }
+  return {
+    configured:source.configured === true,
+    defaultLines,
+    courseLines
+  };
+}
+
+export function schoolStructureConfigured(settings) {
+  return normalizeSchoolSettings(settings).structure.configured;
+}
+
+export function linesForCourse(settings, course) {
+  const structure = normalizeSchoolSettings(settings).structure;
+  return structure.courseLines[course] || structure.defaultLines;
+}
+
+export function classesForCourse(settings, course) {
+  if (!schoolStructureConfigured(settings) || !COURSE_OPTIONS.some(option => option.value === course)) return [];
+  const count = linesForCourse(settings, course);
+  return Array.from({ length:count }, (_, index) => classGroupName(course, index));
+}
+
+export function configuredClassGroups(settings) {
+  if (!schoolStructureConfigured(settings)) return [];
+  return COURSE_OPTIONS.flatMap(course => classesForCourse(settings, course.value));
+}
+
+export function classGroupName(course, index) {
+  const letter = String.fromCharCode(65 + Math.max(0, Math.min(MAX_SCHOOL_LINES - 1, Number(index) || 0)));
+  return stageForCourse(course) === 'infantil' ? `${course} ${letter}` : `${course}${letter}`;
+}
+
+export function courseForClassGroup(settings, grupoClase) {
+  const wanted = normalizeText(grupoClase);
+  if (!wanted) return null;
+  if (schoolStructureConfigured(settings)) {
+    for (const course of COURSE_OPTIONS) {
+      if (classesForCourse(settings, course.value).some(name => normalizeText(name) === wanted)) return course.value;
+    }
+  }
+  for (const course of COURSE_OPTIONS) {
+    const value = normalizeText(course.value);
+    if (stageForCourse(course.value) === 'infantil') {
+      if (wanted.startsWith(value)) return course.value;
+    } else if (wanted.startsWith(value)) {
+      return course.value;
+    }
+  }
+  return null;
 }
 
 export function stageForCourse(course) {
@@ -74,6 +142,13 @@ export function validateSchoolSettings(settings) {
       throw new Error(`El recreo de ${stageLabel(stage)} debe tener una franja horaria válida.`);
     }
   }
+  if (normalized.structure.configured) {
+    if (!isValidLineCount(normalized.structure.defaultLines)) throw new Error('El número general de líneas del centro no es válido.');
+    for (const course of COURSE_OPTIONS) {
+      const count = normalized.structure.courseLines[course.value] || normalized.structure.defaultLines;
+      if (!isValidLineCount(count)) throw new Error(`El número de clases de ${course.label} no es válido.`);
+    }
+  }
   return normalized;
 }
 
@@ -86,4 +161,17 @@ function normalizeRecess(value) {
     inicio: typeof value?.inicio === 'string' ? value.inicio : '',
     fin: typeof value?.fin === 'string' ? value.fin : ''
   };
+}
+
+function clampLines(value) {
+  const numeric = Math.round(Number(value) || 1);
+  return Math.max(1, Math.min(MAX_SCHOOL_LINES, numeric));
+}
+
+function isValidLineCount(value) {
+  return Number.isInteger(value) && value >= 1 && value <= MAX_SCHOOL_LINES;
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLocaleLowerCase('es');
 }
