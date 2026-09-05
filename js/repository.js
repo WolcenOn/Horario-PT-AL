@@ -1,4 +1,4 @@
-import { get, getAll, put, remove, replaceStoreData } from './db.js';
+import { get, getAll, put, remove, replaceClassSubjectData, replaceStoreData } from './db.js';
 import { normalizeSchoolSettings } from './education.js';
 import { normalizeAutomationSettings } from './automation-core.js';
 
@@ -31,6 +31,7 @@ export const saveClassSchedule = entry => put('classSchedules', entry);
 export const saveSchoolSettings = settings => put('settings', normalizeSchoolSettings(settings));
 export const saveAutomationSettings = settings => put('settings', normalizeAutomationSettings(settings));
 export const replaceSessions = sessions => replaceStoreData('sessions', sessions);
+export const replaceClassSubjectSchedule = (grupoClase, materia, entries) => replaceClassSubjectData(grupoClase, materia, entries);
 
 export async function deleteStudent(studentId, state) {
   const affectedGroups = state.groups.filter(g => (g.studentIds || []).includes(studentId));
