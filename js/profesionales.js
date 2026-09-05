@@ -2,7 +2,7 @@ import { DAYS } from './constants.js';
 import { escapeHtml, formatDuration, minutesParts, targetFromParts, uid } from './utils.js';
 import { showModal, setModalMessage } from './ui.js';
 import { sessionDuration } from './hours.js';
-import { externalBlocksForDay, normalizeExternalBlocks } from './professional-availability.js';
+import { effectiveAvailability, externalBlocksForDay, normalizeExternalBlocks } from './professional-availability.js';
 
 export function renderProfessionals(root, { state, onEdit, onDelete }) {
   const rows = [...state.professionals].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(prof => {
@@ -16,10 +16,11 @@ export function renderProfessionals(root, { state, onEdit, onDelete }) {
 }
 
 export function openProfessionalForm(professional, { onSave }) {
-  const current = professional || { tipo:'PT', activo:true, disponibilidad:{}, bloqueosExternos:{} };
+  const current = professional || { tipo:'PT', activo:true, disponibilidad:{}, disponibilidadBase:{}, bloqueosExternos:{} };
   const max = minutesParts(current.maxWeeklyMinutes || 0);
+  const baseAvailability = current.disponibilidadBase || current.disponibilidad || {};
   const availabilityHtml = DAYS.map(day => {
-    const interval = current.disponibilidad?.[day.id]?.[0] || { inicio:'09:00', fin:'14:00' };
+    const interval = baseAvailability?.[day.id]?.[0] || { inicio:'09:00', fin:'14:00' };
     return `<span>${day.label}</span><input aria-label="${day.label} inicio" name="${day.id}_inicio" type="time" value="${escapeHtml(interval.inicio || '')}"><input aria-label="${day.label} fin" name="${day.id}_fin" type="time" value="${escapeHtml(interval.fin || '')}">`;
   }).join('');
   const externalHtml = DAYS.map(day => {
@@ -37,11 +38,11 @@ export function openProfessionalForm(professional, { onSave }) {
   </div>`, onSubmit: async (data, form, message) => {
     const nombre=data.get('nombre')?.trim(); const tipo=data.get('tipo'); const maxMinutes=targetFromParts(data.get('maxHours'),data.get('maxMinutes'));
     if(!nombre){setModalMessage(message,'El nombre es obligatorio.');return false;} if(!['PT','AL'].includes(tipo)){setModalMessage(message,'Selecciona PT o AL.');return false;} if(!Number.isFinite(maxMinutes)){setModalMessage(message,'El máximo semanal no es válido.');return false;}
-    const disponibilidad={};
-    const bloqueosExternos={};
+    const disponibilidadBase={};
+    const rawExternalBlocks={};
     for(const day of DAYS){
       const inicio=data.get(`${day.id}_inicio`);const fin=data.get(`${day.id}_fin`);
-      if(inicio&&fin){if(fin<=inicio){setModalMessage(message,`La disponibilidad del ${day.label.toLowerCase()} termina antes de empezar.`);return false;}disponibilidad[day.id]=[{inicio,fin}];}else disponibilidad[day.id]=[];
+      if(inicio&&fin){if(fin<=inicio){setModalMessage(message,`La disponibilidad del ${day.label.toLowerCase()} termina antes de empezar.`);return false;}disponibilidadBase[day.id]=[{inicio,fin}];}else disponibilidadBase[day.id]=[];
 
       const centro=data.get(`${day.id}_centro_externo`)?.trim() || '';
       const externoInicio=data.get(`${day.id}_externo_inicio`) || '';
@@ -51,9 +52,11 @@ export function openProfessionalForm(professional, { onSave }) {
       if(anyExternal&&!completeExternal){setModalMessage(message,`${day.label}: para bloquear otro centro indica nombre, inicio y fin.`);return false;}
       if(completeExternal){
         if(externoFin<=externoInicio){setModalMessage(message,`${day.label}: la franja del centro externo termina antes de empezar.`);return false;}
-        bloqueosExternos[day.id]=[{centro,inicio:externoInicio,fin:externoFin}];
-      } else bloqueosExternos[day.id]=[];
+        rawExternalBlocks[day.id]=[{centro,inicio:externoInicio,fin:externoFin}];
+      } else rawExternalBlocks[day.id]=[];
     }
-    await onSave({...current,id:current.id||uid('prof'),nombre,tipo,maxWeeklyMinutes:maxMinutes,disponibilidad,bloqueosExternos:normalizeExternalBlocks(bloqueosExternos),observaciones:data.get('observaciones')?.trim(),activo:data.get('activo')==='on'}); return true;
+    const bloqueosExternos=normalizeExternalBlocks(rawExternalBlocks);
+    const disponibilidad=effectiveAvailability(disponibilidadBase,bloqueosExternos);
+    await onSave({...current,id:current.id||uid('prof'),nombre,tipo,maxWeeklyMinutes:maxMinutes,disponibilidadBase,disponibilidad,bloqueosExternos,observaciones:data.get('observaciones')?.trim(),activo:data.get('activo')==='on'}); return true;
   }});
 }
