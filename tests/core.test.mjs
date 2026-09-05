@@ -6,7 +6,7 @@ import { detectConflicts } from '../js/conflicts.js';
 import { demoData } from '../js/seed.js';
 import { createSharePackage, validateSharePackage } from '../js/sharing.js';
 import { classEntriesForInterval, entriesForClassSubject } from '../js/class-schedules.js';
-import { COURSE_OPTIONS, recessOverlaps, stageForCourse, validateSchoolSettings } from '../js/education.js';
+import { COURSE_OPTIONS, classesForCourse, configuredClassGroups, courseForClassGroup, linesForCourse, recessOverlaps, stageForCourse, validateSchoolSettings } from '../js/education.js';
 import { FIXED_SUBJECT_NAMES, subjectsForClassGroup } from '../js/subjects.js';
 import { buildReadinessReport, generateAutomaticProposal } from '../js/automation-core.js';
 
@@ -82,20 +82,21 @@ test('los datos demo cubren el volumen y casos intencionados de la Fase 1',()=>{
   assert.ok(conflicts.some(c=>c.type==='student-restriction'));
 });
 
-test('genera y valida un archivo compartible con horarios, recreos y reglas automáticas',()=>{
+test('genera y valida un archivo compartible con horarios, recreos, estructura y reglas automáticas',()=>{
   const demo=demoData();
-  const schoolSettings={id:'school',recesses:{infantil:{inicio:'10:30',fin:'11:00'},primaria:{inicio:'11:30',fin:'12:00'}}};
+  const schoolSettings={id:'school',recesses:{infantil:{inicio:'10:30',fin:'11:00'},primaria:{inicio:'11:30',fin:'12:00'}},structure:{configured:true,defaultLines:1,courseLines:{'3º':2}}};
   const automationSettings={id:'automation',courseRules:{'4º':{confirmed:true,allowedWindows:{lunes:{inicio:'09:00',fin:'14:00'}},subjectPriorities:{Matemáticas:'high'}}}};
   const state={...demo,classSchedules:[{id:'cl1',grupoClase:'4ºA',dia:'lunes',inicio:'09:00',fin:'09:45',materia:'Matemáticas'}],schoolSettings,automationSettings};
   const payload=createSharePackage(state);
   assert.equal(payload.format,'horario-pt-al');
-  assert.equal(payload.schemaVersion,4);
+  assert.equal(payload.schemaVersion,5);
   const validated=validateSharePackage(payload);
   assert.equal(validated.students.length,20);
   assert.equal(validated.groups.length,8);
   assert.equal(validated.sessions.length,demo.sessions.length);
   assert.equal(validated.classSchedules.length,1);
   assert.equal(validated.schoolSettings.recesses.primaria.inicio,'11:30');
+  assert.equal(linesForCourse(validated.schoolSettings,'3º'),2);
   assert.equal(validated.automationSettings.courseRules['4º'].subjectPriorities.Matemáticas,'high');
 });
 
@@ -106,6 +107,7 @@ test('mantiene compatibilidad con archivos compartidos versión 1',()=>{
   assert.deepEqual(validated.classSchedules,[]);
   assert.equal(validated.schoolSettings.id,'school');
   assert.equal(validated.schoolSettings.recesses.primaria.inicio,'');
+  assert.equal(validated.schoolSettings.structure.configured,false);
   assert.equal(validated.automationSettings.id,'automation');
   assert.deepEqual(validated.automationSettings.courseRules,{});
 });
@@ -134,6 +136,22 @@ test('el selector de cursos cubre Infantil y toda Primaria',()=>{
   assert.equal(stageForCourse('5º'),'primaria');
 });
 
+test('genera la plantilla de clases según las líneas generales del colegio',()=>{
+  const settings=validateSchoolSettings({id:'school',structure:{configured:true,defaultLines:2,courseLines:{}},recesses:{infantil:{inicio:'',fin:''},primaria:{inicio:'',fin:''}}});
+  assert.deepEqual(classesForCourse(settings,'1º'),['1ºA','1ºB']);
+  assert.deepEqual(classesForCourse(settings,'Infantil 3 años'),['Infantil 3 años A','Infantil 3 años B']);
+  assert.equal(configuredClassGroups(settings).length,18);
+  assert.equal(courseForClassGroup(settings,'5ºB'),'5º');
+});
+
+test('permite desdoblar un curso concreto en un colegio de una línea',()=>{
+  const settings=validateSchoolSettings({id:'school',structure:{configured:true,defaultLines:1,courseLines:{'3º':2}},recesses:{infantil:{inicio:'',fin:''},primaria:{inicio:'',fin:''}}});
+  assert.deepEqual(classesForCourse(settings,'2º'),['2ºA']);
+  assert.deepEqual(classesForCourse(settings,'3º'),['3ºA','3ºB']);
+  assert.deepEqual(classesForCourse(settings,'4º'),['4ºA']);
+  assert.equal(configuredClassGroups(settings).length,10);
+});
+
 test('aplica recreos distintos para Infantil y Primaria',()=>{
   const settings=validateSchoolSettings({id:'school',recesses:{infantil:{inicio:'10:30',fin:'11:00'},primaria:{inicio:'11:30',fin:'12:00'}}});
   assert.equal(recessOverlaps(settings,'infantil','10:45','11:15'),true);
@@ -145,10 +163,17 @@ test('el catálogo de asignaturas usa nombres fijos según la etapa',()=>{
   assert.ok(FIXED_SUBJECT_NAMES.includes('Matemáticas'));
   assert.ok(FIXED_SUBJECT_NAMES.includes('Lengua Castellana y Literatura'));
   assert.equal(new Set(FIXED_SUBJECT_NAMES).size,FIXED_SUBJECT_NAMES.length);
-  const primarySubjects=subjectsForClassGroup({students,classSchedules:[]},'4ºA');
+  const primarySubjects=subjectsForClassGroup({students,classSchedules:[],schoolSettings:null},'4ºA');
   assert.ok(primarySubjects.includes('Matemáticas'));
   assert.ok(primarySubjects.includes('Educación Física'));
   assert.equal(primarySubjects.includes('Crecimiento en Armonía'),false);
+});
+
+test('la estructura permite conocer la etapa de una clase antes de crear alumnos',()=>{
+  const schoolSettings={id:'school',structure:{configured:true,defaultLines:1,courseLines:{}},recesses:{infantil:{inicio:'',fin:''},primaria:{inicio:'',fin:''}}};
+  const subjects=subjectsForClassGroup({students:[],classSchedules:[],schoolSettings},'Infantil 4 años A');
+  assert.ok(subjects.includes('Crecimiento en Armonía'));
+  assert.equal(subjects.includes('Matemáticas'),false);
 });
 
 test('agrupa todas las franjas semanales de una clase y asignatura',()=>{
