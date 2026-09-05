@@ -15,6 +15,14 @@ export const RESPONSIBILITY_TYPES = [
   { value:'otra', label:'Otra función' }
 ];
 
+export const DEFAULT_GLOBAL_GENERATION = Object.freeze({
+  start:'09:00',
+  end:'14:00',
+  lessonMinutes:45,
+  stepMinutes:15,
+  maxSameSubjectPerDay:2
+});
+
 export function normalizeCenterPlanningSettings(value) {
   const source = value && typeof value === 'object' ? value : {};
   const mode = PLANNING_MODES.some(option => option.value === source.mode) ? source.mode : 'ptal';
@@ -34,8 +42,34 @@ export function normalizeCenterPlanningSettings(value) {
     territory:String(source.territory || '').trim(),
     academicYear:String(source.academicYear || '').trim(),
     legalReference:String(source.legalReference || '').trim(),
+    generation:normalizeGlobalGeneration(source.generation),
     curriculum
   };
+}
+
+export function normalizeGlobalGeneration(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const lessonMinutes = clampInteger(source.lessonMinutes, 15, 120, DEFAULT_GLOBAL_GENERATION.lessonMinutes);
+  return {
+    start:validTime(source.start) ? source.start : DEFAULT_GLOBAL_GENERATION.start,
+    end:validTime(source.end) ? source.end : DEFAULT_GLOBAL_GENERATION.end,
+    lessonMinutes,
+    stepMinutes:15,
+    maxSameSubjectPerDay:clampInteger(source.maxSameSubjectPerDay, 1, 4, DEFAULT_GLOBAL_GENERATION.maxSameSubjectPerDay)
+  };
+}
+
+export function validateGlobalGeneration(settings) {
+  const generation = normalizeCenterPlanningSettings(settings).generation;
+  const start = timeToMinutes(generation.start);
+  const end = timeToMinutes(generation.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    throw new Error('La jornada global debe tener una hora de inicio y fin válidas.');
+  }
+  if (generation.lessonMinutes % generation.stepMinutes !== 0) {
+    throw new Error('La duración habitual de los tramos debe ser múltiplo de 15 minutos.');
+  }
+  return generation;
 }
 
 export function curriculumForCourse(settings, course) {
@@ -119,6 +153,16 @@ export function courseOptionsUsedByCenter(schoolSettings) {
   if (!groups.length) return COURSE_OPTIONS;
   const used = new Set(groups.map(group => courseForClassGroup(schoolSettings, group)).filter(Boolean));
   return COURSE_OPTIONS.filter(course => used.has(course.value));
+}
+
+function validTime(value) {
+  return typeof value === 'string' && /^\d{2}:\d{2}$/.test(value) && Number.isFinite(timeToMinutes(value));
+}
+
+function clampInteger(value, min, max, fallback) {
+  const numeric = Math.round(Number(value));
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(min, Math.min(max, numeric));
 }
 
 function normalizeText(value) {
