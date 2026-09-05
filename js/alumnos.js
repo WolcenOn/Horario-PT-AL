@@ -1,4 +1,5 @@
 import { deriveStudentStatus } from './hours.js';
+import { COURSE_OPTIONS } from './education.js';
 import { escapeHtml, fullName, minutesParts, targetFromParts, uid, formatDuration } from './utils.js';
 import { showModal, setModalMessage } from './ui.js';
 
@@ -38,7 +39,7 @@ export function openStudentForm(student, { onSave }) {
     bodyHtml: `<div class="form-grid">
       <div class="form-field"><label for="nombre">Nombre *</label><input id="nombre" name="nombre" required value="${escapeHtml(current.nombre || '')}"></div>
       <div class="form-field"><label for="apellidos">Apellidos *</label><input id="apellidos" name="apellidos" required value="${escapeHtml(current.apellidos || '')}"></div>
-      <div class="form-field"><label for="curso">Curso</label><input id="curso" name="curso" value="${escapeHtml(current.curso || '')}" placeholder="4º"></div>
+      <div class="form-field"><label for="curso">Curso *</label><select id="curso" name="curso" required>${courseOptionsHtml(current.curso)}</select><span class="field-hint">Selecciona el curso para evitar variantes de escritura y poder aplicar correctamente el recreo de Infantil o Primaria.</span></div>
       <div class="form-field"><label for="grupoClase">Grupo / clase ordinaria</label><input id="grupoClase" name="grupoClase" value="${escapeHtml(current.grupoClase || '')}" placeholder="4ºA"></div>
       <div class="form-field full"><label for="tutor">Tutor/a</label><input id="tutor" name="tutor" value="${escapeHtml(current.tutor || '')}"></div>
       <fieldset><legend>Objetivo semanal PT</legend><div class="duration-pair"><div class="form-field"><label for="ptHours">Horas</label><input id="ptHours" name="ptHours" type="number" min="0" max="40" value="${pt.hours}"></div><div class="form-field"><label for="ptMinutes">Minutos</label><input id="ptMinutes" name="ptMinutes" type="number" min="0" max="59" value="${pt.minutes}"></div></div></fieldset>
@@ -49,14 +50,16 @@ export function openStudentForm(student, { onSave }) {
     onSubmit: async (data, form, message) => {
       const nombre = data.get('nombre')?.trim();
       const apellidos = data.get('apellidos')?.trim();
+      const curso = data.get('curso')?.trim();
       const ptMin = targetFromParts(data.get('ptHours'), data.get('ptMinutes'));
       const alMin = targetFromParts(data.get('alHours'), data.get('alMinutes'));
       if (!nombre || !apellidos) { setModalMessage(message, 'Nombre y apellidos son obligatorios.'); return false; }
+      if (!curso) { setModalMessage(message, 'Selecciona el curso del alumno.'); return false; }
       if (!Number.isFinite(ptMin) || !Number.isFinite(alMin)) { setModalMessage(message, 'Las horas objetivo deben ser valores válidos y no negativos.'); return false; }
       await onSave({
         ...current,
         id: current.id || uid('alu'), nombre, apellidos,
-        curso: data.get('curso')?.trim(), grupoClase: data.get('grupoClase')?.trim(), tutor: data.get('tutor')?.trim(),
+        curso, grupoClase: data.get('grupoClase')?.trim(), tutor: data.get('tutor')?.trim(),
         horasPTObjetivoMin: ptMin, horasALObjetivoMin: alMin,
         observaciones: data.get('observaciones')?.trim(), activo: data.get('activo') === 'on',
         restricciones: current.restricciones || []
@@ -64,6 +67,15 @@ export function openStudentForm(student, { onSave }) {
       return true;
     }
   });
+}
+
+function courseOptionsHtml(currentCourse) {
+  const current = String(currentCourse || '').trim();
+  const known = new Set(COURSE_OPTIONS.map(option => option.value));
+  const legacy = current && !known.has(current)
+    ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} · dato existente</option>`
+    : '';
+  return `<option value="" ${current ? '' : 'selected'}>Selecciona un curso…</option>${legacy}${COURSE_OPTIONS.map(option => `<option value="${escapeHtml(option.value)}" ${current === option.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}`;
 }
 
 function filterRows(root, query) {
