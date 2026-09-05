@@ -5,7 +5,7 @@ import { normalizeAutomationSettings } from './automation-core.js';
 import { timeToMinutes } from './utils.js';
 
 const FORMAT = 'horario-pt-al';
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const REQUIRED_KEYS = ['students', 'professionals', 'groups', 'sessions'];
 const ARRAY_SHARE_KEYS = [...REQUIRED_KEYS, 'classSchedules'];
 
