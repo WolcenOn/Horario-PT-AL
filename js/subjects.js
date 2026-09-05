@@ -1,4 +1,4 @@
-import { stageForCourse } from './education.js';
+import { courseForClassGroup, stageForCourse } from './education.js';
 
 export const SUBJECT_CATALOG = [
   { name:'Crecimiento en Armonía', stages:['infantil'] },
@@ -37,6 +37,9 @@ export function subjectsForClassGroup(state, grupoClase) {
     .filter(student => normalize(student.grupoClase) === normalized)
     .map(student => stageForCourse(student.curso))
     .filter(Boolean))];
+  const configuredCourse = courseForClassGroup(state.schoolSettings, grupoClase);
+  const configuredStage = stageForCourse(configuredCourse);
+  if (configuredStage && !stages.includes(configuredStage)) stages.push(configuredStage);
 
   const catalog = stages.length
     ? SUBJECT_CATALOG.filter(item => stages.some(stage => item.stages.includes(stage))).map(item => item.name)
