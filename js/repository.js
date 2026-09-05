@@ -49,9 +49,14 @@ export async function deleteStudent(studentId, state) {
 }
 
 export async function deleteProfessional(professionalId, state) {
-  const inUse = state.groups.filter(g => g.professionalId === professionalId);
-  if (inUse.length) {
-    throw new Error(`No se puede eliminar: está asignado a ${inUse.length} grupo(s). Reasigna esos grupos primero.`);
+  const supportGroups = state.groups.filter(g => g.professionalId === professionalId);
+  const classEntries = (state.classSchedules || []).filter(entry => entry.professionalId === professionalId);
+  if (supportGroups.length || classEntries.length) {
+    const details = [
+      supportGroups.length ? `${supportGroups.length} grupo(s) PT/AL` : '',
+      classEntries.length ? `${classEntries.length} franja(s) de aula` : ''
+    ].filter(Boolean).join(' y ');
+    throw new Error(`No se puede eliminar: está asignado a ${details}. Reasigna esos elementos primero.`);
   }
   await remove('professionals', professionalId);
 }
