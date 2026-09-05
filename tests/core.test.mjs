@@ -7,6 +7,7 @@ import { demoData } from '../js/seed.js';
 import { createSharePackage, validateSharePackage } from '../js/sharing.js';
 import { classEntriesForInterval } from '../js/class-schedules.js';
 import { COURSE_OPTIONS, recessOverlaps, stageForCourse, validateSchoolSettings } from '../js/education.js';
+import { buildReadinessReport, generateAutomaticProposal } from '../js/automation-core.js';
 
 const students=[
   {id:'a',nombre:'Ana',apellidos:'Uno',curso:'4º',grupoClase:'4ºA',horasPTObjetivoMin:90,horasALObjetivoMin:45,restricciones:[]},
@@ -80,19 +81,21 @@ test('los datos demo cubren el volumen y casos intencionados de la Fase 1',()=>{
   assert.ok(conflicts.some(c=>c.type==='student-restriction'));
 });
 
-test('genera y valida un archivo compartible con horarios de aula y recreos',()=>{
+test('genera y valida un archivo compartible con horarios, recreos y reglas automáticas',()=>{
   const demo=demoData();
   const schoolSettings={id:'school',recesses:{infantil:{inicio:'10:30',fin:'11:00'},primaria:{inicio:'11:30',fin:'12:00'}}};
-  const state={...demo,classSchedules:[{id:'cl1',grupoClase:'4ºA',dia:'lunes',inicio:'09:00',fin:'09:45',materia:'Matemáticas'}],schoolSettings};
+  const automationSettings={id:'automation',courseRules:{'4º':{confirmed:true,allowedWindows:{lunes:{inicio:'09:00',fin:'14:00'}},subjectPriorities:{Matemáticas:'high'}}}};
+  const state={...demo,classSchedules:[{id:'cl1',grupoClase:'4ºA',dia:'lunes',inicio:'09:00',fin:'09:45',materia:'Matemáticas'}],schoolSettings,automationSettings};
   const payload=createSharePackage(state);
   assert.equal(payload.format,'horario-pt-al');
-  assert.equal(payload.schemaVersion,3);
+  assert.equal(payload.schemaVersion,4);
   const validated=validateSharePackage(payload);
   assert.equal(validated.students.length,20);
   assert.equal(validated.groups.length,8);
   assert.equal(validated.sessions.length,demo.sessions.length);
   assert.equal(validated.classSchedules.length,1);
   assert.equal(validated.schoolSettings.recesses.primaria.inicio,'11:30');
+  assert.equal(validated.automationSettings.courseRules['4º'].subjectPriorities.Matemáticas,'high');
 });
 
 test('mantiene compatibilidad con archivos compartidos versión 1',()=>{
@@ -102,6 +105,8 @@ test('mantiene compatibilidad con archivos compartidos versión 1',()=>{
   assert.deepEqual(validated.classSchedules,[]);
   assert.equal(validated.schoolSettings.id,'school');
   assert.equal(validated.schoolSettings.recesses.primaria.inicio,'');
+  assert.equal(validated.automationSettings.id,'automation');
+  assert.deepEqual(validated.automationSettings.courseRules,{});
 });
 
 test('rechaza archivos compartidos con referencias rotas',()=>{
@@ -133,4 +138,39 @@ test('aplica recreos distintos para Infantil y Primaria',()=>{
   assert.equal(recessOverlaps(settings,'infantil','10:45','11:15'),true);
   assert.equal(recessOverlaps(settings,'primaria','10:45','11:15'),false);
   assert.equal(recessOverlaps(settings,'primaria','11:45','12:15'),true);
+});
+
+test('el gestor automático indica lo que falta antes de habilitarse',()=>{
+  const state={students:[],professionals:[],groups:[],sessions:[],classSchedules:[],schoolSettings:null,automationSettings:null};
+  const report=buildReadinessReport(state,state.automationSettings);
+  assert.equal(report.ready,false);
+  assert.ok(report.items.some(item=>!item.ok&&item.id==='students'));
+  assert.ok(report.items.some(item=>!item.ok&&item.id==='groups'));
+  assert.ok(report.items.some(item=>!item.ok&&item.id==='courseRules'));
+});
+
+test('la configuración automática prefiere una materia de prioridad baja',()=>{
+  const days=['lunes','martes','miercoles','jueves','viernes'];
+  const professional={id:'p',nombre:'PT',tipo:'PT',activo:true,disponibilidad:Object.fromEntries(days.map(day=>[day,[{inicio:'09:00',fin:'11:30'}]]))};
+  const student={id:'s',nombre:'Alumno',apellidos:'Prueba',curso:'4º',grupoClase:'4ºA',activo:true,restricciones:[]};
+  const group={id:'g',nombre:'PT 4ºA',tipo:'PT',professionalId:'p',studentIds:['s'],activo:true};
+  const classSchedules=days.flatMap((day,index)=>[
+    {id:`l${index}`,grupoClase:'4ºA',dia:day,inicio:'09:00',fin:'10:00',materia:'Lengua'},
+    {id:`m${index}`,grupoClase:'4ºA',dia:day,inicio:'10:00',fin:'11:00',materia:'Matemáticas'}
+  ]);
+  const allowedWindows=Object.fromEntries(days.map(day=>[day,{inicio:'09:00',fin:'11:00'}]));
+  const automationSettings={id:'automation',courseRules:{'4º':{confirmed:true,allowedWindows,subjectPriorities:{Lengua:'low',Matemáticas:'high'}}}};
+  const state={
+    students:[student],professionals:[professional],groups:[group],
+    sessions:[{id:'ses',groupId:'g',professionalId:'p',dia:'lunes',inicio:'10:00',fin:'10:45'}],
+    classSchedules,
+    schoolSettings:{id:'school',recesses:{infantil:{inicio:'',fin:''},primaria:{inicio:'11:00',fin:'11:30'}}},
+    automationSettings
+  };
+  const readiness=buildReadinessReport(state,automationSettings);
+  assert.equal(readiness.ready,true);
+  const proposal=generateAutomaticProposal(state,automationSettings);
+  assert.equal(proposal.ok,true);
+  assert.equal(proposal.sessions[0].inicio,'09:00');
+  assert.equal(proposal.sessions[0].fin,'09:45');
 });
