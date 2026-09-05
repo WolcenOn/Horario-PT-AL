@@ -1,5 +1,6 @@
 import { CALENDAR_PX_PER_MINUTE, DAYS, DEFAULT_CALENDAR_END, DEFAULT_CALENDAR_START } from './constants.js';
 import { classDayEntries, classEntriesForInterval, studentNamesForClass } from './class-schedules.js';
+import { recessForStage, recessOverlaps, stageForCourse, stageLabel } from './education.js';
 import { escapeHtml, fullName, minutesToTime, timeToMinutes } from './utils.js';
 
 const DRAG_SNAP_MINUTES = 15;
@@ -29,7 +30,11 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, selected
       const blockHeight = Math.max(28, (timeToMinutes(session.fin) - timeToMinutes(session.inicio)) * CALENDAR_PX_PER_MINUTE);
       const professional = professionalMap.get(session.professionalId || group.professionalId);
       const excluded = new Set(session.excludedStudentIds || []);
-      const students = (group.studentIds || []).filter(id => !excluded.has(id)).map(id => fullName(studentMap.get(id))).filter(Boolean);
+      const students = (group.studentIds || [])
+        .filter(id => !excluded.has(id))
+        .map(id => studentMap.get(id))
+        .filter(Boolean)
+        .sort((a, b) => fullName(a).localeCompare(fullName(b), 'es', { sensitivity:'base' }));
       const dimmed = serviceFilter !== 'ALL' && group.tipo !== serviceFilter;
       const selected = selectedSessionId === session.id;
 
@@ -37,7 +42,7 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, selected
         <strong>${conflictSessionIds.has(session.id) ? '⚠ ' : ''}${escapeHtml(group.nombre)}</strong>
         <small class="session-time">${session.inicio}–${session.fin}</small>
         <small>${escapeHtml(professional?.nombre || 'Sin profesional')}</small>
-        <small>${escapeHtml(students.join(', '))}</small>
+        ${students.length ? `<ol class="session-student-list" aria-label="Alumnos de la sesión">${students.map(student => `<li>${escapeHtml(fullName(student))}</li>`).join('')}</ol>` : '<small>Sin alumnos</small>'}
         ${session.aula ? `<small>${escapeHtml(session.aula)}</small>` : ''}
       </button>`;
     }).join('');
@@ -52,7 +57,7 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, selected
       <span><i class="legend-dot pt"></i>PT</span>
       <span><i class="legend-dot al"></i>AL</span>
       <span><i class="legend-conflict"></i>Conflicto / advertencia</span>
-      <span>Pulsa una sesión para consultar las materias de sus alumnos · arrastra para moverla.</span>
+      <span>Pulsa una sesión para consultar materias y recreo · arrastra para moverla.</span>
     </div>
   </section>
   ${renderClassReferencePanel(state, selectedSessionId, groupMap)}`;
@@ -156,7 +161,7 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, selected
 function renderClassReferencePanel(state, selectedSessionId, groupMap) {
   if (!selectedSessionId) {
     return `<section class="card class-reference-panel is-empty">
-      <div><strong>Horario ordinario de referencia</strong><span>Pulsa una sesión del calendario para ver qué materias tienen sus alumnos en esa franja y durante el resto de ese día.</span></div>
+      <div><strong>Horario ordinario de referencia</strong><span>Pulsa una sesión del calendario para ver qué materias tienen sus alumnos en esa franja, incluido el recreo de su etapa.</span></div>
     </section>`;
   }
 
@@ -170,18 +175,34 @@ function renderClassReferencePanel(state, selectedSessionId, groupMap) {
     .sort((a, b) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' }));
 
   const rows = classGroups.map(grupoClase => {
+    const classStudents = studentsForClassGroup(studentMap, studentIds, grupoClase);
+    const stage = classStudents.map(student => stageForCourse(student.curso)).find(Boolean) || null;
+    const recess = recessForStage(state.schoolSettings, stage);
     const dayEntries = classDayEntries(state.classSchedules || [], grupoClase, session.dia);
-    const overlaps = new Set(classEntriesForInterval(state.classSchedules || [], grupoClase, session.dia, session.inicio, session.fin).map(entry => entry.id));
-    const names = studentNamesForClass(state, studentIds, grupoClase);
-    const schedule = dayEntries.length
-      ? dayEntries.map(entry => `<div class="class-subject-slot ${overlaps.has(entry.id) ? 'is-overlap' : ''}">
-          <span>${escapeHtml(entry.inicio)}–${escapeHtml(entry.fin)}</span>
-          <strong>${escapeHtml(entry.materia)}</strong>
-          ${entry.aula ? `<small>${escapeHtml(entry.aula)}</small>` : ''}
-        </div>`).join('')
+    const ordinaryOverlaps = new Set(classEntriesForInterval(state.classSchedules || [], grupoClase, session.dia, session.inicio, session.fin).map(entry => entry.id));
+    const recessId = `recess_${stage || 'unknown'}`;
+    const recessHit = recess ? recessOverlaps(state.schoolSettings, stage, session.inicio, session.fin) : false;
+    const scheduleEntries = [
+      ...dayEntries.map(entry => ({ ...entry, isRecess:false })),
+      ...(recess ? [{ id:recessId, inicio:recess.inicio, fin:recess.fin, materia:'Recreo', isRecess:true }] : [])
+    ].sort((a, b) => timeToMinutes(a.inicio) - timeToMinutes(b.inicio));
+    const names = studentNamesForClass(state, studentIds, grupoClase).sort((a, b) => a.localeCompare(b, 'es', { sensitivity:'base' }));
+    const schedule = scheduleEntries.length
+      ? scheduleEntries.map(entry => {
+          const overlaps = entry.isRecess ? recessHit : ordinaryOverlaps.has(entry.id);
+          return `<div class="class-subject-slot ${entry.isRecess ? 'is-recess' : ''} ${overlaps ? 'is-overlap' : ''}">
+            <span>${escapeHtml(entry.inicio)}–${escapeHtml(entry.fin)}</span>
+            <strong>${escapeHtml(entry.materia)}</strong>
+            ${entry.isRecess && stage ? `<small>${escapeHtml(stageLabel(stage))}</small>` : entry.aula ? `<small>${escapeHtml(entry.aula)}</small>` : ''}
+          </div>`;
+        }).join('')
       : `<div class="class-schedule-missing">Sin horario cargado para ${escapeHtml(dayLabel(session.dia))}.</div>`;
     return `<div class="class-reference-row">
-      <div class="class-reference-meta"><strong>${escapeHtml(grupoClase)}</strong><small>${escapeHtml(names.join(', ') || 'Alumnos del grupo')}</small></div>
+      <div class="class-reference-meta">
+        <strong>${escapeHtml(grupoClase)}</strong>
+        ${names.length ? `<ol class="class-reference-student-list">${names.map(name => `<li>${escapeHtml(name)}</li>`).join('')}</ol>` : '<small>Alumnos del grupo</small>'}
+        ${recess ? `<span class="recess-status">⏸ Recreo ${escapeHtml(recess.inicio)}–${escapeHtml(recess.fin)}</span>` : ''}
+      </div>
       <div class="class-day-strip">${schedule}</div>
     </div>`;
   }).join('');
@@ -191,7 +212,7 @@ function renderClassReferencePanel(state, selectedSessionId, groupMap) {
       <div>
         <span class="eyebrow">Referencia del aula ordinaria</span>
         <h2>${escapeHtml(group.nombre)} · ${escapeHtml(dayLabel(session.dia))} ${escapeHtml(session.inicio)}–${escapeHtml(session.fin)}</h2>
-        <small>Las materias que coinciden con la sesión aparecen destacadas. Sirven como apoyo para decidir la mejor franja; no bloquean el horario automáticamente.</small>
+        <small>Las materias y recreos que coinciden con la sesión aparecen destacados. Sirven como apoyo para decidir la mejor franja; no bloquean el horario automáticamente.</small>
       </div>
       <div class="button-row">
         <button class="button" type="button" data-reference-manage>Gestionar horarios de aula</button>
@@ -227,25 +248,44 @@ function renderDropPreview(drag, groupMap, state, calendarStart, nextStart) {
   drag.previewEl.innerHTML = `
     <strong>${escapeHtml(group?.nombre || 'Sesión')}</strong>
     <span class="drop-preview-time"><b>${drag.preview.inicio}</b><i>→</i><b>${drag.preview.fin}</b></span>
-    ${classContext ? `<small class="drop-preview-context">${escapeHtml(classContext)}</small>` : ''}
+    ${classContext.text ? `<small class="drop-preview-context ${classContext.hasRecess ? 'has-recess' : ''}">${escapeHtml(classContext.text)}</small>` : ''}
   `;
 }
 
 function candidateClassContext(state, group, session, preview) {
-  if (!group) return '';
+  if (!group) return { text:'', hasRecess:false };
   const excluded = new Set(session.excludedStudentIds || []);
   const studentMap = new Map(state.students.map(student => [student.id, student]));
-  const classGroups = [...new Set((group.studentIds || [])
-    .filter(id => !excluded.has(id))
+  const activeStudentIds = (group.studentIds || []).filter(id => !excluded.has(id));
+  const classGroups = [...new Set(activeStudentIds
     .map(id => studentMap.get(id)?.grupoClase?.trim())
     .filter(Boolean))];
-  if (!classGroups.length) return 'Sin grupo ordinario indicado';
+  if (!classGroups.length) return { text:'Sin grupo ordinario indicado', hasRecess:false };
 
-  return classGroups.map(grupoClase => {
+  let hasRecess = false;
+  const parts = classGroups.map(grupoClase => {
+    const classStudents = studentsForClassGroup(studentMap, activeStudentIds, grupoClase);
+    const stage = classStudents.map(student => stageForCourse(student.curso)).find(Boolean) || null;
+    const recessHit = stage ? recessOverlaps(state.schoolSettings, stage, preview.inicio, preview.fin) : false;
+    if (recessHit) hasRecess = true;
     const entries = classEntriesForInterval(state.classSchedules || [], grupoClase, preview.dia, preview.inicio, preview.fin);
     const subjects = [...new Set(entries.map(entry => entry.materia).filter(Boolean))];
-    return `${grupoClase}: ${subjects.length ? subjects.join(' / ') : 'sin horario cargado'}`;
-  }).join(' · ');
+    const context = [...(recessHit ? ['RECREO'] : []), ...subjects];
+    return `${grupoClase}: ${context.length ? context.join(' / ') : 'sin horario cargado'}`;
+  });
+  return { text:parts.join(' · '), hasRecess };
+}
+
+function studentsForClassGroup(studentMap, studentIds, grupoClase) {
+  const normalized = normalizeClassGroup(grupoClase);
+  return (studentIds || [])
+    .map(id => studentMap.get(id))
+    .filter(student => student && normalizeClassGroup(student.grupoClase) === normalized)
+    .sort((a, b) => fullName(a).localeCompare(fullName(b), 'es', { sensitivity:'base' }));
+}
+
+function normalizeClassGroup(value) {
+  return String(value || '').trim().toLocaleLowerCase('es');
 }
 
 function removeDropPreview(drag) {
