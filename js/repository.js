@@ -1,10 +1,23 @@
-import { getAll, put, remove } from './db.js';
+import { get, getAll, put, remove } from './db.js';
+import { normalizeSchoolSettings } from './education.js';
 
 export async function loadState() {
-  const [students, professionals, groups, sessions, classSchedules] = await Promise.all([
-    getAll('students'), getAll('professionals'), getAll('groups'), getAll('sessions'), getAll('classSchedules')
+  const [students, professionals, groups, sessions, classSchedules, schoolSettings] = await Promise.all([
+    getAll('students'),
+    getAll('professionals'),
+    getAll('groups'),
+    getAll('sessions'),
+    getAll('classSchedules'),
+    get('settings', 'school')
   ]);
-  return { students, professionals, groups, sessions, classSchedules };
+  return {
+    students,
+    professionals,
+    groups,
+    sessions,
+    classSchedules,
+    schoolSettings: normalizeSchoolSettings(schoolSettings)
+  };
 }
 
 export const saveStudent = student => put('students', student);
@@ -12,6 +25,7 @@ export const saveProfessional = professional => put('professionals', professiona
 export const saveGroup = group => put('groups', group);
 export const saveSession = session => put('sessions', session);
 export const saveClassSchedule = entry => put('classSchedules', entry);
+export const saveSchoolSettings = settings => put('settings', normalizeSchoolSettings(settings));
 
 export async function deleteStudent(studentId, state) {
   const affectedGroups = state.groups.filter(g => (g.studentIds || []).includes(studentId));
