@@ -1,5 +1,8 @@
 import { DAYS } from './constants.js';
+import { configuredClassGroups, schoolStructureConfigured } from './education.js';
 import { subjectsForClassGroup } from './subjects.js';
+import { openSchoolStructureForm } from './school-structure.js';
+import { saveSchoolSettings } from './repository.js';
 import { escapeHtml, fullName, minutesToTime, overlapInterval, timeToMinutes, uid } from './utils.js';
 import { setModalMessage, showModal } from './ui.js';
 
@@ -7,6 +10,8 @@ const dayOrder = new Map(DAYS.map((day, index) => [day.id, index]));
 
 export function renderClassSchedules(root, { state, onEdit }) {
   const classGroups = knownClassGroups(state);
+  const structureReady = schoolStructureConfigured(state.schoolSettings);
+  const configuredGroups = configuredClassGroups(state.schoolSettings);
   const weeklySubjects = groupWeeklySubjects(state.classSchedules || []);
   const rows = weeklySubjects.map(item => {
     const slots = item.entries.map(entry => `<span class="weekly-summary-slot"><b>${escapeHtml(shortDayLabel(entry.dia))}</b> ${escapeHtml(entry.inicio)}–${escapeHtml(entry.fin)}</span>`).join('');
@@ -32,8 +37,21 @@ export function renderClassSchedules(root, { state, onEdit }) {
           ${classGroups.map(group => `<option value="${escapeHtml(group)}">${escapeHtml(group)}</option>`).join('')}
         </select>
       </div>
-      <button class="button button-primary" type="button" data-new-week-subject>+ Asignatura semanal</button>
+      <div class="button-row">
+        <button class="button" type="button" data-configure-school-classes>🏫 Configurar clases</button>
+        <button class="button button-primary" type="button" data-new-week-subject ${structureReady || classGroups.length ? '' : 'disabled'}>+ Asignatura semanal</button>
+      </div>
     </div>
+    ${!structureReady ? `<section class="card school-structure-alert">
+      <div>
+        <strong>Primero configura las clases del colegio</strong>
+        <span>Indica si el centro es de una, dos o más líneas. Se generará una plantilla completa de Infantil y Primaria y podrás modificar cursos concretos que estén desdoblados.</span>
+      </div>
+      <button class="button button-primary" type="button" data-configure-school-classes>Configurar ahora</button>
+    </section>` : `<section class="card school-structure-summary">
+      <div><strong>Estructura del centro configurada</strong><span>${configuredGroups.length} clases disponibles para cargar horarios. Puedes cambiar desdobles en cualquier momento.</span></div>
+      <div class="school-class-preview compact">${configuredGroups.slice(0,12).map(group => `<span class="school-class-chip">${escapeHtml(group)}</span>`).join('')}${configuredGroups.length > 12 ? `<span class="school-class-chip more">+${configuredGroups.length - 12}</span>` : ''}</div>
+    </section>`}
     <section class="card">
       <div class="card-header">
         <div><h2>Horarios ordinarios por asignatura</h2><small>Cada fila reúne todas las franjas semanales de una asignatura dentro de una clase.</small></div>
@@ -41,11 +59,11 @@ export function renderClassSchedules(root, { state, onEdit }) {
       </div>
       <div class="class-schedule-help">
         <strong>Edición semanal</strong>
-        <span>Elige una clase y una asignatura fija, y añade todas sus sesiones de lunes a viernes en una sola ventana. Puedes poner varias franjas el mismo día.</span>
+        <span>Elige una clase configurada y una asignatura fija, y añade todas sus sesiones de lunes a viernes en una sola ventana. Puedes poner varias franjas el mismo día.</span>
       </div>
       <div class="table-wrap"><table>
         <thead><tr><th>Clase</th><th>Asignatura</th><th>Franjas semanales</th><th>Docente</th><th>Aula</th><th>Acciones</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="6"><div class="empty-state"><strong>No hay horarios de aula cargados</strong>Utiliza “+ Asignatura semanal” para introducir de una vez todas las franjas de una materia.</div></td></tr>`}</tbody>
+        <tbody>${rows || `<tr><td colspan="6"><div class="empty-state"><strong>No hay horarios de aula cargados</strong>${structureReady ? 'Utiliza “+ Asignatura semanal” para introducir de una vez todas las franjas de una materia.' : 'Configura primero las clases del colegio y después añade sus asignaturas.'}</div></td></tr>`}</tbody>
       </table></div>
     </section>`;
 
@@ -64,8 +82,14 @@ export function renderClassSchedules(root, { state, onEdit }) {
   root.onclick = event => {
     const edit = event.target.closest('[data-edit-week]');
     const add = event.target.closest('[data-new-week-subject]');
+    const configure = event.target.closest('[data-configure-school-classes]');
     if (edit?.dataset.editWeek) onEdit(edit.dataset.editWeek);
-    if (add) onEdit();
+    if (add && !add.disabled) onEdit();
+    if (configure) openSchoolStructureForm(state.schoolSettings, { onSave: async value => {
+      await saveSchoolSettings(value);
+      state.schoolSettings = value;
+      renderClassSchedules(root, { state, onEdit });
+    } });
   };
 }
 
@@ -82,7 +106,7 @@ export function openClassScheduleForm(entry, { state, onSave }) {
         <span>Selecciona la clase y la asignatura. Después añade una o varias franjas en cada día que corresponda.</span>
       </div>
       <div class="form-grid weekly-schedule-top">
-        <div class="form-field"><label for="grupoClase">Grupo / clase ordinaria *</label><select id="grupoClase" name="grupoClase" required>${classGroups.length ? classGroups.map(group => `<option value="${escapeHtml(group)}" ${group === initialGroup ? 'selected' : ''}>${escapeHtml(group)}</option>`).join('') : '<option value="">No hay clases disponibles</option>'}</select><span class="field-hint">Las clases proceden del campo “Grupo / clase ordinaria” de los alumnos.</span></div>
+        <div class="form-field"><label for="grupoClase">Grupo / clase ordinaria *</label><select id="grupoClase" name="grupoClase" required>${classGroups.length ? classGroups.map(group => `<option value="${escapeHtml(group)}" ${group === initialGroup ? 'selected' : ''}>${escapeHtml(group)}</option>`).join('') : '<option value="">No hay clases disponibles</option>'}</select><span class="field-hint">Las clases proceden de la estructura del colegio. Los nombres antiguos que ya existieran se conservan para no perder datos.</span></div>
         <div class="form-field"><label for="materia">Asignatura *</label><select id="materia" name="materia" required></select><span class="field-hint">Catálogo fijo según la etapa para evitar nombres duplicados o variantes.</span></div>
         <div class="form-field"><label for="docente">Docente</label><input id="docente" name="docente" placeholder="Opcional"></div>
         <div class="form-field"><label for="aula">Aula</label><input id="aula" name="aula" placeholder="Opcional"></div>
@@ -245,6 +269,7 @@ export function studentNamesForClass(state, studentIds, grupoClase) {
 
 export function knownClassGroups(state) {
   return [...new Set([
+    ...configuredClassGroups(state.schoolSettings),
     ...(state.students || []).map(student => student.grupoClase?.trim()).filter(Boolean),
     ...(state.classSchedules || []).map(entry => entry.grupoClase?.trim()).filter(Boolean)
   ])].sort(classGroupCompare);
