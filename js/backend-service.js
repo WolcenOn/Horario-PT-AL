@@ -60,6 +60,12 @@ export async function fetchAcademicConfiguration(settings) {
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/academic-configuration`, { timeoutMs:15000 });
 }
 
+export async function listDayPlans(settings, planDate) {
+  const value = requireConfigured(settings);
+  const query = planDate ? `?plan_date=${encodeURIComponent(planDate)}` : '';
+  return request(value, `/schools/${encodeURIComponent(value.schoolId)}/day-plans${query}`, { timeoutMs:15000 });
+}
+
 export async function createDayPlan(settings, payload) {
   const value = requireConfigured(settings);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/day-plans`, {
