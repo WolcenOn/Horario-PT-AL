@@ -1,8 +1,8 @@
-name: Deploy GitHub Pages
+name: Deploy integration preview
 
 on:
   push:
-    branches: [main]
+    branches: [integracion-gestor-escuela]
   workflow_dispatch:
 
 permissions:
@@ -11,30 +11,51 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-integration-preview
   cancel-in-progress: true
 
 jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url }}integration/
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout integration branch
         uses: actions/checkout@v4
-      - name: Verify JavaScript and tests
+        with:
+          path: integration-src
+
+      - name: Verify integration JavaScript and tests
+        working-directory: integration-src
         run: |
           find js -name '*.js' -print0 | xargs -0 -n1 node --check
           npm test
+
+      - name: Checkout stable main site
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: site
+
+      - name: Add isolated integration preview
+        run: |
+          mkdir -p site/integration
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            integration-src/ site/integration/
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
-      - name: Upload static site
+
+      - name: Upload stable site and integration preview
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: site
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
