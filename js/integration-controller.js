@@ -1,5 +1,6 @@
 import { checkBackendHealth, loadBackendSettings, pushAcademicConfiguration, saveBackendSettings } from './backend-service.js';
 import { renderIntegrationView } from './integration-view.js';
+import { toJsonCompatible } from './gestor-serialization.js';
 import { loadState } from './repository.js';
 import { showToast } from './ui.js';
 
@@ -63,7 +64,7 @@ async function openIntegration() {
         const accepted = confirm(`Se enviarán ${adapter.report.counts.teachers} docentes, ${adapter.report.counts.groups} grupos-clase y ${adapter.report.counts.activities} actividades a GestorEscuela. La configuración académica remota del centro indicado será sustituida. Los datos locales NO se modificarán. ¿Continuar?`);
         if (!accepted) return;
         try {
-          await pushAcademicConfiguration(saved, adapter.configuration);
+          await pushAcademicConfiguration(saved, toJsonCompatible(adapter.configuration));
           connectionStatus = { kind:'ok', message:'Configuración académica sincronizada correctamente.' };
           showToast('Configuración enviada a GestorEscuela. Los datos locales permanecen intactos.');
         } catch (error) {
