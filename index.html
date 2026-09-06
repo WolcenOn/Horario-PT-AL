@@ -4,13 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Horario PT / AL</title>
+  <title>Horario PT / AL · Integración</title>
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/layout.css">
   <link rel="stylesheet" href="./css/calendar.css">
   <link rel="stylesheet" href="./css/school.css">
   <link rel="stylesheet" href="./css/automation.css">
   <link rel="stylesheet" href="./css/center-planning.css">
+  <link rel="stylesheet" href="./css/integration.css">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Saltar al contenido</a>
@@ -20,7 +21,7 @@
         <div class="brand-mark" aria-hidden="true">PA</div>
         <div class="brand-copy">
           <strong>Horario PT / AL</strong>
-          <small>Planificación educativa</small>
+          <small>Rama de integración</small>
         </div>
       </div>
       <nav class="nav-list">
@@ -33,6 +34,8 @@
         <button class="nav-item" data-view="centerPlanning" type="button">🏛️ <span>Plan del centro</span></button>
         <button class="nav-item" data-view="automation" type="button">⚙️ <span>Configuración automática</span><span id="automationNavBadge" class="nav-badge" aria-label="Estado de configuración">!</span></button>
         <button class="nav-item" data-view="alerts" type="button">⚠️ <span>Conflictos</span></button>
+        <button class="nav-item" data-view="operations" type="button">🚨 <span>Operativa diaria</span></button>
+        <button class="nav-item" data-view="integration" type="button">🔌 <span>GestorEscuela</span></button>
       </nav>
       <div class="sidebar-footer">
         <div class="sidebar-data-actions">
@@ -43,7 +46,7 @@
         </div>
         <button id="resetDemoBtn" class="button button-ghost button-full" type="button">Restaurar datos de ejemplo</button>
         <button id="clearAllDataBtn" class="button button-ghost button-full sidebar-danger" type="button">Vaciar todos los datos</button>
-        <small>Los datos se guardan en este navegador.</small>
+        <small>IndexedDB sigue siendo la fuente local. El backend es opcional.</small>
       </div>
     </aside>
 
@@ -78,5 +81,7 @@
   <div id="modalRoot"></div>
   <div id="toastRoot" class="toast-root" aria-live="polite" aria-atomic="true"></div>
   <script type="module" src="./js/app.js"></script>
+  <script type="module" src="./js/integration-controller.js"></script>
+  <script type="module" src="./js/operations-controller.js"></script>
 </body>
 </html>
