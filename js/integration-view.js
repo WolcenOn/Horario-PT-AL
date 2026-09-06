@@ -13,7 +13,7 @@ export function renderIntegrationView(root, { state, settings, status, onSave, o
       <div>
         <p class="eyebrow">Integración experimental</p>
         <h2>GestorEscuela</h2>
-        <p>La aplicación continúa guardando y trabajando con IndexedDB. El backend es opcional y solo recibe datos cuando tú pulsas “Sincronizar”.</p>
+        <p>La aplicación continúa guardando y trabajando con IndexedDB. El backend es opcional y solo recibe datos cuando tú pulsas “Sincronizar” o solicitas un cálculo en Operativa diaria.</p>
       </div>
       <span class="integration-mode ${normalized.enabled ? 'is-hybrid' : 'is-offline'}">${normalized.enabled ? 'Híbrido' : 'Offline'}</span>
     </section>
@@ -57,12 +57,12 @@ export function renderIntegrationView(root, { state, settings, status, onSave, o
     </section>
 
     <section class="card integration-roadmap">
-      <div class="card-header"><div><h2>Siguiente fase</h2><small>La conexión se activa de forma progresiva.</small></div></div>
+      <div class="card-header"><div><h2>Estado de la integración</h2><small>La conexión se activa de forma progresiva y mantiene el modo offline.</small></div></div>
       <div class="card-body integration-roadmap-grid">
         <div class="is-done"><b>1</b><span><strong>Adaptador y conexión opcional</strong><small>Configuración local, prueba de salud y sincronización manual.</small></span></div>
-        <div><b>2</b><span><strong>Operativa diaria</strong><small>Ausencias y propuesta de sustituciones desde nuestra interfaz.</small></span></div>
+        <div class="is-done"><b>2</b><span><strong>Operativa diaria básica</strong><small>Ausencia de un docente y propuesta de sustituciones usando CP-SAT.</small></span></div>
         <div><b>3</b><span><strong>Actividades y vigilancias</strong><small>Coordinaciones, reuniones y turnos de recreo.</small></span></div>
-        <div><b>4</b><span><strong>Sincronización segura</strong><small>Autenticación real, CORS y control de cambios entre dispositivos.</small></span></div>
+        <div><b>4</b><span><strong>Sincronización segura</strong><small>Autenticación real y control de cambios entre dispositivos.</small></span></div>
       </div>
     </section>
   </div>`;
@@ -92,6 +92,7 @@ function metric(label, value) {
 
 function renderConnectionStatus(status) {
   if (!status) return '<div class="integration-status">Todavía no se ha probado la conexión en esta sesión.</div>';
+  if (status.kind === 'pending') return `<div class="integration-status"><strong>Probando conexión…</strong><span>${escapeHtml(status.message || '')}</span></div>`;
   const ok = status.kind === 'ok';
   return `<div class="integration-status ${ok ? 'is-ok' : 'is-error'}"><strong>${ok ? '✓ Conexión correcta' : '⚠ No se pudo conectar'}</strong><span>${escapeHtml(status.message || '')}</span></div>`;
 }
