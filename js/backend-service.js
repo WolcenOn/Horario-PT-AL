@@ -2,7 +2,7 @@ const STORAGE_KEY = 'horario-gestor-escuela-backend';
 
 export const DEFAULT_BACKEND_SETTINGS = Object.freeze({
   enabled:false,
-  baseUrl:'',
+  baseUrl:'https://gestorescuela-production.up.railway.app',
   schoolId:'',
   actorId:'',
   autoSync:false
@@ -27,7 +27,7 @@ export function normalizeBackendSettings(value) {
   const source = value && typeof value === 'object' ? value : {};
   return {
     enabled:source.enabled === true,
-    baseUrl:normalizeBaseUrl(source.baseUrl),
+    baseUrl:normalizeBaseUrl(source.baseUrl || DEFAULT_BACKEND_SETTINGS.baseUrl),
     schoolId:String(source.schoolId || '').trim(),
     actorId:String(source.actorId || '').trim(),
     autoSync:source.autoSync === true
