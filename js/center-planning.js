@@ -1,5 +1,6 @@
 import { COURSE_OPTIONS, configuredClassGroups, courseForClassGroup, stageForCourse } from './education.js';
 import { subjectsForStage } from './subjects.js';
+import { normalizeScheduledSlots, normalizeSubjectPatterns, normalizeTimePattern } from './time-patterns.js';
 import { timeToMinutes } from './utils.js';
 
 export const CENTER_PLANNING_ID = 'centerPlanning';
@@ -65,6 +66,7 @@ export function normalizeCenterPlanningSettings(value) {
     legalReference:String(source.legalReference || '').trim(),
     generation:normalizeGlobalGeneration(source.generation),
     curriculum,
+    subjectPatterns:normalizeSubjectPatterns(source.subjectPatterns),
     weeklyActivities:normalizeWeeklyActivities(source.weeklyActivities)
   };
 }
@@ -93,7 +95,10 @@ export function normalizeWeeklyActivities(value) {
       eligibleTeacherIds:uniqueStrings(raw?.eligibleTeacherIds),
       classGroupIds:uniqueStrings(raw?.classGroupIds),
       movable:raw?.movable !== false,
+      allowDuringRecess:raw?.allowDuringRecess === true,
       active:raw?.active !== false,
+      timePattern:normalizeTimePattern(raw?.timePattern),
+      scheduledSlots:normalizeScheduledSlots(raw?.scheduledSlots),
       notes:String(raw?.notes || '').trim()
     });
   }
