@@ -142,6 +142,16 @@ export async function solveAcademicDay(settings, planId, payload) {
   });
 }
 
+export async function solveStaffingAllocation(settings, payload) {
+  const value = requireConfigured(settings);
+  return request(value, `/schools/${encodeURIComponent(value.schoolId)}/staffing/solve`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(payload),
+    timeoutMs:30000
+  });
+}
+
 function requireConfigured(settings) {
   const value = normalizeBackendSettings(settings);
   if (!value.enabled) throw new Error('La conexión con GestorEscuela está desactivada.');
