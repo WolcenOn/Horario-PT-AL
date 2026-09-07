@@ -8,6 +8,17 @@ export const PLANNING_MODES = [
   { value:'global', label:'Centro completo' }
 ];
 export const PROFESSIONAL_TYPES = ['PT', 'AL', 'DOCENTE'];
+export const TEACHER_ROLES = [
+  { value:'generalista', label:'Generalista / Primaria' },
+  { value:'especialista', label:'Especialista' },
+  { value:'mixto', label:'Mixto' }
+];
+export const TUTOR_PREFERENCES = [
+  { value:'preferente', label:'Preferente para tutoría' },
+  { value:'disponible', label:'Puede ser tutor/a' },
+  { value:'evitar', label:'Evitar si es posible' },
+  { value:'no', label:'No disponible para tutoría' }
+];
 export const RESPONSIBILITY_TYPES = [
   { value:'coordinacion', label:'Coordinación' },
   { value:'plan-programa', label:'Plan / programa' },
@@ -114,14 +125,45 @@ export function curriculumCoverage(state, settings) {
 export function normalizeProfessionalProfile(professional) {
   const current = professional && typeof professional === 'object' ? professional : {};
   const type = PROFESSIONAL_TYPES.includes(current.tipo) ? current.tipo : 'DOCENTE';
+  const teachingAssignments = normalizeTeachingAssignments(current.teachingAssignments);
+  const inferredRole = inferTeacherRole(type, current.especialidad);
+  const teacherRole = TEACHER_ROLES.some(option => option.value === current.teacherRole) ? current.teacherRole : inferredRole;
+  const defaultTutorPreference = current.tutoriaGrupo
+    ? 'preferente'
+    : type === 'PT' || type === 'AL' || teacherRole === 'especialista' ? 'evitar' : 'disponible';
+  const tutorPreference = TUTOR_PREFERENCES.some(option => option.value === current.tutorPreference)
+    ? current.tutorPreference
+    : defaultTutorPreference;
   return {
     ...current,
     tipo:type,
     especialidad:String(current.especialidad || '').trim(),
+    teacherRole,
+    tutorPreference,
+    minimumTutorMinutes:Math.max(0, Math.round(Number(current.minimumTutorMinutes) || 0)),
+    allowedSubjects:normalizeAllowedSubjects([
+      ...(Array.isArray(current.allowedSubjects) ? current.allowedSubjects : []),
+      ...teachingAssignments.map(item => item.materia)
+    ]),
     tutoriaGrupo:String(current.tutoriaGrupo || '').trim(),
-    teachingAssignments:normalizeTeachingAssignments(current.teachingAssignments),
+    teachingAssignments,
     responsibilities:normalizeResponsibilities(current.responsibilities)
   };
+}
+
+export function normalizeAllowedSubjects(value) {
+  if (!Array.isArray(value)) return [];
+  const result = [];
+  const seen = new Set();
+  for (const raw of value) {
+    const subject = String(raw || '').trim();
+    if (!subject) continue;
+    const key = normalizeText(subject);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(subject);
+  }
+  return result;
 }
 
 export function normalizeTeachingAssignments(value) {
@@ -153,6 +195,14 @@ export function courseOptionsUsedByCenter(schoolSettings) {
   if (!groups.length) return COURSE_OPTIONS;
   const used = new Set(groups.map(group => courseForClassGroup(schoolSettings, group)).filter(Boolean));
   return COURSE_OPTIONS.filter(course => used.has(course.value));
+}
+
+function inferTeacherRole(type, specialty) {
+  if (type === 'PT' || type === 'AL') return 'especialista';
+  const text = normalizeText(specialty);
+  if (!text || text === 'primaria' || text === 'infantil' || text.includes('general')) return 'generalista';
+  if (/ingl|música|musica|física|fisica|franc|portugu|relig|alem/.test(text)) return 'especialista';
+  return 'mixto';
 }
 
 function validTime(value) {
