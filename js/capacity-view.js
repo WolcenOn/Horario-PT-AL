@@ -1,7 +1,15 @@
 import { buildCapacityStudy, formatMinutes } from './capacity-analysis.js';
 import { escapeHtml } from './utils.js';
 
-export function renderCapacityStudy(root, { state, onOpenProfessionals, onOpenCenterPlanning }) {
+export function renderCapacityStudy(root, {
+  state,
+  backendReady = false,
+  optimizerStatus = null,
+  optimizerResult = null,
+  onOpenProfessionals,
+  onOpenCenterPlanning,
+  onOptimize
+}) {
   const study = buildCapacityStudy(state);
   const coverage = Math.round((study.totals.coverageRatio || 0) * 100);
   root.innerHTML = `<div class="capacity-study">
@@ -26,7 +34,7 @@ export function renderCapacityStudy(root, { state, onOpenProfessionals, onOpenCe
     ${renderIssues(study.issues)}
 
     <section class="card">
-      <div class="card-header"><div><h2>Capacidad por materia</h2><small>La capacidad potencial considera únicamente docentes habilitados para cada materia. Un mismo margen puede estar compartido entre varias materias; el reparto definitivo lo resolverá CP-SAT.</small></div></div>
+      <div class="card-header"><div><h2>Capacidad por materia</h2><small>La capacidad potencial considera únicamente docentes habilitados para cada materia. Un mismo margen puede estar compartido entre varias materias; el reparto definitivo lo resuelve CP-SAT.</small></div></div>
       <div class="table-wrap"><table><thead><tr><th>Materia</th><th>Necesidad</th><th>Docentes habilitados</th><th>Capacidad potencial</th><th>Margen</th><th>Diagnóstico</th></tr></thead><tbody>
         ${study.subjects.map(row => `<tr>
           <td><strong>${escapeHtml(row.subject)}</strong></td>
@@ -56,7 +64,7 @@ export function renderCapacityStudy(root, { state, onOpenProfessionals, onOpenCe
     </section>
 
     <section class="card tutor-study">
-      <div class="card-header"><div><h2>Tutorías</h2><small>Primera estimación. Todavía no asigna automáticamente una tutoría: detecta si, por capacidad y perfil, probablemente será necesario recurrir a especialistas.</small></div></div>
+      <div class="card-header"><div><h2>Tutorías</h2><small>Primera estimación. Detecta si, por capacidad y perfil, probablemente será necesario recurrir a especialistas.</small></div></div>
       <div class="capacity-metrics capacity-metrics-compact">
         ${metric('Tutorías necesarias', study.tutors.required)}
         ${metric('Ya fijadas', study.tutors.fixed)}
@@ -68,19 +76,62 @@ export function renderCapacityStudy(root, { state, onOpenProfessionals, onOpenCe
       ${study.tutors.specialistCandidates.length ? `<div class="capacity-note"><strong>Especialistas candidatos si hicieran falta</strong><span>${study.tutors.specialistCandidates.slice(0,6).map(item => `${escapeHtml(item.name)} · ${formatMinutes(item.freeMinutes)} libres`).join(' · ')}</span></div>` : ''}
     </section>
 
+    <section class="card staffing-solver-card">
+      <div class="card-header"><div><h2>Propuesta de reparto docente · CP-SAT</h2><small>Decide quién cubre cada grupo/materia y propone tutorías, pero todavía no decide días ni horas. Penaliza especialistas como tutores, fragmentación y movimientos entre grupos.</small></div><span class="badge ${backendReady ? 'badge-success' : 'badge-warning'}">${backendReady ? 'Servidor conectado' : 'GestorEscuela no vinculado'}</span></div>
+      <div class="card-body">
+        <div class="capacity-note"><strong>Qué conserva</strong><span>Las tutorías y asignaciones clase–materia que ya hayas fijado se consideran decisiones bloqueadas. Las materias solo pueden ir a docentes marcados como habilitados.</span></div>
+        <div class="button-row">
+          <button class="button button-primary" data-optimize-staffing type="button" ${backendReady && study.teachers.length && study.classes.length ? '' : 'disabled'}>${optimizerStatus?.kind === 'pending' ? 'Calculando…' : 'Optimizar reparto docente'}</button>
+          <span class="field-hint">El cálculo es reversible: no guarda ni aplica la propuesta automáticamente.</span>
+        </div>
+        ${renderOptimizerStatus(optimizerStatus)}
+        ${renderOptimizerResult(optimizerResult, study)}
+      </div>
+    </section>
+
     <section class="card capacity-next">
-      <div class="card-header"><div><h2>Siguiente paso</h2><small>Cuando las horas y habilitaciones estén configuradas, esta misma información alimentará el solver de reparto docente.</small></div></div>
+      <div class="card-header"><div><h2>Flujo de trabajo</h2><small>Primero cerramos reparto y tutorías; después construiremos la cuadrícula semanal.</small></div></div>
       <div class="card-body capacity-next-grid">
         <button class="button" data-open-center-planning type="button">1. Revisar currículo</button>
         <button class="button" data-open-professionals type="button">2. Revisar plantilla</button>
-        <button class="button button-primary" type="button" disabled>3. Optimizar reparto docente · próximamente</button>
+        <button class="button button-primary" data-optimize-staffing type="button" ${backendReady && study.teachers.length && study.classes.length ? '' : 'disabled'}>3. Optimizar reparto</button>
       </div>
     </section>
   </div>`;
 
   root.querySelectorAll('[data-open-professionals]').forEach(button => button.addEventListener('click', onOpenProfessionals));
   root.querySelector('[data-open-center-planning]')?.addEventListener('click', onOpenCenterPlanning);
+  root.querySelectorAll('[data-optimize-staffing]').forEach(button => button.addEventListener('click', onOptimize));
   return study;
+}
+
+function renderOptimizerStatus(status) {
+  if (!status) return '';
+  const className = status.kind === 'ok' ? 'is-ok' : status.kind === 'error' ? 'is-error' : 'is-warning';
+  return `<div class="capacity-banner ${className}"><strong>${status.kind === 'pending' ? 'Calculando' : status.kind === 'ok' ? '✓ Propuesta calculada' : status.kind === 'error' ? '⚠ Error del optimizador' : '△ Propuesta parcial'}</strong><span>${escapeHtml(status.message || '')}</span></div>`;
+}
+
+function renderOptimizerResult(result, study) {
+  if (!result) return '';
+  const teacherNames = new Map(study.teachers.map(item => [item.id, item.name]));
+  const tutorRows = (result.tutors || []).map(item => `<tr><td>${escapeHtml(item.group_id)}</td><td><strong>${escapeHtml(teacherNames.get(item.teacher_id) || item.teacher_id)}</strong></td></tr>`).join('');
+  const assignments = (result.assignments || []).slice().sort((a,b) => a.group_id.localeCompare(b.group_id, 'es', {numeric:true}) || a.subject.localeCompare(b.subject,'es'));
+  const assignmentRows = assignments.map(item => `<tr><td>${escapeHtml(item.group_id)}</td><td>${escapeHtml(item.subject)}</td><td>${formatMinutes(item.minutes)}</td><td><strong>${escapeHtml(teacherNames.get(item.teacher_id) || item.teacher_id)}</strong></td></tr>`).join('');
+  const loadRows = (result.teacher_loads || []).map(item => `<tr><td>${escapeHtml(teacherNames.get(item.teacher_id) || item.teacher_id)}</td><td>${formatMinutes(item.assigned_minutes)}</td><td>${formatMinutes(item.remaining_minutes)}</td><td>${item.groups_taught}</td><td>${escapeHtml(item.tutor_group || '—')}</td></tr>`).join('');
+  return `<div class="staffing-result">
+    <div class="capacity-metrics capacity-metrics-compact">
+      ${metric('Asignaciones', assignments.length)}
+      ${metric('Tutorías propuestas', (result.tutors || []).length)}
+      ${metric('Necesidades sin cubrir', (result.uncovered_requirement_ids || []).length, (result.uncovered_requirement_ids || []).length ? 'is-danger' : 'is-ok')}
+      ${metric('Tutorías sin cubrir', (result.uncovered_tutor_groups || []).length, (result.uncovered_tutor_groups || []).length ? 'is-danger' : 'is-ok')}
+      ${metric('Tiempo solver', `${Number(result.wall_time_seconds || 0).toFixed(2)} s`)}
+    </div>
+    <details open><summary><strong>Tutorías propuestas</strong></summary><div class="table-wrap"><table><thead><tr><th>Grupo</th><th>Tutor/a</th></tr></thead><tbody>${tutorRows || '<tr><td colspan="2">Sin propuesta</td></tr>'}</tbody></table></div></details>
+    <details><summary><strong>Reparto de materias</strong></summary><div class="table-wrap"><table><thead><tr><th>Grupo</th><th>Materia</th><th>Carga</th><th>Docente</th></tr></thead><tbody>${assignmentRows || '<tr><td colspan="4">Sin asignaciones</td></tr>'}</tbody></table></div></details>
+    <details><summary><strong>Carga resultante por docente</strong></summary><div class="table-wrap"><table><thead><tr><th>Docente</th><th>Asignado</th><th>Margen restante</th><th>Grupos</th><th>Tutoría</th></tr></thead><tbody>${loadRows || '<tr><td colspan="5">Sin datos</td></tr>'}</tbody></table></div></details>
+    ${(result.uncovered_requirement_ids || []).length ? `<div class="capacity-banner is-error"><strong>Necesidades sin cubrir</strong><span>${result.uncovered_requirement_ids.map(escapeHtml).join(', ')}</span></div>` : ''}
+    ${(result.uncovered_tutor_groups || []).length ? `<div class="capacity-banner is-warning"><strong>Tutorías sin cubrir</strong><span>${result.uncovered_tutor_groups.map(escapeHtml).join(', ')}</span></div>` : ''}
+  </div>`;
 }
 
 function metric(label, value, className = '') {
