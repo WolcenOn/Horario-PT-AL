@@ -40,6 +40,7 @@ async function openCapacityStudy() {
     optimizerResult,
     onOpenProfessionals:() => document.querySelector('[data-view="professionals"]')?.click(),
     onOpenCenterPlanning:() => document.querySelector('[data-view="centerPlanning"]')?.click(),
+    onOpenCenterActivities:() => document.querySelector('[data-view="centerActivities"]')?.click(),
     onOptimize:async () => {
       if (!backendConfigured(settings)) {
         showToast('Activa y vincula GestorEscuela antes de optimizar el reparto.', 'error');
