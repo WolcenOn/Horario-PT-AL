@@ -45,6 +45,62 @@ export async function checkBackendHealth(settings, { timeoutMs = 8000 } = {}) {
   return request(value, '/health', { timeoutMs, auth:false });
 }
 
+export async function bootstrapBackendConnection({ baseUrl, schoolName, email, displayName }) {
+  const settings = normalizeBackendSettings({ enabled:true, baseUrl });
+  const cleanSchoolName = String(schoolName || '').trim();
+  const cleanEmail = String(email || '').trim();
+  const cleanDisplayName = String(displayName || '').trim();
+  if (!settings.baseUrl) throw new Error('Falta la URL del backend GestorEscuela.');
+  if (!cleanSchoolName) throw new Error('Indica el nombre del centro.');
+  if (!cleanEmail) throw new Error('Indica el correo del administrador inicial.');
+  if (!cleanDisplayName) throw new Error('Indica el nombre del administrador inicial.');
+
+  const bootstrapHeaders = {
+    'Content-Type':'application/json',
+    'X-Actor-Role':'ADMIN'
+  };
+
+  // Se crea primero el usuario para evitar dejar un centro huérfano si el correo ya existe.
+  const user = await request(settings, '/users', {
+    method:'POST',
+    headers:bootstrapHeaders,
+    body:JSON.stringify({ email:cleanEmail, display_name:cleanDisplayName }),
+    timeoutMs:15000,
+    auth:false
+  });
+
+  let school;
+  try {
+    school = await request(settings, '/schools', {
+      method:'POST',
+      headers:bootstrapHeaders,
+      body:JSON.stringify({ name:cleanSchoolName }),
+      timeoutMs:15000,
+      auth:false
+    });
+    await request(settings, `/schools/${encodeURIComponent(school.id)}/memberships`, {
+      method:'PUT',
+      headers:bootstrapHeaders,
+      body:JSON.stringify({ user_id:user.id, role:'ADMIN' }),
+      timeoutMs:15000,
+      auth:false
+    });
+  } catch (error) {
+    throw new Error(`Se creó el usuario (${user.id}), pero no se pudo completar la vinculación del centro: ${error.message || error}`);
+  }
+
+  return {
+    settings:normalizeBackendSettings({
+      enabled:true,
+      baseUrl:settings.baseUrl,
+      schoolId:school.id,
+      actorId:user.id
+    }),
+    school,
+    user
+  };
+}
+
 export async function pushAcademicConfiguration(settings, configuration) {
   const value = requireConfigured(settings);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/academic-configuration`, {
