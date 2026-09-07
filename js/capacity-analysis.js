@@ -15,11 +15,7 @@ export function buildCapacityStudy(state, rawSettings = state.centerPlanningSett
 
   for (const requirement of requirements) {
     if (requirement.fixedTeacherIds.length > 1) {
-      issues.push({
-        severity:'error',
-        type:'duplicate-fixed-assignment',
-        message:`${requirement.grupoClase} · ${requirement.subject}: hay ${requirement.fixedTeacherIds.length} docentes fijados para la misma necesidad.`
-      });
+      issues.push({ severity:'error', type:'duplicate-fixed-assignment', message:`${requirement.grupoClase} · ${requirement.subject}: hay ${requirement.fixedTeacherIds.length} docentes fijados para la misma necesidad.` });
     }
   }
 
@@ -43,9 +39,7 @@ export function buildCapacityStudy(state, rawSettings = state.centerPlanningSett
   const openRequirements = requirements.filter(item => item.fixedTeacherIds.length !== 1);
   const flow = maximumAssignableMinutes(teacherRows, openRequirements);
   const totalRequiredMinutes = requirements.reduce((sum, item) => sum + item.minutes, 0);
-  const fixedRequiredMinutes = requirements
-    .filter(item => item.fixedTeacherIds.length === 1)
-    .reduce((sum, item) => sum + item.minutes, 0);
+  const fixedRequiredMinutes = requirements.filter(item => item.fixedTeacherIds.length === 1).reduce((sum, item) => sum + item.minutes, 0);
   const totalCapacityMinutes = teacherRows.reduce((sum, row) => sum + row.capacityMinutes, 0);
   const totalNonOrdinaryMinutes = teacherRows.reduce((sum, row) => sum + row.nonOrdinaryMinutes, 0);
   const totalFreeMinutes = teacherRows.reduce((sum, row) => sum + row.freeMinutes, 0);
@@ -60,6 +54,13 @@ export function buildCapacityStudy(state, rawSettings = state.centerPlanningSett
   const subjects = buildSubjectRows(requirements, teacherRows);
   subjects.filter(row => row.eligibleTeachers === 0 && row.requiredMinutes > 0).forEach(row => {
     issues.push({ severity:'error', type:'subject-without-teacher', message:`${row.subject}: no hay ningún docente habilitado para cubrir ${formatMinutes(row.requiredMinutes)}.` });
+  });
+  subjects.filter(row => row.specialistTeachers > 0 && row.specialistMarginMinutes < 0).forEach(row => {
+    issues.push({
+      severity:'warning',
+      type:'specialist-capacity-deficit',
+      message:`${row.subject}: la especialidad dispone de ${formatMinutes(row.specialistCapacityMinutes)} para ${formatMinutes(row.requiredMinutes)}. Harán falta ${formatMinutes(Math.abs(row.specialistMarginMinutes))} de apoyo de docentes también habilitados o revisar cargas.`
+    });
   });
 
   const tutors = buildTutorStudy(classes, teacherRows, professionals);
@@ -99,14 +100,7 @@ function buildRequirements(classes, schoolSettings, settings, professionals) {
       const fixedTeacherIds = professionals
         .filter(prof => prof.teachingAssignments.some(item => same(item.grupoClase, grupoClase) && same(item.materia, subject)))
         .map(prof => prof.id);
-      result.push({
-        id:`${normalize(grupoClase)}::${normalize(subject)}`,
-        grupoClase,
-        course,
-        subject,
-        minutes,
-        fixedTeacherIds
-      });
+      result.push({ id:`${normalize(grupoClase)}::${normalize(subject)}`, grupoClase, course, subject, minutes, fixedTeacherIds });
     }
   }
   return result;
@@ -135,6 +129,7 @@ function buildTeacherRow(professional, state, requirements) {
     tutorPreference:professional.tutorPreference,
     minimumTutorMinutes:professional.minimumTutorMinutes || 0,
     allowedSubjects:[...(professional.allowedSubjects || [])],
+    specialtySubjects:[...(professional.specialtySubjects || [])],
     teachingAssignments:[...(professional.teachingAssignments || [])],
     capacityMinutes,
     availabilityMinutes,
@@ -157,12 +152,15 @@ function buildSubjectRows(requirements, teachers) {
     const requiredMinutes = rows.reduce((sum, item) => sum + item.minutes, 0);
     const requirementIds = new Set(rows.map(item => item.id));
     const eligible = teachers.filter(teacher => teacher.eligibleRequirementIds.some(id => requirementIds.has(id)));
+    const specialists = eligible.filter(teacher => (teacher.specialtySubjects || []).some(item => same(item, subject)));
     const eligibleCapacityMinutes = eligible.reduce((sum, teacher) => sum + teacher.freeMinutes, 0)
       + rows.filter(item => item.fixedTeacherIds.length === 1).reduce((sum, item) => sum + item.minutes, 0);
+    const specialistCapacityMinutes = specialists.reduce((sum, teacher) => sum + teacher.freeMinutes, 0)
+      + rows.filter(item => item.fixedTeacherIds.length === 1 && specialists.some(teacher => teacher.id === item.fixedTeacherIds[0])).reduce((sum, item) => sum + item.minutes, 0);
     const marginMinutes = eligibleCapacityMinutes - requiredMinutes;
+    const specialistMarginMinutes = specialistCapacityMinutes - requiredMinutes;
     let status = 'ok';
-    if (!eligible.length) status = 'deficit';
-    else if (marginMinutes < 0) status = 'deficit';
+    if (!eligible.length || marginMinutes < 0) status = 'deficit';
     else if (marginMinutes <= TIGHT_MARGIN_MINUTES) status = 'tight';
     else if (eligible.length === 1) status = 'critical';
     return {
@@ -172,6 +170,10 @@ function buildSubjectRows(requirements, teachers) {
       eligibleTeacherNames:eligible.map(item => item.name),
       eligibleCapacityMinutes,
       marginMinutes,
+      specialistTeachers:specialists.length,
+      specialistTeacherNames:specialists.map(item => item.name),
+      specialistCapacityMinutes,
+      specialistMarginMinutes,
       status,
       dependency:eligible.length === 1
     };
@@ -197,17 +199,9 @@ function buildTutorStudy(classes, teacherRows, professionals) {
   const alreadyTutors = new Set([...assignments.values()].flat());
   const candidates = teacherRows
     .filter(row => !alreadyTutors.has(row.id) && row.tutorPreference !== 'no' && row.freeMinutes > 0)
-    .map(row => ({
-      id:row.id,
-      name:row.name,
-      teacherRole:row.teacherRole,
-      tutorPreference:row.tutorPreference,
-      freeMinutes:row.freeMinutes,
-      specialty:row.specialty
-    }));
+    .map(row => ({ id:row.id, name:row.name, teacherRole:row.teacherRole, tutorPreference:row.tutorPreference, freeMinutes:row.freeMinutes, specialty:row.specialty, specialtySubjects:row.specialtySubjects }));
   const naturalCandidates = candidates.filter(item => item.teacherRole !== 'especialista');
-  const specialistCandidates = candidates.filter(item => item.teacherRole === 'especialista')
-    .sort((a, b) => tutorCandidateScore(b) - tutorCandidateScore(a));
+  const specialistCandidates = candidates.filter(item => item.teacherRole === 'especialista').sort((a, b) => tutorCandidateScore(b) - tutorCandidateScore(a));
   const specialistTutorsNeeded = Math.max(0, uncoveredClasses.length - naturalCandidates.length);
 
   if (uncoveredClasses.length > candidates.length) {
@@ -216,16 +210,7 @@ function buildTutorStudy(classes, teacherRows, professionals) {
     issues.push({ severity:'warning', type:'specialist-tutor-needed', message:`Con la configuración actual, al menos ${specialistTutorsNeeded} especialista(s) tendría(n) que asumir tutoría.` });
   }
 
-  return {
-    required:classes.length,
-    fixed:coveredClasses.length,
-    uncoveredClasses,
-    candidates,
-    naturalCandidates,
-    specialistCandidates,
-    specialistTutorsNeeded,
-    issues
-  };
+  return { required:classes.length, fixed:coveredClasses.length, uncoveredClasses, candidates, naturalCandidates, specialistCandidates, specialistTutorsNeeded, issues };
 }
 
 function maximumAssignableMinutes(teachers, requirements) {
