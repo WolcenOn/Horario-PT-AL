@@ -60,7 +60,6 @@ export async function bootstrapBackendConnection({ baseUrl, schoolName, email, d
     'X-Actor-Role':'ADMIN'
   };
 
-  // Se crea primero el usuario para evitar dejar un centro huérfano si el correo ya existe.
   const user = await request(settings, '/users', {
     method:'POST',
     headers:bootstrapHeaders,
@@ -114,6 +113,21 @@ export async function pushAcademicConfiguration(settings, configuration) {
 export async function fetchAcademicConfiguration(settings) {
   const value = requireConfigured(settings);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/academic-configuration`, { timeoutMs:15000 });
+}
+
+export async function pushRoster(settings, roster) {
+  const value = requireConfigured(settings);
+  return request(value, `/schools/${encodeURIComponent(value.schoolId)}/students`, {
+    method:'PUT',
+    headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(roster),
+    timeoutMs:20000
+  });
+}
+
+export async function fetchRoster(settings) {
+  const value = requireConfigured(settings);
+  return request(value, `/schools/${encodeURIComponent(value.schoolId)}/students`, { timeoutMs:15000 });
 }
 
 export async function listDayPlans(settings, planDate) {
