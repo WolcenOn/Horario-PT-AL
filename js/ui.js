@@ -1,8 +1,9 @@
-export function showModal({ title, bodyHtml, submitLabel = 'Guardar', onSubmit, onOpen }) {
+export function showModal({ title, bodyHtml, submitLabel = 'Guardar', onSubmit, onOpen, size = 'default' }) {
   const root = document.querySelector('#modalRoot');
+  const sizeClass = size === 'wide' ? ' modal-wide' : '';
   root.innerHTML = `
     <div class="modal-backdrop" data-modal-backdrop>
-      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <section class="modal${sizeClass}" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <header class="modal-header">
           <h2 id="modalTitle">${title}</h2>
           <button class="icon-button" type="button" data-close-modal aria-label="Cerrar">✕</button>
