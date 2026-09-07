@@ -1,4 +1,4 @@
-import { checkBackendHealth, loadBackendSettings, pushAcademicConfiguration, saveBackendSettings } from './backend-service.js';
+import { bootstrapBackendConnection, checkBackendHealth, loadBackendSettings, pushAcademicConfiguration, saveBackendSettings } from './backend-service.js';
 import { renderIntegrationView } from './integration-view.js';
 import { toJsonCompatible } from './gestor-serialization.js';
 import { loadState } from './repository.js';
@@ -52,6 +52,22 @@ async function openIntegration() {
           connectionStatus = { kind:'ok', message:response?.status === 'ok' ? 'GestorEscuela respondió correctamente.' : 'El servidor respondió.' };
         } catch (error) {
           connectionStatus = { kind:'error', message:error.message || 'No se pudo conectar.' };
+        }
+        await openIntegration();
+      },
+      onBootstrap:async value => {
+        const accepted = confirm('Se crearán en GestorEscuela un usuario administrador, un centro y su pertenencia ADMIN. No se modificará ningún dato local. ¿Continuar?');
+        if (!accepted) return;
+        connectionStatus = { kind:'pending', message:'Creando centro y administrador…' };
+        await openIntegration();
+        try {
+          const result = await bootstrapBackendConnection(value);
+          saveBackendSettings(result.settings);
+          connectionStatus = { kind:'ok', message:`Centro vinculado: ${result.school.name}. School ID y Actor ID guardados en este navegador.` };
+          showToast('Centro y administrador vinculados con GestorEscuela.');
+        } catch (error) {
+          connectionStatus = { kind:'error', message:error.message || 'No se pudo crear el vínculo inicial.' };
+          showToast(connectionStatus.message, 'error');
         }
         await openIntegration();
       },
