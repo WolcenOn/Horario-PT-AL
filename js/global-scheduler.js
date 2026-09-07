@@ -3,6 +3,7 @@ import { curriculumForCourse, normalizeCenterPlanningSettings, normalizeProfessi
 import { configuredClassGroups, courseForClassGroup, recessForStage, recessOverlaps, schoolStructureConfigured, stageForCourse } from './education.js';
 import { detectConflicts } from './conflicts.js';
 import { professionalCanWork } from './professional-availability.js';
+import { dayAllowed, effectiveMaxSessionsPerDay, effectiveSessionMinutes, subjectPatternForCourse, timePreferenceScore, timeWindowAllows, validateTimePattern } from './time-patterns.js';
 import { minutesToTime, overlapInterval, timeToMinutes } from './utils.js';
 
 const DAY_INDEX = new Map(DAYS.map((day, index) => [day.id, index]));
@@ -38,23 +39,43 @@ export function buildGlobalReadiness(state, rawSettings = state.centerPlanningSe
     ? `${participatingClasses.length} clase(s) tienen carga curricular y entrarán en la propuesta.`
     : 'Introduce horas semanales en al menos un curso. Los cursos sin currículo se omiten.'));
 
+  const activeActivities = settings.weeklyActivities.filter(activity => activity.active !== false && activity.weeklyMinutes > 0);
+  const activityResolution = resolveActivities(state, activeActivities);
+  items.push(item('activities', 'Actividades del centro', activityResolution.errors.length === 0, activityResolution.errors.length
+    ? `${activityResolution.errors.length} actividad(es) todavía no pueden colocarse. Ej.: ${activityResolution.errors.slice(0,3).join(', ')}${activityResolution.errors.length > 3 ? '…' : ''}`
+    : activeActivities.length ? `${activeActivities.length} actividad(es) tienen participantes suficientes para entrar en la propuesta.` : 'No hay actividades no curriculares activas.'));
+
   const gridErrors = [];
+  const patternErrors = [];
   for (const grupoClase of participatingClasses) {
     const course = courseForClassGroup(state.schoolSettings, grupoClase);
     for (const [subject, minutes] of Object.entries(curriculumForCourse(settings, course))) {
       if (minutes % 15 !== 0) gridErrors.push(`${grupoClase} · ${subject}: ${minutes} min`);
+      const pattern = subjectPatternForCourse(settings, course, subject);
+      if (pattern.sessionMinutes && pattern.sessionMinutes % 15 !== 0) gridErrors.push(`${grupoClase} · ${subject}: bloque ${pattern.sessionMinutes} min`);
+      try { validateTimePattern(pattern, `${grupoClase} · ${subject}`); } catch (error) { patternErrors.push(error.message); }
     }
   }
+  for (const activity of activeActivities) {
+    if (activity.weeklyMinutes % 15 !== 0 || activity.sessionMinutes % 15 !== 0) gridErrors.push(`${activity.name}: ${activity.weeklyMinutes}/${activity.sessionMinutes} min`);
+    try { validateTimePattern(activity.timePattern, activity.name); } catch (error) { patternErrors.push(error.message); }
+  }
   items.push(item('grid', 'Encaje en la rejilla de 15 minutos', gridErrors.length === 0, gridErrors.length
-    ? `${gridErrors.length} carga(s) no son múltiplo de 15 min. Ej.: ${gridErrors.slice(0,3).join(', ')}.`
-    : 'Todas las cargas curriculares se pueden dividir en la rejilla de 15 minutos.'));
+    ? `${gridErrors.length} carga(s) o bloque(s) no son múltiplo de 15 min. Ej.: ${gridErrors.slice(0,3).join(', ')}.`
+    : 'Todas las cargas y bloques se pueden dividir en la rejilla de 15 minutos.'));
+  items.push(item('patterns', 'Patrones temporales', patternErrors.length === 0, patternErrors.length
+    ? `${patternErrors.length} patrón(es) contienen ventanas incompatibles. Ej.: ${patternErrors.slice(0,2).join(' · ')}`
+    : 'Los días y ventanas temporales configurados son coherentes.'));
 
   const teacherResolution = resolveTeachers(state, settings, participatingClasses);
   items.push(item('teachers', 'Profesorado por clase y asignatura', teacherResolution.errors.length === 0, teacherResolution.errors.length
     ? `${teacherResolution.errors.length} asignación(es) necesitan exactamente un docente activo. Ej.: ${teacherResolution.errors.slice(0,3).join(', ')}${teacherResolution.errors.length > 3 ? '…' : ''}`
     : `${teacherResolution.map.size} combinaciones clase/asignatura tienen un docente único.`));
 
-  const teacherIds = new Set([...teacherResolution.map.values()].map(prof => prof.id));
+  const teacherIds = new Set([
+    ...[...teacherResolution.map.values()].map(prof => prof.id),
+    ...activityResolution.teacherIds
+  ]);
   const unavailable = [...teacherIds]
     .map(id => state.professionals.find(prof => prof.id === id))
     .filter(prof => !prof || !DAYS.some(day => (prof.disponibilidad?.[day.id] || []).length));
@@ -64,10 +85,10 @@ export function buildGlobalReadiness(state, rawSettings = state.centerPlanningSe
 
   const capacityErrors = generationReady ? classCapacityErrors(state, settings, participatingClasses, generation) : [];
   items.push(item('capacity', 'Capacidad semanal de las clases', capacityErrors.length === 0, capacityErrors.length
-    ? `${capacityErrors.length} clase(s) tienen más minutos curriculares que tiempo lectivo disponible. Ej.: ${capacityErrors.slice(0,3).join(', ')}.`
-    : participatingClasses.length ? 'La carga curricular cabe dentro de la jornada y los recreos configurados.' : 'Sin clases participantes.'));
+    ? `${capacityErrors.length} clase(s) tienen más minutos planificados que tiempo disponible. Ej.: ${capacityErrors.slice(0,3).join(', ')}.`
+    : participatingClasses.length ? 'La carga curricular y las actividades asociadas caben dentro de la jornada.' : 'Sin clases participantes.'));
 
-  const workloadErrors = generationReady && teacherResolution.errors.length === 0
+  const workloadErrors = generationReady && teacherResolution.errors.length === 0 && activityResolution.errors.length === 0
     ? teacherWorkloadErrors(state, settings, participatingClasses, teacherResolution.map)
     : [];
   items.push(item('workload', 'Carga máxima del profesorado', workloadErrors.length === 0, workloadErrors.length
@@ -79,6 +100,7 @@ export function buildGlobalReadiness(state, rawSettings = state.centerPlanningSe
     items,
     participatingClasses,
     teacherMap:teacherResolution.map,
+    activityTeachers:activityResolution.teacherMap,
     settings,
     generation
   };
@@ -88,7 +110,7 @@ export function generateGlobalProposal(state, rawSettings = state.centerPlanning
   const readiness = buildGlobalReadiness(state, rawSettings);
   if (!readiness.ready) return emptyProposal(state, readiness);
 
-  const tasks = buildTasks(state, readiness.settings, readiness.participatingClasses, readiness.teacherMap, readiness.generation);
+  const tasks = buildTasks(state, readiness.settings, readiness.participatingClasses, readiness.teacherMap, readiness.activityTeachers, readiness.generation);
   const candidatesByTask = new Map();
   for (const task of tasks) candidatesByTask.set(task.id, buildCandidates(task, state, readiness.settings, readiness.generation));
 
@@ -96,12 +118,12 @@ export function generateGlobalProposal(state, rawSettings = state.centerPlanning
   if (noCandidate.length) {
     return {
       ...emptyProposal(state, readiness),
-      unresolved:noCandidate.map(task => ({ task, reason:'No existe ningún hueco compatible con jornada, recreo, disponibilidad, centro externo y PT/AL.' }))
+      unresolved:noCandidate.map(task => ({ task, reason:'No existe ningún hueco compatible con su patrón temporal, jornada, recreo, disponibilidad, centro externo y PT/AL.' }))
     };
   }
 
   let best = { assigned:[], unresolved:tasks, score:-Infinity };
-  const attempts = Math.min(32, Math.max(8, tasks.length));
+  const attempts = Math.min(48, Math.max(10, tasks.length));
   for (let attempt = 0; attempt < attempts; attempt++) {
     const result = greedyAttempt(tasks, candidatesByTask, readiness.settings, attempt);
     if (result.unresolved.length < best.unresolved.length || (result.unresolved.length === best.unresolved.length && result.score > best.score)) best = result;
@@ -111,14 +133,19 @@ export function generateGlobalProposal(state, rawSettings = state.centerPlanning
   if (best.unresolved.length) {
     return {
       ...emptyProposal(state, readiness),
-      unresolved:best.unresolved.map(task => ({ task, reason:'Los huecos posibles entran en conflicto con otras clases o con el mismo docente durante la construcción de la propuesta.' })),
+      unresolved:best.unresolved.map(task => ({ task, reason:'Los huecos posibles entran en conflicto con otra clase, actividad o con alguno de sus docentes durante la construcción de la propuesta.' })),
       partial:best.assigned.map(item => item.entry)
     };
   }
 
   const generated = best.assigned
+    .filter(item => item.task.kind === 'class')
     .map(item => item.entry)
     .sort((a, b) => normalize(a.grupoClase).localeCompare(normalize(b.grupoClase), 'es', { numeric:true }) || (DAY_INDEX.get(a.dia) ?? 99) - (DAY_INDEX.get(b.dia) ?? 99) || timeToMinutes(a.inicio) - timeToMinutes(b.inicio));
+  const activitySchedules = best.assigned
+    .filter(item => item.task.kind === 'activity')
+    .map(item => item.entry)
+    .sort((a, b) => normalize(a.activityName).localeCompare(normalize(b.activityName), 'es') || (DAY_INDEX.get(a.dia) ?? 99) - (DAY_INDEX.get(b.dia) ?? 99) || timeToMinutes(a.inicio) - timeToMinutes(b.inicio));
 
   const proposedState = { ...state, classSchedules:generated };
   const conflicts = detectConflicts(proposedState);
@@ -132,26 +159,32 @@ export function generateGlobalProposal(state, rawSettings = state.centerPlanning
   }
 
   const changed = countChangedEntries(state.classSchedules || [], generated);
-  const ptalAligned = best.assigned.filter(item => item.candidate.ptalOverlapCount > 0).length;
+  const ptalAligned = best.assigned.filter(item => item.task.kind === 'class' && item.candidate.ptalOverlapCount > 0).length;
+  const classTasks = tasks.filter(task => task.kind === 'class');
+  const activityTasks = tasks.filter(task => task.kind === 'activity');
   return {
     ok:true,
     readiness,
     classSchedules:generated,
+    activitySchedules,
     unresolved:[],
     conflicts,
     score:best.score,
     stats:{
       classes:readiness.participatingClasses.length,
-      subjects:new Set(tasks.map(task => `${task.grupoClase}\u0000${task.materia}`)).size,
+      subjects:new Set(classTasks.map(task => `${task.grupoClase}\u0000${task.materia}`)).size,
       blocks:generated.length,
       minutes:generated.reduce((sum, entry) => sum + (timeToMinutes(entry.fin) - timeToMinutes(entry.inicio)), 0),
+      activities:new Set(activityTasks.map(task => task.activityId)).size,
+      activityBlocks:activitySchedules.length,
+      activityMinutes:activitySchedules.reduce((sum, entry) => sum + (timeToMinutes(entry.fin) - timeToMinutes(entry.inicio)), 0),
       changed,
       ptalAligned
     }
   };
 }
 
-function buildTasks(state, settings, classes, teacherMap, generation) {
+function buildTasks(state, settings, classes, teacherMap, activityTeacherMap, generation) {
   const tasks = [];
   let counter = 0;
   for (const grupoClase of classes) {
@@ -159,24 +192,55 @@ function buildTasks(state, settings, classes, teacherMap, generation) {
     const curriculum = curriculumForCourse(settings, course);
     for (const [materia, totalMinutes] of Object.entries(curriculum)) {
       const teacher = teacherMap.get(pairKey(grupoClase, materia));
-      const chunks = splitMinutes(totalMinutes, generation.lessonMinutes);
+      const pattern = subjectPatternForCourse(settings, course, materia);
+      const chunks = splitMinutes(totalMinutes, effectiveSessionMinutes(pattern, generation.lessonMinutes));
       const existing = (state.classSchedules || []).filter(entry => normalize(entry.grupoClase) === normalize(grupoClase) && normalize(entry.materia) === normalize(materia));
       const aula = existing.find(entry => entry.aula)?.aula || '';
       const observaciones = existing.find(entry => entry.observaciones)?.observaciones || '';
       chunks.forEach((duration, index) => tasks.push({
+        kind:'class',
         id:`global-task-${counter++}`,
+        familyId:`class:${normalize(grupoClase)}:${normalize(materia)}`,
         grupoClase,
+        classGroupIds:[grupoClase],
         course,
         stage:stageForCourse(course),
         materia,
+        label:`${grupoClase} · ${materia}`,
         duration,
         teacher,
+        teachers:[teacher],
+        pattern,
+        maxSessionsPerDay:effectiveMaxSessionsPerDay(pattern, generation.maxSameSubjectPerDay),
         sequence:index,
         existing,
         aula,
         observaciones
       }));
     }
+  }
+
+  for (const activity of settings.weeklyActivities.filter(item => item.active !== false && item.weeklyMinutes > 0)) {
+    const teachers = activityTeacherMap.get(activity.id) || [];
+    const chunks = splitMinutes(activity.weeklyMinutes, activity.sessionMinutes);
+    chunks.forEach((duration, index) => tasks.push({
+      kind:'activity',
+      id:`activity-task-${safeId(activity.id)}-${index + 1}`,
+      familyId:`activity:${activity.id}`,
+      activityId:activity.id,
+      activityName:activity.name,
+      category:activity.category,
+      label:activity.name,
+      duration,
+      teachers,
+      classGroupIds:[...activity.classGroupIds],
+      pattern:activity.timePattern,
+      maxSessionsPerDay:effectiveMaxSessionsPerDay(activity.timePattern, 1),
+      allowDuringRecess:activity.allowDuringRecess === true,
+      movable:activity.movable !== false,
+      existingSlots:activity.scheduledSlots || [],
+      sequence:index
+    }));
   }
   return tasks;
 }
@@ -186,23 +250,29 @@ function buildCandidates(task, state, settings, generation) {
   const endDay = timeToMinutes(generation.end);
   const candidates = [];
   for (const day of DAYS) {
+    if (!dayAllowed(task.pattern, day.id)) continue;
     for (let start = startDay; start + task.duration <= endDay; start += generation.stepMinutes) {
       const end = start + task.duration;
       const inicio = minutesToTime(start);
       const fin = minutesToTime(end);
-      if (recessOverlaps(state.schoolSettings, task.stage, inicio, fin)) continue;
-      if (!professionalCanWork(task.teacher, day.id, inicio, fin)) continue;
-      if (teacherSupportConflict(task.teacher.id, day.id, start, end, state)) continue;
-      const ptal = ptalCompatibility(task, day.id, start, end, state, settings);
+      if (!timeWindowAllows(task.pattern, start, end)) continue;
+      if (task.kind === 'class' && recessOverlaps(state.schoolSettings, task.stage, inicio, fin)) continue;
+      if (task.kind === 'activity' && activityRecessConflict(task, state, inicio, fin)) continue;
+      if (task.kind === 'activity' && task.movable === false && task.existingSlots.length && !matchesExistingSlot(task, day.id, inicio, fin)) continue;
+      if (!task.teachers.every(teacher => professionalCanWork(teacher, day.id, inicio, fin))) continue;
+      if (task.teachers.some(teacher => teacherSupportConflict(teacher.id, day.id, start, end, state))) continue;
+      const ptal = task.kind === 'class' ? ptalCompatibility(task, day.id, start, end, state) : { blocked:false, score:0, overlapCount:0 };
       if (ptal.blocked) continue;
-      const stability = task.existing.some(entry => entry.dia === day.id && entry.inicio === inicio && entry.fin === fin) ? 35 : 0;
+      const stability = task.kind === 'class'
+        ? task.existing.some(entry => entry.dia === day.id && entry.inicio === inicio && entry.fin === fin) ? 35 : 0
+        : task.existingSlots.some(entry => entry.dia === day.id && entry.inicio === inicio && entry.fin === fin) ? 60 : 0;
       candidates.push({
         dia:day.id,
         inicio,
         fin,
         start,
         end,
-        baseScore:ptal.score + stability,
+        baseScore:ptal.score + stability + timePreferenceScore(task.pattern, day.id, start, end),
         ptalOverlapCount:ptal.overlapCount
       });
     }
@@ -212,12 +282,16 @@ function buildCandidates(task, state, settings, generation) {
 
 function greedyAttempt(tasks, candidatesByTask, settings, attempt) {
   const teacherTaskCount = new Map();
-  for (const task of tasks) teacherTaskCount.set(task.teacher.id, (teacherTaskCount.get(task.teacher.id) || 0) + 1);
+  for (const task of tasks) {
+    for (const teacher of task.teachers) teacherTaskCount.set(teacher.id, (teacherTaskCount.get(teacher.id) || 0) + 1);
+  }
   const ordered = [...tasks].sort((a, b) => {
     const scarcity = (candidatesByTask.get(a.id)?.length || 0) - (candidatesByTask.get(b.id)?.length || 0);
     if (scarcity) return scarcity;
-    const sharedTeacher = (teacherTaskCount.get(b.teacher.id) || 0) - (teacherTaskCount.get(a.teacher.id) || 0);
-    if (sharedTeacher) return sharedTeacher;
+    const teacherPressureA = Math.max(0, ...a.teachers.map(teacher => teacherTaskCount.get(teacher.id) || 0));
+    const teacherPressureB = Math.max(0, ...b.teachers.map(teacher => teacherTaskCount.get(teacher.id) || 0));
+    if (teacherPressureB !== teacherPressureA) return teacherPressureB - teacherPressureA;
+    if (b.classGroupIds.length !== a.classGroupIds.length) return b.classGroupIds.length - a.classGroupIds.length;
     if (b.duration !== a.duration) return b.duration - a.duration;
     return pseudoOrder(a.id, attempt) - pseudoOrder(b.id, attempt);
   });
@@ -228,7 +302,7 @@ function greedyAttempt(tasks, candidatesByTask, settings, attempt) {
   for (const task of ordered) {
     const valid = (candidatesByTask.get(task.id) || [])
       .filter(candidate => !runtimeOverlap(task, candidate, assigned))
-      .filter(candidate => sameSubjectDayCount(task, candidate, assigned) < settings.generation.maxSameSubjectPerDay)
+      .filter(candidate => sameFamilyDayCount(task, candidate, assigned) < task.maxSessionsPerDay)
       .map(candidate => ({ candidate, score:dynamicScore(task, candidate, assigned, attempt) }))
       .sort((a, b) => b.score - a.score || a.candidate.start - b.candidate.start);
     if (!valid.length) {
@@ -236,18 +310,31 @@ function greedyAttempt(tasks, candidatesByTask, settings, attempt) {
       continue;
     }
     const selected = valid[0];
-    const entry = {
-      id:`global-${safeId(task.grupoClase)}-${safeId(task.materia)}-${task.sequence + 1}`,
-      grupoClase:task.grupoClase,
-      materia:task.materia,
-      dia:selected.candidate.dia,
-      inicio:selected.candidate.inicio,
-      fin:selected.candidate.fin,
-      professionalId:task.teacher.id,
-      docente:task.teacher.nombre || '',
-      aula:task.aula,
-      observaciones:task.observaciones
-    };
+    const entry = task.kind === 'class'
+      ? {
+          id:`global-${safeId(task.grupoClase)}-${safeId(task.materia)}-${task.sequence + 1}`,
+          grupoClase:task.grupoClase,
+          materia:task.materia,
+          dia:selected.candidate.dia,
+          inicio:selected.candidate.inicio,
+          fin:selected.candidate.fin,
+          professionalId:task.teacher.id,
+          docente:task.teacher.nombre || '',
+          aula:task.aula,
+          observaciones:task.observaciones
+        }
+      : {
+          id:`global-activity-${safeId(task.activityId)}-${task.sequence + 1}`,
+          activityId:task.activityId,
+          activityName:task.activityName,
+          category:task.category,
+          dia:selected.candidate.dia,
+          inicio:selected.candidate.inicio,
+          fin:selected.candidate.fin,
+          teacherIds:task.teachers.map(teacher => teacher.id),
+          teacherNames:task.teachers.map(teacher => teacher.nombre || teacher.id),
+          classGroupIds:[...task.classGroupIds]
+        };
     assigned.push({ task, candidate:selected.candidate, entry });
     score += selected.score;
   }
@@ -256,33 +343,39 @@ function greedyAttempt(tasks, candidatesByTask, settings, attempt) {
 
 function dynamicScore(task, candidate, assigned, attempt) {
   let score = candidate.baseScore;
-  const sameSubjectDay = sameSubjectDayCount(task, candidate, assigned);
-  score -= sameSubjectDay * 120;
+  const sameDay = sameFamilyDayCount(task, candidate, assigned);
+  score -= sameDay * 120;
 
-  const classDayMinutes = assigned
-    .filter(item => item.task.grupoClase === task.grupoClase && item.candidate.dia === candidate.dia)
-    .reduce((sum, item) => sum + item.task.duration, 0);
-  score -= classDayMinutes * 0.07;
+  for (const groupId of task.classGroupIds) {
+    const classDayMinutes = assigned
+      .filter(item => item.candidate.dia === candidate.dia && item.task.classGroupIds.includes(groupId))
+      .reduce((sum, item) => sum + item.task.duration, 0);
+    score -= classDayMinutes * 0.07;
+  }
 
-  const teacherDayMinutes = assigned
-    .filter(item => item.task.teacher.id === task.teacher.id && item.candidate.dia === candidate.dia)
-    .reduce((sum, item) => sum + item.task.duration, 0);
-  score -= teacherDayMinutes * 0.035;
+  for (const teacher of task.teachers) {
+    const teacherDayMinutes = assigned
+      .filter(item => item.candidate.dia === candidate.dia && item.task.teachers.some(itemTeacher => itemTeacher.id === teacher.id))
+      .reduce((sum, item) => sum + item.task.duration, 0);
+    score -= teacherDayMinutes * 0.035;
+  }
 
   score += ((pseudoOrder(`${task.id}-${candidate.dia}-${candidate.inicio}`, attempt) % 100) / 1000);
   return score;
 }
 
-function sameSubjectDayCount(task, candidate, assigned) {
-  return assigned.filter(item => item.task.grupoClase === task.grupoClase && item.task.materia === task.materia && item.candidate.dia === candidate.dia).length;
+function sameFamilyDayCount(task, candidate, assigned) {
+  return assigned.filter(item => item.task.familyId === task.familyId && item.candidate.dia === candidate.dia).length;
 }
 
 function runtimeOverlap(task, candidate, assigned) {
+  const teacherIds = new Set(task.teachers.map(teacher => teacher.id));
+  const classIds = new Set(task.classGroupIds.map(normalize));
   for (const item of assigned) {
     if (item.candidate.dia !== candidate.dia) continue;
     if (!overlapInterval(candidate.start, candidate.end, item.candidate.start, item.candidate.end)) continue;
-    if (item.task.grupoClase === task.grupoClase) return true;
-    if (item.task.teacher.id === task.teacher.id) return true;
+    if (item.task.teachers.some(teacher => teacherIds.has(teacher.id))) return true;
+    if (item.task.classGroupIds.some(group => classIds.has(normalize(group)))) return true;
   }
   return false;
 }
@@ -305,6 +398,33 @@ function resolveTeachers(state, settings, classes) {
   return { map, errors };
 }
 
+function resolveActivities(state, activities) {
+  const activeTeachers = new Map((state.professionals || [])
+    .filter(prof => prof.activo !== false)
+    .map(prof => {
+      const normalized = normalizeProfessionalProfile(prof);
+      return [normalized.id, normalized];
+    }));
+  const teacherMap = new Map();
+  const teacherIds = new Set();
+  const errors = [];
+  for (const activity of activities) {
+    const ids = [...new Set(activity.assignedTeacherIds || [])];
+    if (ids.length < activity.requiredStaff) {
+      errors.push(`${activity.name}: ${ids.length}/${activity.requiredStaff} docentes asignados`);
+      continue;
+    }
+    const teachers = ids.map(id => activeTeachers.get(id)).filter(Boolean);
+    if (teachers.length !== ids.length) {
+      errors.push(`${activity.name}: contiene docentes inexistentes o inactivos`);
+      continue;
+    }
+    teacherMap.set(activity.id, teachers);
+    teachers.forEach(teacher => teacherIds.add(teacher.id));
+  }
+  return { teacherMap, teacherIds, errors };
+}
+
 function classCapacityErrors(state, settings, classes, generation) {
   const errors = [];
   const daily = timeToMinutes(generation.end) - timeToMinutes(generation.start);
@@ -314,7 +434,11 @@ function classCapacityErrors(state, settings, classes, generation) {
     const recess = recessForStage(state.schoolSettings, stage);
     const recessMinutes = recess ? timeToMinutes(recess.fin) - timeToMinutes(recess.inicio) : 0;
     const capacity = Math.max(0, daily - recessMinutes) * DAYS.length;
-    const target = Object.values(curriculumForCourse(settings, course)).reduce((sum, value) => sum + value, 0);
+    let target = Object.values(curriculumForCourse(settings, course)).reduce((sum, value) => sum + value, 0);
+    for (const activity of settings.weeklyActivities || []) {
+      if (activity.active === false || activity.allowDuringRecess === true) continue;
+      if (activity.classGroupIds.some(group => normalize(group) === normalize(grupoClase))) target += activity.weeklyMinutes;
+    }
     if (target > capacity) errors.push(`${grupoClase}: ${target} min > ${capacity} min`);
   }
   return errors;
@@ -340,6 +464,12 @@ function teacherWorkloadErrors(state, settings, classes, teacherMap) {
     const responsibilities = (prof.responsibilities || []).reduce((sum, item) => sum + Math.max(0, Number(item.weeklyMinutes) || 0), 0);
     if (responsibilities) required.set(prof.id, (required.get(prof.id) || 0) + responsibilities);
   }
+  for (const activity of settings.weeklyActivities || []) {
+    if (activity.active === false) continue;
+    for (const teacherId of activity.assignedTeacherIds || []) {
+      required.set(teacherId, (required.get(teacherId) || 0) + activity.weeklyMinutes);
+    }
+  }
   const errors = [];
   for (const prof of state.professionals || []) {
     if (!prof.maxWeeklyMinutes) continue;
@@ -357,6 +487,22 @@ function teacherSupportConflict(professionalId, dayId, start, end, state) {
     if (overlapInterval(start, end, timeToMinutes(session.inicio), timeToMinutes(session.fin))) return true;
   }
   return false;
+}
+
+function activityRecessConflict(task, state, inicio, fin) {
+  if (task.allowDuringRecess) return false;
+  if (task.classGroupIds.length) {
+    return task.classGroupIds.some(group => {
+      const course = courseForClassGroup(state.schoolSettings, group);
+      return recessOverlaps(state.schoolSettings, stageForCourse(course), inicio, fin);
+    });
+  }
+  return recessOverlaps(state.schoolSettings, 'infantil', inicio, fin)
+    || recessOverlaps(state.schoolSettings, 'primaria', inicio, fin);
+}
+
+function matchesExistingSlot(task, dayId, inicio, fin) {
+  return task.existingSlots.some(slot => slot.dia === dayId && slot.inicio === inicio && slot.fin === fin);
 }
 
 function ptalCompatibility(task, dayId, start, end, state) {
@@ -417,5 +563,5 @@ function pseudoOrder(value, seed) {
   return hash >>> 0;
 }
 function emptyProposal(state, readiness) {
-  return { ok:false, readiness, classSchedules:state.classSchedules || [], unresolved:[], conflicts:[], score:0, stats:{ classes:0, subjects:0, blocks:0, minutes:0, changed:0, ptalAligned:0 } };
+  return { ok:false, readiness, classSchedules:state.classSchedules || [], activitySchedules:[], unresolved:[], conflicts:[], score:0, stats:{ classes:0, subjects:0, blocks:0, minutes:0, activities:0, activityBlocks:0, activityMinutes:0, changed:0, ptalAligned:0 } };
 }
