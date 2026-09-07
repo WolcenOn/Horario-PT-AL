@@ -134,6 +134,15 @@ export function normalizeProfessionalProfile(professional) {
   const tutorPreference = TUTOR_PREFERENCES.some(option => option.value === current.tutorPreference)
     ? current.tutorPreference
     : defaultTutorPreference;
+  const allowedSubjects = normalizeAllowedSubjects([
+    ...(Array.isArray(current.allowedSubjects) ? current.allowedSubjects : []),
+    ...teachingAssignments.map(item => item.materia)
+  ]);
+  const specialtySubjects = normalizeAllowedSubjects(
+    Array.isArray(current.specialtySubjects) && current.specialtySubjects.length
+      ? current.specialtySubjects
+      : inferSpecialtySubjects(current.especialidad, allowedSubjects)
+  ).filter(subject => allowedSubjects.some(allowed => normalizeText(allowed) === normalizeText(subject)));
   return {
     ...current,
     tipo:type,
@@ -141,10 +150,8 @@ export function normalizeProfessionalProfile(professional) {
     teacherRole,
     tutorPreference,
     minimumTutorMinutes:Math.max(0, Math.round(Number(current.minimumTutorMinutes) || 0)),
-    allowedSubjects:normalizeAllowedSubjects([
-      ...(Array.isArray(current.allowedSubjects) ? current.allowedSubjects : []),
-      ...teachingAssignments.map(item => item.materia)
-    ]),
+    allowedSubjects,
+    specialtySubjects,
     tutoriaGrupo:String(current.tutoriaGrupo || '').trim(),
     teachingAssignments,
     responsibilities:normalizeResponsibilities(current.responsibilities)
@@ -203,6 +210,20 @@ function inferTeacherRole(type, specialty) {
   if (!text || text === 'primaria' || text === 'infantil' || text.includes('general')) return 'generalista';
   if (/ingl|música|musica|física|fisica|franc|portugu|relig|alem/.test(text)) return 'especialista';
   return 'mixto';
+}
+
+function inferSpecialtySubjects(specialty, allowedSubjects) {
+  const text = normalizeText(specialty);
+  if (!text) return [];
+  const aliases = [
+    { pattern:/ingl/, names:['Inglés'] },
+    { pattern:/música|musica/, names:['Música','Educación Artística'] },
+    { pattern:/educación física|educacion fisica|\bef\b|física|fisica/, names:['Educación Física'] },
+    { pattern:/relig/, names:['Religión'] },
+    { pattern:/portugu|segunda lengua/, names:['Segunda Lengua Extranjera'] }
+  ];
+  const inferred = aliases.filter(item => item.pattern.test(text)).flatMap(item => item.names);
+  return inferred.filter(subject => allowedSubjects.some(allowed => normalizeText(allowed) === normalizeText(subject)));
 }
 
 function validTime(value) {
