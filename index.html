@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="./css/center-planning.css">
   <link rel="stylesheet" href="./css/integration.css">
   <link rel="stylesheet" href="./css/capacity-study.css">
+  <link rel="stylesheet" href="./css/rosters.css">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Saltar al contenido</a>
@@ -27,11 +28,12 @@
       </div>
       <nav class="nav-list">
         <button class="nav-item is-active" data-view="calendar" type="button">📅 <span>Horario semanal</span></button>
+        <button class="nav-item" data-view="classRosters" type="button">🏫 <span>Clases y alumnado</span></button>
         <button class="nav-item" data-view="students" type="button">👤 <span>Alumnos</span></button>
         <button class="nav-item" data-view="professionals" type="button">🧑‍🏫 <span>Profesorado</span></button>
         <button class="nav-item" data-view="groups" type="button">👥 <span>Grupos PT/AL</span></button>
         <button class="nav-item" data-view="sessions" type="button">🕒 <span>Sesiones PT/AL</span></button>
-        <button class="nav-item" data-view="classSchedules" type="button">🏫 <span>Horarios de aula</span></button>
+        <button class="nav-item" data-view="classSchedules" type="button">🗓️ <span>Horarios de aula</span></button>
         <button class="nav-item" data-view="centerPlanning" type="button">🏛️ <span>Plan del centro</span></button>
         <button class="nav-item" data-view="capacityStudy" type="button">📊 <span>Estudio de plantilla</span></button>
         <button class="nav-item" data-view="automation" type="button">⚙️ <span>Configuración automática</span><span id="automationNavBadge" class="nav-badge" aria-label="Estado de configuración">!</span></button>
@@ -83,6 +85,7 @@
   <div id="modalRoot"></div>
   <div id="toastRoot" class="toast-root" aria-live="polite" aria-atomic="true"></div>
   <script type="module" src="./js/app.js"></script>
+  <script type="module" src="./js/class-rosters-controller.js"></script>
   <script type="module" src="./js/integration-controller.js"></script>
   <script type="module" src="./js/operations-controller.js"></script>
   <script type="module" src="./js/capacity-controller.js"></script>
