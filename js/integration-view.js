@@ -2,7 +2,7 @@ import { backendConfigured, normalizeBackendSettings } from './backend-service.j
 import { buildGestorEscuelaConfiguration } from './gestor-adapter.js';
 import { escapeHtml } from './utils.js';
 
-export function renderIntegrationView(root, { state, settings, status, onSave, onTest, onSync }) {
+export function renderIntegrationView(root, { state, settings, status, onSave, onTest, onBootstrap, onSync }) {
   const normalized = normalizeBackendSettings(settings);
   const adapter = buildGestorEscuelaConfiguration(state);
   const configured = backendConfigured(normalized);
@@ -36,6 +36,22 @@ export function renderIntegrationView(root, { state, settings, status, onSave, o
     </section>
 
     <section class="card">
+      <div class="card-header"><div><h2>Vincular un centro nuevo</h2><small>Úsalo solo si GestorEscuela todavía no tiene centro y administrador creados. El asistente guardará automáticamente los UUID.</small></div></div>
+      <form id="backendBootstrapForm" class="card-body integration-form">
+        <div class="integration-note"><strong>Bootstrap inicial</strong><span>Se crea un usuario, un centro y la pertenencia ADMIN. No modifica ningún alumno, horario o sesión local.</span></div>
+        <div class="form-grid">
+          <div class="form-field integration-wide"><label for="bootstrapSchoolName">Nombre del centro</label><input id="bootstrapSchoolName" name="schoolName" maxlength="160" placeholder="CEIP / centro educativo"></div>
+          <div class="form-field"><label for="bootstrapDisplayName">Nombre del administrador</label><input id="bootstrapDisplayName" name="displayName" maxlength="160" placeholder="Nombre para GestorEscuela"></div>
+          <div class="form-field"><label for="bootstrapEmail">Correo del administrador</label><input id="bootstrapEmail" name="email" type="email" maxlength="320" placeholder="correo@centro.es"></div>
+        </div>
+        <div class="button-row">
+          <button class="button" type="submit">Crear y vincular centro</button>
+          <span class="field-hint">Si ya tienes School ID y Actor ID, no necesitas este asistente.</span>
+        </div>
+      </form>
+    </section>
+
+    <section class="card">
       <div class="card-header"><div><h2>Adaptador local → GestorEscuela</h2><small>Vista previa de lo que se enviaría. No realiza ninguna escritura remota.</small></div><span class="badge ${adapter.report.ready ? 'badge-success' : 'badge-warning'}">${adapter.report.ready ? 'Preparado' : `${adapter.report.errors.length} error(es)`}</span></div>
       <div class="card-body">
         <div class="integration-metrics">
@@ -59,7 +75,7 @@ export function renderIntegrationView(root, { state, settings, status, onSave, o
     <section class="card integration-roadmap">
       <div class="card-header"><div><h2>Estado de la integración</h2><small>La conexión se activa de forma progresiva y mantiene el modo offline.</small></div></div>
       <div class="card-body integration-roadmap-grid">
-        <div class="is-done"><b>1</b><span><strong>Adaptador y conexión opcional</strong><small>Configuración local, prueba de salud y sincronización manual.</small></span></div>
+        <div class="is-done"><b>1</b><span><strong>Adaptador y conexión opcional</strong><small>Configuración local, bootstrap, prueba de salud y sincronización manual.</small></span></div>
         <div class="is-done"><b>2</b><span><strong>Operativa diaria básica</strong><small>Ausencia de un docente y propuesta de sustituciones usando CP-SAT.</small></span></div>
         <div><b>3</b><span><strong>Actividades y vigilancias</strong><small>Coordinaciones, reuniones y turnos de recreo.</small></span></div>
         <div><b>4</b><span><strong>Sincronización segura</strong><small>Autenticación real y control de cambios entre dispositivos.</small></span></div>
@@ -74,6 +90,18 @@ export function renderIntegrationView(root, { state, settings, status, onSave, o
   });
   root.querySelector('[data-test-backend]')?.addEventListener('click', async () => onTest(readSettings(form)));
   root.querySelector('[data-sync-backend]')?.addEventListener('click', async () => onSync(readSettings(form), adapter));
+
+  const bootstrapForm = root.querySelector('#backendBootstrapForm');
+  bootstrapForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const data = new FormData(bootstrapForm);
+    await onBootstrap({
+      baseUrl:form?.elements?.baseUrl?.value || normalized.baseUrl,
+      schoolName:data.get('schoolName'),
+      displayName:data.get('displayName'),
+      email:data.get('email')
+    });
+  });
 }
 
 function readSettings(form) {
