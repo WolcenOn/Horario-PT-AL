@@ -75,3 +75,22 @@ test('detecta déficit cuando una materia no tiene ningún docente habilitado', 
   assert.ok(study.totals.uncoveredMinutes >= 480);
   assert.ok(study.issues.some(item => item.type === 'subject-without-teacher'));
 });
+
+test('una sesión PT/AL sin alumnado también consume capacidad, por ejemplo coordinación', () => {
+  const state = baseState();
+  state.centerPlanningSettings.curriculum = {};
+  state.professionals = [{
+    id:'al', nombre:'AL', tipo:'AL', teacherRole:'especialista', tutorPreference:'no',
+    maxWeeklyMinutes:1080, allowedSubjects:[], teachingAssignments:[], responsibilities:[], disponibilidad:{}
+  }];
+  state.groups = [{
+    id:'coord', nombre:'Coordinación AL', tipo:'AL', professionalId:'al', studentIds:[]
+  }];
+  state.sessions = [{
+    id:'coord-session', groupId:'coord', professionalId:'al', dia:'jueves', inicio:'13:00', fin:'14:00'
+  }];
+  const study = buildCapacityStudy(state);
+  const row = study.teachers.find(item => item.id === 'al');
+  assert.equal(row.ptalMinutes, 60);
+  assert.equal(row.freeMinutes, 1020);
+});
