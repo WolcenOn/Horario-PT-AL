@@ -1,6 +1,7 @@
 import { backendConfigured, loadBackendSettings, solveStaffingAllocation } from './backend-service.js';
 import { renderCapacityStudy } from './capacity-view.js';
-import { loadState } from './repository.js';
+import { loadState, saveProfessional } from './repository.js';
+import { normalizeProfessionalProfile } from './center-planning.js';
 import { buildStaffingSolverPayload } from './staffing-adapter.js';
 import { showToast } from './ui.js';
 
@@ -63,7 +64,46 @@ async function openCapacityStudy() {
         showToast(optimizerStatus.message, 'error');
       }
       render();
+    },
+    onApply:async () => {
+      if (!optimizerResult?.complete) {
+        showToast('Solo se puede aplicar una propuesta completa.', 'error');
+        return;
+      }
+      const accepted = confirm('Se guardará este reparto como nueva base de planificación: las tutorías y materias propuestas quedarán fijadas en los perfiles docentes. No se modifica todavía ninguna hora del calendario. ¿Aplicar?');
+      if (!accepted) return;
+
+      const requirementKeys = new Set(staffing.study.requirements.map(item => pairKey(item.grupoClase, item.subject)));
+      const assignmentsByTeacher = new Map(state.professionals.map(item => [item.id, []]));
+      for (const assignment of optimizerResult.assignments || []) {
+        if (!assignmentsByTeacher.has(assignment.teacher_id)) assignmentsByTeacher.set(assignment.teacher_id, []);
+        assignmentsByTeacher.get(assignment.teacher_id).push({ grupoClase:assignment.group_id, materia:assignment.subject });
+      }
+      const tutorByTeacher = new Map((optimizerResult.tutors || []).map(item => [item.teacher_id, item.group_id]));
+      const plannedGroups = new Set(staffing.study.classes);
+
+      for (const raw of state.professionals) {
+        const current = normalizeProfessionalProfile(raw);
+        const preservedAssignments = current.teachingAssignments.filter(item => !requirementKeys.has(pairKey(item.grupoClase, item.materia)));
+        const proposedAssignments = assignmentsByTeacher.get(current.id) || [];
+        const proposedTutor = tutorByTeacher.get(current.id);
+        const tutoriaGrupo = proposedTutor || (current.tutoriaGrupo && !plannedGroups.has(current.tutoriaGrupo) ? current.tutoriaGrupo : '');
+        await saveProfessional(normalizeProfessionalProfile({
+          ...current,
+          tutoriaGrupo,
+          teachingAssignments:[...preservedAssignments, ...proposedAssignments]
+        }));
+      }
+
+      optimizerStatus = null;
+      optimizerResult = null;
+      showToast('Reparto docente aplicado. Estas decisiones serán la base bloqueada de los siguientes cálculos.');
+      await openCapacityStudy();
     }
   });
   render();
+}
+
+function pairKey(group, subject) {
+  return `${String(group || '').trim().toLocaleLowerCase('es')}\u0000${String(subject || '').trim().toLocaleLowerCase('es')}`;
 }
