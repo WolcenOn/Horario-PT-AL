@@ -25,6 +25,16 @@ export const RESPONSIBILITY_TYPES = [
   { value:'equipo-directivo', label:'Equipo directivo' },
   { value:'otra', label:'Otra función' }
 ];
+export const CENTER_ACTIVITY_CATEGORIES = [
+  { value:'biblioteca', label:'Biblioteca' },
+  { value:'lectura', label:'Lectura / plan lector' },
+  { value:'coordinacion', label:'Coordinación' },
+  { value:'apoyo', label:'Apoyo ordinario' },
+  { value:'plan-programa', label:'Plan / programa' },
+  { value:'equipo-directivo', label:'Equipo directivo' },
+  { value:'reunion', label:'Reunión' },
+  { value:'otra', label:'Otra actividad' }
+];
 
 export const DEFAULT_GLOBAL_GENERATION = Object.freeze({
   start:'09:00',
@@ -54,8 +64,47 @@ export function normalizeCenterPlanningSettings(value) {
     academicYear:String(source.academicYear || '').trim(),
     legalReference:String(source.legalReference || '').trim(),
     generation:normalizeGlobalGeneration(source.generation),
-    curriculum
+    curriculum,
+    weeklyActivities:normalizeWeeklyActivities(source.weeklyActivities)
   };
+}
+
+export function normalizeWeeklyActivities(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const raw of value) {
+    const id = String(raw?.id || '').trim();
+    const name = String(raw?.name || '').trim();
+    if (!id || !name || seen.has(id)) continue;
+    seen.add(id);
+    const category = CENTER_ACTIVITY_CATEGORIES.some(item => item.value === raw?.category) ? raw.category : 'otra';
+    const weeklyMinutes = Math.max(0, Math.round(Number(raw?.weeklyMinutes) || 0));
+    const sessionMinutes = Math.max(15, Math.round(Number(raw?.sessionMinutes) || Math.min(weeklyMinutes || 60, 60)));
+    const requiredStaff = Math.max(1, Math.round(Number(raw?.requiredStaff) || 1));
+    result.push({
+      id,
+      name,
+      category,
+      weeklyMinutes,
+      sessionMinutes,
+      requiredStaff,
+      assignedTeacherIds:uniqueStrings(raw?.assignedTeacherIds),
+      eligibleTeacherIds:uniqueStrings(raw?.eligibleTeacherIds),
+      classGroupIds:uniqueStrings(raw?.classGroupIds),
+      movable:raw?.movable !== false,
+      active:raw?.active !== false,
+      notes:String(raw?.notes || '').trim()
+    });
+  }
+  return result;
+}
+
+export function activityMinutesForTeacher(settings, teacherId) {
+  const normalized = normalizeCenterPlanningSettings(settings);
+  return normalized.weeklyActivities
+    .filter(activity => activity.active !== false && activity.assignedTeacherIds.includes(teacherId))
+    .reduce((sum, activity) => sum + activity.weeklyMinutes, 0);
 }
 
 export function normalizeGlobalGeneration(value) {
@@ -224,6 +273,11 @@ function inferSpecialtySubjects(specialty, allowedSubjects) {
   ];
   const inferred = aliases.filter(item => item.pattern.test(text)).flatMap(item => item.names);
   return inferred.filter(subject => allowedSubjects.some(allowed => normalizeText(allowed) === normalizeText(subject)));
+}
+
+function uniqueStrings(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(item => String(item || '').trim()).filter(Boolean))];
 }
 
 function validTime(value) {
