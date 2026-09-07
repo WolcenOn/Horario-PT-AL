@@ -1,5 +1,7 @@
 import { CENTER_ACTIVITY_CATEGORIES, normalizeCenterPlanningSettings, normalizeWeeklyActivities } from './center-planning.js';
+import { DAYS } from './constants.js';
 import { configuredClassGroups } from './education.js';
+import { describeTimePattern, validateTimePattern } from './time-patterns.js';
 import { escapeHtml, formatDuration, uid } from './utils.js';
 import { setModalMessage, showModal } from './ui.js';
 
@@ -14,7 +16,7 @@ export function renderCenterActivities(root, { state, onAdd, onEdit, onDelete })
 
   root.innerHTML = `<div class="center-activities-view">
     <section class="card activity-hero">
-      <div><p class="eyebrow">Carga semanal no curricular</p><h2>Actividades del centro</h2><p>Configura biblioteca, lectura, coordinaciones, apoyos, planes y otras tareas que consumen tiempo del profesorado. Una actividad puede quedar fijada a docentes concretos o dejar candidatos preparados para que el optimizador decida más adelante.</p></div>
+      <div><p class="eyebrow">Carga semanal no curricular</p><h2>Actividades del centro</h2><p>Configura biblioteca, lectura, coordinaciones, apoyos, planes y otras tareas que consumen tiempo del profesorado. Además de la carga y los candidatos, cada actividad puede definir días permitidos, ventanas horarias y preferencias que utilizará el generador semanal.</p></div>
       <button class="button button-primary" data-add-center-activity type="button">+ Nueva actividad</button>
     </section>
     <section class="capacity-metrics">
@@ -25,16 +27,16 @@ export function renderCenterActivities(root, { state, onAdd, onEdit, onDelete })
     </section>
     ${pending.length ? `<section class="capacity-banner is-warning"><strong>Hay actividades sin toda la plantilla asignada</strong><span>${pending.slice(0,8).map(item => `${escapeHtml(item.name)} (${item.assignedTeacherIds.length}/${item.requiredStaff})`).join(' · ')}</span></section>` : ''}
     <section class="card">
-      <div class="card-header"><div><h2>Catálogo semanal</h2><small>La carga de las actividades fijadas ya puede descontarse del Estudio de plantilla. La colocación exacta en día y hora se incorporará al generador semanal.</small></div><span class="badge badge-neutral">${activities.length} definidas</span></div>
-      <div class="table-wrap"><table><thead><tr><th>Actividad</th><th>Categoría</th><th>Carga</th><th>Bloque habitual</th><th>Personal</th><th>Asignados</th><th>Candidatos</th><th>Clases</th><th>Acciones</th></tr></thead><tbody>
-        ${activities.map(item => activityRow(item, professionalMap)).join('') || `<tr><td colspan="9"><div class="empty-state"><strong>Sin actividades adicionales</strong>Añade Biblioteca, Plan lector, coordinaciones u otras tareas que deban entrar en la carga semanal.</div></td></tr>`}
+      <div class="card-header"><div><h2>Catálogo semanal</h2><small>Las actividades fijadas descuentan carga en el Estudio de plantilla y sus patrones temporales ya pueden intervenir en la generación global.</small></div><span class="badge badge-neutral">${activities.length} definidas</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Actividad</th><th>Categoría</th><th>Carga</th><th>Bloque</th><th>Personal</th><th>Asignados</th><th>Candidatos</th><th>Clases</th><th>Patrón temporal</th><th>Franja propuesta</th><th>Acciones</th></tr></thead><tbody>
+        ${activities.map(item => activityRow(item, professionalMap)).join('') || `<tr><td colspan="11"><div class="empty-state"><strong>Sin actividades adicionales</strong>Añade Biblioteca, Plan lector, coordinaciones u otras tareas que deban entrar en la carga semanal.</div></td></tr>`}
       </tbody></table></div>
     </section>
     <section class="card activity-help"><div class="card-header"><div><h2>Cómo se interpretará</h2></div></div><div class="card-body activity-help-grid">
-      <div><strong>Biblioteca · 2 h</strong><span>Puede asignarse a un docente concreto o a varios candidatos. Si requiere 1 persona, el futuro solver elegirá solo una.</span></div>
-      <div><strong>Lectura · 1 h</strong><span>Puede asociarse a una o varias clases para reservar tiempo del profesor responsable del plan lector.</span></div>
-      <div><strong>Coordinación · 1 h</strong><span>Si tiene varios docentes fijados, cada uno consume esa hora y después deberán coincidir en la misma franja.</span></div>
-      <div><strong>Movible</strong><span>Indica si el generador puede elegir la franja. Una actividad no movible deberá fijarse más adelante a una hora concreta.</span></div>
+      <div><strong>Biblioteca · 2 h</strong><span>Puede restringirse a ciertos días o a una ventana, por ejemplo 12:00–14:00, y dejar que el solver elija el docente.</span></div>
+      <div><strong>Lectura · 1 h</strong><span>Puede asociarse a una clase y preferir primeras horas, sin convertir esa preferencia en una obligación.</span></div>
+      <div><strong>Coordinación · 1 h</strong><span>Todos los docentes asignados deberán coincidir en la misma franja cuando se coloque el bloque.</span></div>
+      <div><strong>Recreo</strong><span>Por defecto una actividad evita recreos de las clases asociadas. Puedes permitirlos explícitamente para biblioteca, vigilancia u otras tareas.</span></div>
     </section>
   </div>`;
 
@@ -55,7 +57,10 @@ export function openCenterActivityForm(activity, { state, onSave }) {
     eligibleTeacherIds:[],
     classGroupIds:[],
     movable:true,
+    allowDuringRecess:false,
     active:true,
+    timePattern:{ allowedDays:[], preferredDays:[], earliestStart:'', latestEnd:'', preferredStart:'', preferredEnd:'', maxSessionsPerDay:1 },
+    scheduledSlots:[],
     notes:''
   };
   const teachers = (state.professionals || []).filter(item => item.activo !== false).sort((a,b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
@@ -63,6 +68,8 @@ export function openCenterActivityForm(activity, { state, onSave }) {
   const assigned = new Set(current.assignedTeacherIds || []);
   const eligible = new Set(current.eligibleTeacherIds || []);
   const selectedClasses = new Set(current.classGroupIds || []);
+  const allowedDays = new Set(current.timePattern?.allowedDays?.length ? current.timePattern.allowedDays : DAYS.map(day => day.id));
+  const preferredDays = new Set(current.timePattern?.preferredDays || []);
   showModal({
     title:activity ? 'Editar actividad del centro' : 'Nueva actividad del centro',
     submitLabel:'Guardar actividad',
@@ -72,9 +79,18 @@ export function openCenterActivityForm(activity, { state, onSave }) {
       <div class="form-field"><label for="weeklyHours">Carga semanal total</label><input id="weeklyHours" name="weeklyHours" type="number" min="0.25" step="0.25" value="${trimHours(current.weeklyMinutes)}"><span class="field-hint">Tiempo que consume cada docente asignado.</span></div>
       <div class="form-field"><label for="sessionMinutes">Duración habitual de cada bloque</label><select id="sessionMinutes" name="sessionMinutes">${[15,30,45,60,75,90,120].map(value => `<option value="${value}" ${Number(current.sessionMinutes)===value?'selected':''}>${value} min</option>`).join('')}</select></div>
       <div class="form-field"><label for="requiredStaff">Docentes simultáneos necesarios</label><input id="requiredStaff" name="requiredStaff" type="number" min="1" max="20" value="${Math.max(1, Number(current.requiredStaff) || 1)}"></div>
-      <div class="form-field"><label><input name="movable" type="checkbox" ${current.movable !== false ? 'checked' : ''}> El optimizador puede elegir la franja</label><label><input name="active" type="checkbox" ${current.active !== false ? 'checked' : ''}> Actividad activa</label></div>
+      <div class="form-field"><label><input name="movable" type="checkbox" ${current.movable !== false ? 'checked' : ''}> Puede recolocarse automáticamente</label><label><input name="allowDuringRecess" type="checkbox" ${current.allowDuringRecess === true ? 'checked' : ''}> Puede coincidir con recreo</label><label><input name="active" type="checkbox" ${current.active !== false ? 'checked' : ''}> Actividad activa</label></div>
+
+      <fieldset class="full"><legend>Patrón temporal · días permitidos</legend><div class="activity-check-grid activity-day-grid">${DAYS.map(day => `<label><input type="checkbox" name="allowedDay" value="${day.id}" ${allowedDays.has(day.id)?'checked':''}><span>${escapeHtml(day.label)}</span></label>`).join('')}</div><p class="field-hint">Restricción dura: el generador no utilizará días desmarcados.</p></fieldset>
+      <fieldset class="full"><legend>Patrón temporal · días preferidos</legend><div class="activity-check-grid activity-day-grid">${DAYS.map(day => `<label><input type="checkbox" name="preferredDay" value="${day.id}" ${preferredDays.has(day.id)?'checked':''}><span>${escapeHtml(day.label)}</span></label>`).join('')}</div><p class="field-hint">Preferencia blanda: se intentarán usar antes, pero no bloquean otros días permitidos.</p></fieldset>
+      <div class="form-field"><label for="activityEarliestStart">No empezar antes de</label><input id="activityEarliestStart" name="earliestStart" type="time" value="${escapeHtml(current.timePattern?.earliestStart || '')}"></div>
+      <div class="form-field"><label for="activityLatestEnd">Terminar como máximo a</label><input id="activityLatestEnd" name="latestEnd" type="time" value="${escapeHtml(current.timePattern?.latestEnd || '')}"></div>
+      <div class="form-field"><label for="activityPreferredStart">Preferir desde</label><input id="activityPreferredStart" name="preferredStart" type="time" value="${escapeHtml(current.timePattern?.preferredStart || '')}"></div>
+      <div class="form-field"><label for="activityPreferredEnd">Preferir hasta</label><input id="activityPreferredEnd" name="preferredEnd" type="time" value="${escapeHtml(current.timePattern?.preferredEnd || '')}"></div>
+      <div class="form-field"><label for="activityMaxPerDay">Máximo de bloques al día</label><select id="activityMaxPerDay" name="maxSessionsPerDay">${[1,2,3,4].map(value => `<option value="${value}" ${Number(current.timePattern?.maxSessionsPerDay || 1)===value?'selected':''}>${value}</option>`).join('')}</select></div>
+
       <fieldset class="full"><legend>Docentes ya asignados</legend><div class="activity-check-grid">${teachers.map(teacher => `<label><input type="checkbox" name="assignedTeacherId" value="${teacher.id}" ${assigned.has(teacher.id)?'checked':''}><span>${escapeHtml(teacher.nombre || 'Sin nombre')}<small>${escapeHtml(teacher.especialidad || teacher.tipo || '')}</small></span></label>`).join('') || '<span class="muted">No hay profesorado activo.</span>'}</div><p class="field-hint">Estos docentes consumen ya la carga semanal indicada. En coordinaciones con varias personas, marca a todos los participantes.</p></fieldset>
-      <fieldset class="full"><legend>Docentes candidatos</legend><div class="activity-check-grid">${teachers.map(teacher => `<label><input type="checkbox" name="eligibleTeacherId" value="${teacher.id}" ${eligible.has(teacher.id)?'checked':''}><span>${escapeHtml(teacher.nombre || 'Sin nombre')}<small>${escapeHtml(teacher.especialidad || teacher.tipo || '')}</small></span></label>`).join('') || '<span class="muted">No hay profesorado activo.</span>'}</div><p class="field-hint">Sirve para actividades todavía no adjudicadas. Más adelante el solver podrá elegir entre estos candidatos intentando equilibrar cargas y movimientos.</p></fieldset>
+      <fieldset class="full"><legend>Docentes candidatos</legend><div class="activity-check-grid">${teachers.map(teacher => `<label><input type="checkbox" name="eligibleTeacherId" value="${teacher.id}" ${eligible.has(teacher.id)?'checked':''}><span>${escapeHtml(teacher.nombre || 'Sin nombre')}<small>${escapeHtml(teacher.especialidad || teacher.tipo || '')}</small></span></label>`).join('') || '<span class="muted">No hay profesorado activo.</span>'}</div><p class="field-hint">Sirve para actividades todavía no adjudicadas. El solver puede elegir entre estos candidatos intentando equilibrar cargas y movimientos.</p></fieldset>
       <fieldset class="full"><legend>Clases relacionadas (opcional)</legend><div class="activity-check-grid activity-class-grid">${classes.map(group => `<label><input type="checkbox" name="classGroupId" value="${escapeHtml(group)}" ${selectedClasses.has(group)?'checked':''}><span>${escapeHtml(group)}</span></label>`).join('') || '<span class="muted">Configura primero las clases del centro.</span>'}</div></fieldset>
       <div class="form-field full"><label for="activityNotes">Observaciones</label><textarea id="activityNotes" name="notes">${escapeHtml(current.notes || '')}</textarea></div>
     </div>`,
@@ -89,6 +105,26 @@ export function openCenterActivityForm(activity, { state, onSave }) {
         setModalMessage(message, 'Revisa la duración habitual del bloque.');
         return false;
       }
+      const selectedAllowedDays = data.getAll('allowedDay');
+      if (!selectedAllowedDays.length) {
+        setModalMessage(message, 'Selecciona al menos un día permitido para la actividad.');
+        return false;
+      }
+      let timePattern;
+      try {
+        timePattern = validateTimePattern({
+          maxSessionsPerDay:Number(data.get('maxSessionsPerDay') || 1),
+          allowedDays:selectedAllowedDays,
+          preferredDays:data.getAll('preferredDay'),
+          earliestStart:String(data.get('earliestStart') || ''),
+          latestEnd:String(data.get('latestEnd') || ''),
+          preferredStart:String(data.get('preferredStart') || ''),
+          preferredEnd:String(data.get('preferredEnd') || '')
+        }, name);
+      } catch (error) {
+        setModalMessage(message, error.message || 'Revisa el patrón temporal.');
+        return false;
+      }
       const next = normalizeWeeklyActivities([{
         ...current,
         name,
@@ -100,7 +136,10 @@ export function openCenterActivityForm(activity, { state, onSave }) {
         eligibleTeacherIds:data.getAll('eligibleTeacherId'),
         classGroupIds:data.getAll('classGroupId'),
         movable:data.get('movable') === 'on',
+        allowDuringRecess:data.get('allowDuringRecess') === 'on',
         active:data.get('active') === 'on',
+        timePattern,
+        scheduledSlots:[],
         notes:String(data.get('notes') || '').trim()
       }])[0];
       if (!next) { setModalMessage(message, 'No se pudo normalizar la actividad.'); return false; }
@@ -115,8 +154,11 @@ function activityRow(item, professionalMap) {
   const assignedNames = item.assignedTeacherIds.map(id => professionalMap.get(id)?.nombre || id);
   const eligibleNames = item.eligibleTeacherIds.map(id => professionalMap.get(id)?.nombre || id);
   const staffClass = item.assignedTeacherIds.length < item.requiredStaff ? 'badge-warning' : 'badge-success';
+  const scheduled = item.scheduledSlots?.length
+    ? item.scheduledSlots.map(slot => `${slot.dia.slice(0,3)} ${slot.inicio}–${slot.fin}`).join(' · ')
+    : '—';
   return `<tr class="${item.active === false ? 'is-muted-row' : ''}">
-    <td><strong>${escapeHtml(item.name)}</strong><small>${item.active === false ? 'Inactiva' : item.movable ? 'Franja flexible' : 'Franja por fijar'}</small></td>
+    <td><strong>${escapeHtml(item.name)}</strong><small>${item.active === false ? 'Inactiva' : item.movable ? 'Recolocable' : 'Mantener si ya está fijada'}</small></td>
     <td>${escapeHtml(category)}</td>
     <td>${formatDuration(item.weeklyMinutes)}</td>
     <td>${item.sessionMinutes} min</td>
@@ -124,6 +166,8 @@ function activityRow(item, professionalMap) {
     <td>${assignedNames.length ? assignedNames.map(escapeHtml).join(', ') : '—'}</td>
     <td>${eligibleNames.length ? eligibleNames.map(escapeHtml).join(', ') : '—'}</td>
     <td>${item.classGroupIds.length ? item.classGroupIds.map(escapeHtml).join(', ') : '—'}</td>
+    <td>${escapeHtml(describeTimePattern(item.timePattern))}${item.allowDuringRecess ? '<small>Recreo permitido</small>' : ''}</td>
+    <td>${escapeHtml(scheduled)}</td>
     <td class="table-actions"><button class="button" data-edit-center-activity="${item.id}" type="button">Editar</button><button class="button button-danger" data-delete-center-activity="${item.id}" type="button">Eliminar</button></td>
   </tr>`;
 }
