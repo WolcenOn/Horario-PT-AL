@@ -1,28 +1,51 @@
 import { deriveStudentStatus } from './hours.js';
-import { COURSE_OPTIONS, classesForCourse, normalizeSchoolSettings, schoolStructureConfigured } from './education.js';
+import { COURSE_OPTIONS, classesForCourse, configuredClassGroups, normalizeSchoolSettings, schoolStructureConfigured } from './education.js';
 import { get } from './db.js';
+import { studentServiceKey, studentServices } from './student-services.js';
 import { escapeHtml, fullName, minutesParts, targetFromParts, uid, formatDuration } from './utils.js';
 import { showModal, setModalMessage } from './ui.js';
 
 export function renderStudents(root, { state, hoursMap, conflictStudentIds, onEdit, onDelete }) {
-  const rows = [...state.students].sort((a,b) => fullName(a).localeCompare(fullName(b), 'es')).map(student => {
+  const classes = [...new Set([
+    ...configuredClassGroups(state.schoolSettings),
+    ...state.students.map(student => student.grupoClase).filter(Boolean)
+  ])].sort((a,b) => a.localeCompare(b, 'es', { numeric:true }));
+
+  const rows = [...state.students].sort((a,b) => {
+    const classCompare = String(a.grupoClase || '').localeCompare(String(b.grupoClase || ''), 'es', { numeric:true });
+    return classCompare || fullName(a).localeCompare(fullName(b), 'es');
+  }).map(student => {
     const h = hoursMap.get(student.id) || { ptTarget:0,ptAssigned:0,ptPending:0,alTarget:0,alAssigned:0,alPending:0 };
-    const status = deriveStudentStatus(h, conflictStudentIds.has(student.id));
-    return `<tr data-search-row="${escapeHtml(`${fullName(student)} ${student.curso} ${student.grupoClase} ${status}`.toLowerCase())}">
-      <td class="name-cell"><strong>${escapeHtml(fullName(student))}</strong><small>${escapeHtml(student.grupoClase || '')} · ${escapeHtml(student.tutor || 'Sin tutor')}</small></td>
+    const services = studentServices(student, state.groups);
+    const serviceKey = studentServiceKey(student, state.groups);
+    const status = services.length ? deriveStudentStatus(h, conflictStudentIds.has(student.id)) : 'Sin apoyo';
+    return `<tr data-search-row="${escapeHtml(`${fullName(student)} ${student.curso} ${student.grupoClase} ${status} ${services.join(' ')}`.toLowerCase())}" data-class="${escapeHtml(student.grupoClase || '')}" data-support="${serviceKey}">
+      <td class="name-cell"><strong>${escapeHtml(fullName(student))}</strong><small>${escapeHtml(student.grupoClase || 'Sin clase')} · ${escapeHtml(student.tutor || 'Sin tutor')}</small></td>
       <td>${escapeHtml(student.curso || '—')}</td>
-      <td>${formatDuration(h.ptTarget)}</td><td>${formatDuration(h.ptAssigned)}</td><td>${pendingCell(h.ptPending)}</td>
-      <td>${formatDuration(h.alTarget)}</td><td>${formatDuration(h.alAssigned)}</td><td>${pendingCell(h.alPending)}</td>
-      <td>${statusBadge(status)}</td>
+      <td>${supportBadges(services)}</td>
+      <td>${formatDuration(h.ptTarget)}<small>${formatDuration(h.ptAssigned)} asignado</small></td>
+      <td>${formatDuration(h.alTarget)}<small>${formatDuration(h.alAssigned)} asignado</small></td>
+      <td>${studentStatusBadge(status, h)}</td>
       <td class="table-actions"><button class="button" data-edit="${student.id}" type="button">Editar</button><button class="button button-danger" data-delete="${student.id}" type="button">Eliminar</button></td>
     </tr>`;
   }).join('');
 
-  root.innerHTML = `<div class="toolbar"><div class="toolbar-group"><input id="studentSearch" class="search-input" type="search" placeholder="Buscar alumno, curso o estado…" aria-label="Buscar alumnos"></div></div>
-  <section class="card"><div class="card-header"><div><h2>Seguimiento de alumnos</h2><small>Las horas asignadas se calculan automáticamente desde las sesiones.</small></div><span class="badge badge-neutral">${state.students.length} alumnos</span></div>
-  <div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Curso</th><th>PT objetivo</th><th>PT asignado</th><th>PT pendiente</th><th>AL objetivo</th><th>AL asignado</th><th>AL pendiente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${rows || `<tr><td colspan="10"><div class="empty-state"><strong>No hay alumnos</strong>Utiliza “Nuevo alumno” para comenzar.</div></td></tr>`}</tbody></table></div></section>`;
+  root.innerHTML = `<div class="toolbar student-toolbar">
+    <div class="toolbar-group"><input id="studentSearch" class="search-input" type="search" placeholder="Buscar alumno, clase o estado…" aria-label="Buscar alumnos"></div>
+    <div class="toolbar-group"><label class="sr-only" for="studentClassFilter">Filtrar por clase</label><select id="studentClassFilter"><option value="ALL">Todas las clases</option>${classes.map(group => `<option value="${escapeHtml(group)}">${escapeHtml(group)}</option>`).join('')}</select></div>
+    <div class="toolbar-group"><label class="sr-only" for="studentSupportFilter">Filtrar por apoyo</label><select id="studentSupportFilter"><option value="ALL">Todos los alumnos</option><option value="NONE">Sin PT/AL</option><option value="PT">Solo PT</option><option value="AL">Solo AL</option><option value="PT+AL">PT + AL</option></select></div>
+  </div>
+  <section class="card"><div class="card-header"><div><h2>Alumnado del centro</h2><small>Incluye toda la matrícula. PT y AL son apoyos opcionales sobre los mismos alumnos.</small></div><span class="badge badge-neutral">${state.students.length} alumnos</span></div>
+  <div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Curso</th><th>Apoyos</th><th>PT</th><th>AL</th><th>Seguimiento</th><th>Acciones</th></tr></thead><tbody>${rows || `<tr><td colspan="7"><div class="empty-state"><strong>No hay alumnos</strong>Utiliza “Nuevo alumno” o carga la matrícula desde “Clases y alumnado”.</div></td></tr>`}</tbody></table></div></section>`;
 
-  root.querySelector('#studentSearch')?.addEventListener('input', event => filterRows(root, event.target.value));
+  const applyFilters = () => filterRows(root, {
+    query:root.querySelector('#studentSearch')?.value || '',
+    classGroup:root.querySelector('#studentClassFilter')?.value || 'ALL',
+    support:root.querySelector('#studentSupportFilter')?.value || 'ALL'
+  });
+  root.querySelector('#studentSearch')?.addEventListener('input', applyFilters);
+  root.querySelector('#studentClassFilter')?.addEventListener('change', applyFilters);
+  root.querySelector('#studentSupportFilter')?.addEventListener('change', applyFilters);
   root.onclick = event => {
     const edit = event.target.closest('[data-edit]');
     const del = event.target.closest('[data-delete]');
@@ -31,8 +54,8 @@ export function renderStudents(root, { state, hoursMap, conflictStudentIds, onEd
   };
 }
 
-export async function openStudentForm(student, { onSave }) {
-  const current = student || { activo:true, restricciones:[] };
+export async function openStudentForm(student, { onSave, initialCourse = '', initialClassGroup = '' }) {
+  const current = student || { activo:true, restricciones:[], curso:initialCourse, grupoClase:initialClassGroup };
   const schoolSettings = normalizeSchoolSettings(await get('settings', 'school'));
   const structureReady = schoolStructureConfigured(schoolSettings);
   const pt = minutesParts(current.horasPTObjetivoMin || 0);
@@ -42,11 +65,11 @@ export async function openStudentForm(student, { onSave }) {
     bodyHtml: `<div class="form-grid">
       <div class="form-field"><label for="nombre">Nombre *</label><input id="nombre" name="nombre" required value="${escapeHtml(current.nombre || '')}"></div>
       <div class="form-field"><label for="apellidos">Apellidos *</label><input id="apellidos" name="apellidos" required value="${escapeHtml(current.apellidos || '')}"></div>
-      <div class="form-field"><label for="curso">Curso *</label><select id="curso" name="curso" required>${courseOptionsHtml(current.curso)}</select><span class="field-hint">Selecciona el curso para evitar variantes de escritura y poder aplicar correctamente el recreo de Infantil o Primaria.</span></div>
-      <div class="form-field"><label for="grupoClase">Grupo / clase ordinaria${structureReady ? ' *' : ''}</label><select id="grupoClase" name="grupoClase" ${structureReady ? 'required' : ''}></select><span id="classGroupHint" class="field-hint">${structureReady ? 'Se muestran las clases definidas en la estructura del colegio.' : 'Configura primero las clases del colegio desde “Horarios de aula” para poder seleccionarlas.'}</span></div>
+      <div class="form-field"><label for="curso">Curso *</label><select id="curso" name="curso" required>${courseOptionsHtml(current.curso)}</select><span class="field-hint">El curso y la clase forman parte de la matrícula ordinaria, independientemente de PT/AL.</span></div>
+      <div class="form-field"><label for="grupoClase">Grupo / clase ordinaria${structureReady ? ' *' : ''}</label><select id="grupoClase" name="grupoClase" ${structureReady ? 'required' : ''}></select><span id="classGroupHint" class="field-hint">${structureReady ? 'Se muestran las clases definidas en la estructura del colegio.' : 'Configura primero las clases del colegio para organizar la matrícula.'}</span></div>
       <div class="form-field full"><label for="tutor">Tutor/a</label><input id="tutor" name="tutor" value="${escapeHtml(current.tutor || '')}"></div>
-      <fieldset><legend>Objetivo semanal PT</legend><div class="duration-pair"><div class="form-field"><label for="ptHours">Horas</label><input id="ptHours" name="ptHours" type="number" min="0" max="40" value="${pt.hours}"></div><div class="form-field"><label for="ptMinutes">Minutos</label><input id="ptMinutes" name="ptMinutes" type="number" min="0" max="59" value="${pt.minutes}"></div></div></fieldset>
-      <fieldset><legend>Objetivo semanal AL</legend><div class="duration-pair"><div class="form-field"><label for="alHours">Horas</label><input id="alHours" name="alHours" type="number" min="0" max="40" value="${al.hours}"></div><div class="form-field"><label for="alMinutes">Minutos</label><input id="alMinutes" name="alMinutes" type="number" min="0" max="59" value="${al.minutes}"></div></div></fieldset>
+      <fieldset><legend>Apoyo PT</legend><div class="duration-pair"><div class="form-field"><label for="ptHours">Horas objetivo</label><input id="ptHours" name="ptHours" type="number" min="0" max="40" value="${pt.hours}"></div><div class="form-field"><label for="ptMinutes">Minutos</label><input id="ptMinutes" name="ptMinutes" type="number" min="0" max="59" value="${pt.minutes}"></div></div><p class="field-hint">Déjalo en 0 si el alumno no requiere PT.</p></fieldset>
+      <fieldset><legend>Apoyo AL</legend><div class="duration-pair"><div class="form-field"><label for="alHours">Horas objetivo</label><input id="alHours" name="alHours" type="number" min="0" max="40" value="${al.hours}"></div><div class="form-field"><label for="alMinutes">Minutos</label><input id="alMinutes" name="alMinutes" type="number" min="0" max="59" value="${al.minutes}"></div></div><p class="field-hint">Déjalo en 0 si el alumno no requiere AL. PT y AL pueden coexistir.</p></fieldset>
       <div class="form-field full"><label for="observaciones">Observaciones</label><textarea id="observaciones" name="observaciones">${escapeHtml(current.observaciones || '')}</textarea></div>
       <div class="form-field full"><label><input name="activo" type="checkbox" ${current.activo !== false ? 'checked' : ''}> Alumno activo</label></div>
     </div>`,
@@ -102,9 +125,24 @@ function courseOptionsHtml(currentCourse) {
   return `<option value="" ${current ? '' : 'selected'}>Selecciona un curso…</option>${legacy}${COURSE_OPTIONS.map(option => `<option value="${escapeHtml(option.value)}" ${current === option.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}`;
 }
 
-function filterRows(root, query) {
-  const q = query.trim().toLowerCase();
-  root.querySelectorAll('[data-search-row]').forEach(row => row.hidden = q && !row.dataset.searchRow.includes(q));
+function filterRows(root, { query, classGroup, support }) {
+  const q = String(query || '').trim().toLowerCase();
+  root.querySelectorAll('[data-search-row]').forEach(row => {
+    const searchOk = !q || row.dataset.searchRow.includes(q);
+    const classOk = classGroup === 'ALL' || row.dataset.class === classGroup;
+    const supportOk = support === 'ALL' || row.dataset.support === support;
+    row.hidden = !(searchOk && classOk && supportOk);
+  });
 }
-function pendingCell(value) { return value < 0 ? `<span class="badge badge-warning">+${formatDuration(Math.abs(value))}</span>` : value > 0 ? `<span class="badge badge-warning">${formatDuration(value)}</span>` : `<span class="badge badge-success">0 min</span>`; }
-function statusBadge(status) { const cls = { Completo:'success', Pendiente:'warning', Exceso:'warning', Conflicto:'danger' }[status]; return `<span class="badge badge-${cls}">${status === 'Conflicto' ? '⚠ ' : ''}${status}</span>`; }
+
+function supportBadges(services) {
+  if (!services.length) return '<span class="badge badge-neutral">Sin apoyo</span>';
+  return services.map(service => `<span class="badge badge-${service.toLowerCase()}">${service}</span>`).join(' ');
+}
+
+function studentStatusBadge(status, hours) {
+  if (status === 'Sin apoyo') return '<span class="badge badge-neutral">Ordinario</span>';
+  const cls = { Completo:'success', Pendiente:'warning', Exceso:'warning', Conflicto:'danger' }[status] || 'neutral';
+  const pending = Math.max(0, hours.ptPending || 0) + Math.max(0, hours.alPending || 0);
+  return `<span class="badge badge-${cls}">${status === 'Conflicto' ? '⚠ ' : ''}${status}</span>${pending ? `<small>${formatDuration(pending)} pendiente</small>` : ''}`;
+}
