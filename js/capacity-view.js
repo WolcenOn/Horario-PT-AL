@@ -8,7 +8,8 @@ export function renderCapacityStudy(root, {
   optimizerResult = null,
   onOpenProfessionals,
   onOpenCenterPlanning,
-  onOptimize
+  onOptimize,
+  onApply
 }) {
   const study = buildCapacityStudy(state);
   const coverage = Math.round((study.totals.coverageRatio || 0) * 100);
@@ -82,13 +83,14 @@ export function renderCapacityStudy(root, {
     <section class="card staffing-solver-card">
       <div class="card-header"><div><h2>Propuesta de reparto docente · CP-SAT</h2><small>Decide quién cubre cada grupo/materia y propone tutorías, pero todavía no decide días ni horas. Penaliza especialistas como tutores, fragmentación y movimientos entre grupos.</small></div><span class="badge ${backendReady ? 'badge-success' : 'badge-warning'}">${backendReady ? 'Servidor conectado' : 'GestorEscuela no vinculado'}</span></div>
       <div class="card-body">
-        <div class="capacity-note"><strong>Qué conserva</strong><span>Las tutorías y asignaciones clase–materia que ya hayas fijado se consideran decisiones bloqueadas. Las materias solo pueden ir a docentes marcados como habilitados. En la siguiente iteración del solver también priorizaremos explícitamente la especialidad principal.</span></div>
+        <div class="capacity-note"><strong>Qué conserva y prioriza</strong><span>Las tutorías y asignaciones clase–materia que ya hayas fijado se consideran decisiones bloqueadas. Las materias solo pueden ir a docentes habilitados y, cuando existe una especialidad principal, el solver intenta reservar esa carga para sus especialistas antes de recurrir a otros docentes compatibles.</span></div>
         <div class="button-row">
           <button class="button button-primary" data-optimize-staffing type="button" ${backendReady && study.teachers.length && study.classes.length ? '' : 'disabled'}>${optimizerStatus?.kind === 'pending' ? 'Calculando…' : 'Optimizar reparto docente'}</button>
-          <span class="field-hint">El cálculo es reversible: no guarda ni aplica la propuesta automáticamente.</span>
+          <span class="field-hint">El cálculo es reversible y no modifica tus datos hasta que confirmes “Aplicar reparto”.</span>
         </div>
         ${renderOptimizerStatus(optimizerStatus)}
         ${renderOptimizerResult(optimizerResult, study)}
+        ${optimizerResult?.complete ? `<div class="button-row staffing-apply-row"><button class="button button-primary" data-apply-staffing type="button">✓ Aplicar reparto como base</button><span class="field-hint">Guarda tutorías y asignaciones grupo–materia en los perfiles docentes. No coloca todavía ninguna sesión en el calendario.</span></div>` : ''}
       </div>
     </section>
 
@@ -105,6 +107,7 @@ export function renderCapacityStudy(root, {
   root.querySelectorAll('[data-open-professionals]').forEach(button => button.addEventListener('click', onOpenProfessionals));
   root.querySelector('[data-open-center-planning]')?.addEventListener('click', onOpenCenterPlanning);
   root.querySelectorAll('[data-optimize-staffing]').forEach(button => button.addEventListener('click', onOptimize));
+  root.querySelector('[data-apply-staffing]')?.addEventListener('click', onApply);
   return study;
 }
 
