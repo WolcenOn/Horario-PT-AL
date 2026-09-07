@@ -12,6 +12,17 @@ export function buildCapacityStudy(state, rawSettings = state.centerPlanningSett
     .map(normalizeProfessionalProfile);
   const requirements = buildRequirements(classes, state.schoolSettings, settings, professionals);
   const issues = [];
+  const professionalIds = new Set(professionals.map(item => item.id));
+
+  for (const activity of settings.weeklyActivities.filter(item => item.active !== false)) {
+    const unknown = activity.assignedTeacherIds.filter(id => !professionalIds.has(id));
+    if (unknown.length) {
+      issues.push({ severity:'warning', type:'activity-unknown-teacher', message:`${activity.name}: tiene ${unknown.length} docente(s) asignado(s) que ya no están activos.` });
+    }
+    if (activity.assignedTeacherIds.filter(id => professionalIds.has(id)).length < activity.requiredStaff) {
+      issues.push({ severity:'warning', type:'activity-understaffed', message:`${activity.name}: necesita ${activity.requiredStaff} docente(s) y solo tiene ${activity.assignedTeacherIds.filter(id => professionalIds.has(id)).length} fijado(s).` });
+    }
+  }
 
   for (const requirement of requirements) {
     if (requirement.fixedTeacherIds.length > 1) {
@@ -19,7 +30,7 @@ export function buildCapacityStudy(state, rawSettings = state.centerPlanningSett
     }
   }
 
-  const teacherRows = professionals.map(professional => buildTeacherRow(professional, state, requirements));
+  const teacherRows = professionals.map(professional => buildTeacherRow(professional, state, settings, requirements));
   const teacherById = new Map(teacherRows.map(row => [row.id, row]));
 
   for (const requirement of requirements) {
@@ -33,6 +44,12 @@ export function buildCapacityStudy(state, rawSettings = state.centerPlanningSett
     row.freeMinutes = Math.max(0, row.capacityMinutes - row.nonOrdinaryMinutes - row.fixedOrdinaryMinutes);
     if (row.capacityMinutes - row.nonOrdinaryMinutes - row.fixedOrdinaryMinutes < 0) {
       issues.push({ severity:'error', type:'teacher-over-capacity', message:`${row.name} supera su capacidad semanal con las asignaciones ya fijadas.` });
+    }
+  }
+
+  for (const row of teacherRows) {
+    if (row.capacityMinutes - row.nonOrdinaryMinutes < 0) {
+      issues.push({ severity:'error', type:'teacher-over-capacity-activities', message:`${row.name} supera su capacidad semanal antes de repartir docencia: PT/AL, funciones y actividades suman ${formatMinutes(row.nonOrdinaryMinutes)} para una capacidad de ${formatMinutes(row.capacityMinutes)}.` });
     }
   }
 
@@ -106,13 +123,16 @@ function buildRequirements(classes, schoolSettings, settings, professionals) {
   return result;
 }
 
-function buildTeacherRow(professional, state, requirements) {
+function buildTeacherRow(professional, state, settings, requirements) {
   const availabilityMinutes = weeklyAvailabilityMinutes(professional);
   const configuredCapacity = Math.max(0, Math.round(Number(professional.maxWeeklyMinutes) || 0));
   const capacityMinutes = configuredCapacity || availabilityMinutes;
   const responsibilityMinutes = (professional.responsibilities || []).reduce((sum, item) => sum + Math.max(0, Number(item.weeklyMinutes) || 0), 0);
+  const activityMinutes = settings.weeklyActivities
+    .filter(activity => activity.active !== false && activity.assignedTeacherIds.includes(professional.id))
+    .reduce((sum, activity) => sum + activity.weeklyMinutes, 0);
   const ptalMinutes = directSupportMinutes(professional.id, state);
-  const nonOrdinaryMinutes = responsibilityMinutes + ptalMinutes;
+  const nonOrdinaryMinutes = responsibilityMinutes + activityMinutes + ptalMinutes;
   const baseFree = Math.max(0, capacityMinutes - nonOrdinaryMinutes);
   const explicitlyAllowed = new Set((professional.allowedSubjects || []).map(normalize));
   const fixedSubjects = new Set((professional.teachingAssignments || []).map(item => normalize(item.materia)));
@@ -134,6 +154,7 @@ function buildTeacherRow(professional, state, requirements) {
     capacityMinutes,
     availabilityMinutes,
     responsibilityMinutes,
+    activityMinutes,
     ptalMinutes,
     nonOrdinaryMinutes,
     fixedOrdinaryMinutes:0,
