@@ -17,7 +17,7 @@ export function renderCapacityStudy(root, {
       <div>
         <p class="eyebrow">Fase 1 · antes de construir el horario</p>
         <h2>Estudio preliminar de plantilla</h2>
-        <p>Comprueba si la carga curricular puede cubrirse con la plantilla actual, qué materias dependen de pocos docentes y si faltan candidatos naturales para las tutorías.</p>
+        <p>Comprueba si la carga curricular puede cubrirse con la plantilla actual, qué materias dependen de pocos docentes, cuánta carga puede asumir realmente cada especialidad y si faltan candidatos naturales para las tutorías.</p>
       </div>
       <span class="capacity-state ${study.ready ? 'is-ok' : 'is-warning'}">${study.ready ? 'Base viable' : 'Revisar configuración'}</span>
     </section>
@@ -34,22 +34,24 @@ export function renderCapacityStudy(root, {
     ${renderIssues(study.issues)}
 
     <section class="card">
-      <div class="card-header"><div><h2>Capacidad por materia</h2><small>La capacidad potencial considera únicamente docentes habilitados para cada materia. Un mismo margen puede estar compartido entre varias materias; el reparto definitivo lo resuelve CP-SAT.</small></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Materia</th><th>Necesidad</th><th>Docentes habilitados</th><th>Capacidad potencial</th><th>Margen</th><th>Diagnóstico</th></tr></thead><tbody>
+      <div class="card-header"><div><h2>Capacidad por materia</h2><small>Se distingue entre docentes simplemente habilitados y especialistas principales. El margen especialista ayuda a detectar cuándo habrá que usar capacidad generalista o revisar tutorías y cargas.</small></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Materia</th><th>Necesidad</th><th>Especialistas</th><th>Capacidad especialista</th><th>Docentes habilitados</th><th>Capacidad total</th><th>Margen total</th><th>Diagnóstico</th></tr></thead><tbody>
         ${study.subjects.map(row => `<tr>
           <td><strong>${escapeHtml(row.subject)}</strong></td>
           <td>${formatMinutes(row.requiredMinutes)}</td>
+          <td>${row.specialistTeachers}<small class="capacity-small">${row.specialistTeacherNames.map(escapeHtml).join(', ') || '—'}</small></td>
+          <td class="${row.specialistTeachers && row.specialistMarginMinutes < 0 ? 'capacity-negative' : ''}">${row.specialistTeachers ? `${formatMinutes(row.specialistCapacityMinutes)}<small class="capacity-small">${row.specialistMarginMinutes < 0 ? `faltan ${formatMinutes(Math.abs(row.specialistMarginMinutes))}` : `margen +${formatMinutes(row.specialistMarginMinutes)}`}</small>` : '—'}</td>
           <td>${row.eligibleTeachers}<small class="capacity-small">${row.eligibleTeacherNames.map(escapeHtml).join(', ') || '—'}</small></td>
           <td>${formatMinutes(row.eligibleCapacityMinutes)}</td>
           <td class="${row.marginMinutes < 0 ? 'capacity-negative' : ''}">${row.marginMinutes < 0 ? '−' : '+'}${formatMinutes(Math.abs(row.marginMinutes))}</td>
           <td>${statusBadge(row.status, row.dependency)}</td>
-        </tr>`).join('') || `<tr><td colspan="6"><div class="empty-state"><strong>Sin currículo</strong>Configura primero las horas semanales en Plan del centro.</div></td></tr>`}
+        </tr>`).join('') || `<tr><td colspan="8"><div class="empty-state"><strong>Sin currículo</strong>Configura primero las horas semanales en Plan del centro.</div></td></tr>`}
       </tbody></table></div>
     </section>
 
     <section class="card">
       <div class="card-header"><div><h2>Capacidad por docente</h2><small>Capacidad semanal menos PT/AL directo y funciones configuradas. Las asignaciones clase–materia ya fijadas también descuentan carga.</small></div><button class="button" data-open-professionals type="button">Configurar profesorado</button></div>
-      <div class="table-wrap"><table><thead><tr><th>Docente</th><th>Perfil</th><th>Tutoría</th><th>Capacidad</th><th>PT/AL + funciones</th><th>Docencia fijada</th><th>Libre para reparto</th><th>Materias permitidas</th></tr></thead><tbody>
+      <div class="table-wrap"><table><thead><tr><th>Docente</th><th>Perfil</th><th>Tutoría</th><th>Capacidad</th><th>PT/AL + funciones</th><th>Docencia fijada</th><th>Libre para reparto</th><th>Especialidad principal</th><th>Materias permitidas</th></tr></thead><tbody>
         ${study.teachers.map(row => `<tr>
           <td><strong>${escapeHtml(row.name)}</strong><small class="capacity-small">${escapeHtml(row.specialty || 'Sin especialidad indicada')}</small></td>
           <td>${roleLabel(row.teacherRole)}</td>
@@ -58,8 +60,9 @@ export function renderCapacityStudy(root, {
           <td>${formatMinutes(row.nonOrdinaryMinutes)}</td>
           <td>${formatMinutes(row.fixedOrdinaryMinutes)}</td>
           <td><strong>${formatMinutes(row.freeMinutes)}</strong></td>
+          <td>${row.specialtySubjects.length}<small class="capacity-small">${row.specialtySubjects.slice(0,4).map(escapeHtml).join(', ') || '—'}${row.specialtySubjects.length > 4 ? '…' : ''}</small></td>
           <td>${row.allowedSubjects.length}<small class="capacity-small">${row.allowedSubjects.slice(0,4).map(escapeHtml).join(', ')}${row.allowedSubjects.length > 4 ? '…' : ''}</small></td>
-        </tr>`).join('') || `<tr><td colspan="8"><div class="empty-state"><strong>Sin docentes activos</strong>Añade la plantilla del centro para comenzar.</div></td></tr>`}
+        </tr>`).join('') || `<tr><td colspan="9"><div class="empty-state"><strong>Sin docentes activos</strong>Añade la plantilla del centro para comenzar.</div></td></tr>`}
       </tbody></table></div>
     </section>
 
@@ -73,13 +76,13 @@ export function renderCapacityStudy(root, {
         ${metric('Especialistas necesarios', study.tutors.specialistTutorsNeeded, study.tutors.specialistTutorsNeeded ? 'is-warning' : 'is-ok')}
       </div>
       ${study.tutors.uncoveredClasses.length ? `<div class="capacity-note"><strong>Grupos sin tutor fijado</strong><span>${study.tutors.uncoveredClasses.map(escapeHtml).join(', ')}</span></div>` : ''}
-      ${study.tutors.specialistCandidates.length ? `<div class="capacity-note"><strong>Especialistas candidatos si hicieran falta</strong><span>${study.tutors.specialistCandidates.slice(0,6).map(item => `${escapeHtml(item.name)} · ${formatMinutes(item.freeMinutes)} libres`).join(' · ')}</span></div>` : ''}
+      ${study.tutors.specialistCandidates.length ? `<div class="capacity-note"><strong>Especialistas candidatos si hicieran falta</strong><span>${study.tutors.specialistCandidates.slice(0,6).map(item => `${escapeHtml(item.name)} · ${formatMinutes(item.freeMinutes)} libres${item.specialtySubjects?.length ? ` · ${item.specialtySubjects.map(escapeHtml).join(', ')}` : ''}`).join(' · ')}</span></div>` : ''}
     </section>
 
     <section class="card staffing-solver-card">
       <div class="card-header"><div><h2>Propuesta de reparto docente · CP-SAT</h2><small>Decide quién cubre cada grupo/materia y propone tutorías, pero todavía no decide días ni horas. Penaliza especialistas como tutores, fragmentación y movimientos entre grupos.</small></div><span class="badge ${backendReady ? 'badge-success' : 'badge-warning'}">${backendReady ? 'Servidor conectado' : 'GestorEscuela no vinculado'}</span></div>
       <div class="card-body">
-        <div class="capacity-note"><strong>Qué conserva</strong><span>Las tutorías y asignaciones clase–materia que ya hayas fijado se consideran decisiones bloqueadas. Las materias solo pueden ir a docentes marcados como habilitados.</span></div>
+        <div class="capacity-note"><strong>Qué conserva</strong><span>Las tutorías y asignaciones clase–materia que ya hayas fijado se consideran decisiones bloqueadas. Las materias solo pueden ir a docentes marcados como habilitados. En la siguiente iteración del solver también priorizaremos explícitamente la especialidad principal.</span></div>
         <div class="button-row">
           <button class="button button-primary" data-optimize-staffing type="button" ${backendReady && study.teachers.length && study.classes.length ? '' : 'disabled'}>${optimizerStatus?.kind === 'pending' ? 'Calculando…' : 'Optimizar reparto docente'}</button>
           <span class="field-hint">El cálculo es reversible: no guarda ni aplica la propuesta automáticamente.</span>
