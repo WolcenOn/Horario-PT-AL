@@ -6,10 +6,13 @@ import { setModalMessage, showModal } from './ui.js';
 
 export function renderClassRosters(root, {
   state,
+  backendReady = false,
+  syncStatus = null,
   onConfigureStructure,
   onAddStudent,
   onEditStudent,
-  onBulkCreate
+  onBulkCreate,
+  onSyncRoster
 }) {
   const classes = configuredClassGroups(state.schoolSettings);
   const activeStudents = (state.students || []).filter(student => student.activo !== false);
@@ -65,8 +68,9 @@ export function renderClassRosters(root, {
   root.innerHTML = `<div class="class-rosters">
     <section class="card roster-hero">
       <div><p class="eyebrow">Matrícula del centro</p><h2>Clases y alumnado</h2><p>La clase ordinaria contiene a todo el alumnado. PT y AL son apoyos opcionales sobre esos mismos alumnos, por lo que un alumno puede no tener apoyo, recibir PT, AL o ambos.</p></div>
-      <button class="button" data-configure-classes type="button">Configurar estructura</button>
+      <div class="roster-hero-actions"><span class="badge ${backendReady ? 'badge-success' : 'badge-neutral'}">${backendReady ? 'GestorEscuela conectado' : 'Solo local'}</span><button class="button" data-sync-roster type="button" ${backendReady && activeStudents.length ? '' : 'disabled'}>${syncStatus?.kind === 'pending' ? 'Sincronizando…' : '☁ Sincronizar matrícula'}</button><button class="button" data-configure-classes type="button">Configurar estructura</button></div>
     </section>
+    ${renderSyncStatus(syncStatus)}
     <section class="capacity-metrics roster-metrics">
       ${metric('Clases', classes.length)}
       ${metric('Alumnos activos', activeStudents.length)}
@@ -79,6 +83,7 @@ export function renderClassRosters(root, {
   </div>`;
 
   root.querySelector('[data-configure-classes]')?.addEventListener('click', onConfigureStructure);
+  root.querySelector('[data-sync-roster]')?.addEventListener('click', onSyncRoster);
   root.querySelectorAll('[data-add-to-class]').forEach(button => button.addEventListener('click', () => onAddStudent(button.dataset.addToClass)));
   root.querySelectorAll('[data-bulk-to-class]').forEach(button => button.addEventListener('click', () => openBulkStudentForm(button.dataset.bulkToClass, state, onBulkCreate)));
   root.querySelectorAll('[data-edit-roster-student]').forEach(button => button.addEventListener('click', () => onEditStudent(button.dataset.editRosterStudent)));
@@ -176,6 +181,12 @@ function studentRow(student, groups) {
     <div class="roster-student-services">${services.length ? services.map(service => `<span class="badge badge-${service.toLowerCase()}">${service}</span>`).join('') : '<span class="badge badge-neutral">Sin apoyo</span>'}</div>
     <button class="button button-ghost" data-edit-roster-student="${student.id}" type="button">Editar</button>
   </div>`;
+}
+
+function renderSyncStatus(status) {
+  if (!status) return '';
+  const className = status.kind === 'ok' ? 'is-ok' : status.kind === 'error' ? 'is-error' : 'is-warning';
+  return `<section class="capacity-banner ${className}"><strong>${status.kind === 'pending' ? 'Sincronizando matrícula' : status.kind === 'ok' ? '✓ Matrícula sincronizada' : '⚠ No se pudo sincronizar'}</strong><span>${escapeHtml(status.message || '')}</span></section>`;
 }
 
 function metric(label, value) {
