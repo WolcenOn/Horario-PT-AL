@@ -12,6 +12,7 @@ export function buildStaffingSolverPayload(state) {
         role:teacher.teacherRole,
         available_minutes:Math.max(0, teacher.capacityMinutes - teacher.nonOrdinaryMinutes),
         allowed_subjects:[...teacher.allowedSubjects],
+        specialty_subjects:[...teacher.specialtySubjects],
         tutor_preference:teacher.tutorPreference,
         fixed_tutor_group:teacher.tutorGroup || null,
         minimum_tutor_minutes:teacher.minimumTutorMinutes || 0
