@@ -1,7 +1,7 @@
 import { backendConfigured, loadBackendSettings, solveStaffingAllocation } from './backend-service.js';
 import { renderCapacityStudy } from './capacity-view.js';
-import { loadState, saveProfessional } from './repository.js';
-import { normalizeProfessionalProfile } from './center-planning.js';
+import { loadState, saveCenterPlanningSettings, saveProfessional } from './repository.js';
+import { normalizeCenterPlanningSettings, normalizeProfessionalProfile } from './center-planning.js';
 import { buildStaffingSolverPayload } from './staffing-adapter.js';
 import { showToast } from './ui.js';
 
@@ -49,14 +49,16 @@ async function openCapacityStudy() {
         showToast('Configura primero la plantilla y la estructura del centro.', 'error');
         return;
       }
-      optimizerStatus = { kind:'pending', message:'Calculando reparto docente con CP-SAT…' };
+      optimizerStatus = { kind:'pending', message:'Calculando docencia, tutorías y actividades con CP-SAT…' };
       optimizerResult = null;
       render();
       try {
         optimizerResult = await solveStaffingAllocation(settings, staffing.payload);
         optimizerStatus = {
           kind:optimizerResult.complete ? 'ok' : 'warning',
-          message:optimizerResult.complete ? 'Se ha encontrado un reparto completo.' : 'Se ha encontrado una propuesta parcial; quedan necesidades sin cubrir.'
+          message:optimizerResult.complete
+            ? 'Se ha encontrado un reparto completo de docencia, tutorías y actividades.'
+            : 'Se ha encontrado una propuesta parcial; quedan necesidades sin cubrir.'
         };
         showToast(optimizerStatus.message);
       } catch (error) {
@@ -70,14 +72,17 @@ async function openCapacityStudy() {
         showToast('Solo se puede aplicar una propuesta completa.', 'error');
         return;
       }
-      const accepted = confirm('Se guardará este reparto como nueva base de planificación: las tutorías y materias propuestas quedarán fijadas en los perfiles docentes. No se modifica todavía ninguna hora del calendario. ¿Aplicar?');
+      const accepted = confirm('Se guardará este reparto como nueva base de planificación: tutorías, materias y actividades semanales propuestas quedarán fijadas. No se modifica todavía ninguna hora del calendario. ¿Aplicar?');
       if (!accepted) return;
 
       const requirementKeys = new Set(staffing.study.requirements.map(item => pairKey(item.grupoClase, item.subject)));
       const assignmentsByTeacher = new Map(state.professionals.map(item => [item.id, []]));
       for (const assignment of optimizerResult.assignments || []) {
         if (!assignmentsByTeacher.has(assignment.teacher_id)) assignmentsByTeacher.set(assignment.teacher_id, []);
-        assignmentsByTeacher.get(assignment.teacher_id).push({ grupoClase:assignment.group_id, materia:assignment.subject });
+        assignmentsByTeacher.get(assignment.teacher_id).push({
+          grupoClase:assignment.group_id,
+          materia:assignment.subject
+        });
       }
       const tutorByTeacher = new Map((optimizerResult.tutors || []).map(item => [item.teacher_id, item.group_id]));
       const plannedGroups = new Set(staffing.study.classes);
@@ -95,9 +100,23 @@ async function openCapacityStudy() {
         }));
       }
 
+      const centerPlanning = normalizeCenterPlanningSettings(state.centerPlanningSettings);
+      const assignedByActivity = new Map();
+      for (const assignment of optimizerResult.activity_assignments || []) {
+        if (!assignedByActivity.has(assignment.activity_id)) assignedByActivity.set(assignment.activity_id, []);
+        assignedByActivity.get(assignment.activity_id).push(assignment.teacher_id);
+      }
+      const solvedActivityIds = new Set((staffing.payload.activities || []).map(item => item.id));
+      await saveCenterPlanningSettings({
+        ...centerPlanning,
+        weeklyActivities:centerPlanning.weeklyActivities.map(activity => solvedActivityIds.has(activity.id)
+          ? { ...activity, assignedTeacherIds:assignedByActivity.get(activity.id) || [] }
+          : activity)
+      });
+
       optimizerStatus = null;
       optimizerResult = null;
-      showToast('Reparto docente aplicado. Estas decisiones serán la base bloqueada de los siguientes cálculos.');
+      showToast('Reparto aplicado. Docencia, tutorías y actividades quedan como base de los siguientes cálculos.');
       await openCapacityStudy();
     }
   });
