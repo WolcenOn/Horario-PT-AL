@@ -303,7 +303,7 @@ function directSupportMinutes(professionalId, state) {
   return (state.sessions || []).reduce((sum, session) => {
     const group = groups.get(session.groupId);
     const owner = session.professionalId || group?.professionalId;
-    if (owner !== professionalId || !group || !Array.isArray(group.studentIds) || !group.studentIds.length) return sum;
+    if (owner !== professionalId) return sum;
     const start = timeToMinutes(session.inicio);
     const end = timeToMinutes(session.fin);
     return Number.isFinite(start) && Number.isFinite(end) && end > start ? sum + end - start : sum;
