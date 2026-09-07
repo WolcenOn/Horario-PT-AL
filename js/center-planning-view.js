@@ -1,6 +1,7 @@
 import { COURSE_OPTIONS, configuredClassGroups, schoolStructureConfigured } from './education.js';
 import { curriculumCoverage, curriculumForCourse, curriculumSubjectsForCourse, normalizeCenterPlanningSettings, normalizeProfessionalProfile, PLANNING_MODES, RESPONSIBILITY_TYPES } from './center-planning.js';
 import { buildGlobalReadiness } from './global-scheduler.js';
+import { saveCenterPlanningSettings } from './repository.js';
 import { escapeHtml, formatDuration } from './utils.js';
 
 export function renderCenterPlanning(root, { state, centerPlanningSettings, globalProposal, onSave, onNavigate, onGenerateGlobal, onApplyGlobal, onDiscardGlobal }) {
@@ -40,18 +41,19 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
       <div class="card-body form-grid">
         <div class="form-field"><label for="globalStart">Inicio de jornada</label><input id="globalStart" name="globalStart" type="time" value="${escapeHtml(settings.generation.start)}"></div>
         <div class="form-field"><label for="globalEnd">Fin de jornada</label><input id="globalEnd" name="globalEnd" type="time" value="${escapeHtml(settings.generation.end)}"></div>
-        <div class="form-field"><label for="lessonMinutes">Duración habitual de tramo</label><select id="lessonMinutes" name="lessonMinutes">${[30,45,60,75,90].map(value => `<option value="${value}" ${settings.generation.lessonMinutes === value ? 'selected' : ''}>${value} minutos</option>`).join('')}</select><span class="field-hint">Si una carga semanal deja un resto menor, el último bloque tendrá esa duración, siempre en múltiplos de 15 minutos.</span></div>
-        <div class="form-field"><label for="maxSameSubjectPerDay">Máximo de la misma materia al día</label><select id="maxSameSubjectPerDay" name="maxSameSubjectPerDay">${[1,2,3,4].map(value => `<option value="${value}" ${settings.generation.maxSameSubjectPerDay === value ? 'selected' : ''}>${value}</option>`).join('')}</select><span class="field-hint">El generador intenta repartir las materias a lo largo de la semana.</span></div>
+        <div class="form-field"><label for="lessonMinutes">Duración habitual de tramo</label><select id="lessonMinutes" name="lessonMinutes">${[30,45,60,75,90].map(value => `<option value="${value}" ${settings.generation.lessonMinutes === value ? 'selected' : ''}>${value} minutos</option>`).join('')}</select><span class="field-hint">Las materias pueden sobrescribir esta duración desde Patrones temporales. Si queda un resto menor, el último bloque conserva ese resto en múltiplos de 15 min.</span></div>
+        <div class="form-field"><label for="maxSameSubjectPerDay">Máximo de la misma materia al día</label><select id="maxSameSubjectPerDay" name="maxSameSubjectPerDay">${[1,2,3,4].map(value => `<option value="${value}" ${settings.generation.maxSameSubjectPerDay === value ? 'selected' : ''}>${value}</option>`).join('')}</select><span class="field-hint">También puede personalizarse por materia desde Patrones temporales.</span></div>
       </div>
     </section>` : ''}
 
     ${!structureReady ? `<section class="card warning-box center-planning-warning"><strong>Falta la estructura del colegio.</strong><span>Configura primero las líneas y clases para poder medir la cobertura real del currículo.</span><button class="button" type="button" data-go="classSchedules">Configurar clases</button></section>` : ''}
 
     <section class="card">
-      <div class="card-header"><div><h2>Carga semanal por curso y asignatura</h2><small>Introduce horas semanales objetivo. Internamente se guardan como minutos para poder comparar y generar el horario.</small></div><span class="badge badge-neutral">${curriculumCourses.length} cursos</span></div>
+      <div class="card-header"><div><h2>Carga semanal por curso y asignatura</h2><small>Introduce horas semanales objetivo. Los patrones de distribución se configuran después en “Patrones temporales”.</small></div><span class="badge badge-neutral">${curriculumCourses.length} cursos</span></div>
       <div class="curriculum-course-list">
         ${curriculumCourses.map(course => renderCourseCurriculum(course, settings)).join('')}
       </div>
+      <div class="button-row" style="padding:0 16px 16px"><button class="button" type="button" data-go="temporalPatterns">🧭 Configurar patrones temporales</button><button class="button" type="button" data-go="centerActivities">🧩 Actividades del centro</button></div>
     </section>
 
     <section class="card">
@@ -70,13 +72,14 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
 
     <section class="card global-proposal-card">
       <div class="card-header">
-        <div><h2>Propuesta automática global</h2><small>Construye desde cero los horarios ordinarios usando currículo, profesorado, jornada, recreos, centros externos y las reglas PT/AL.</small></div>
+        <div><h2>Propuesta automática global</h2><small>Construye conjuntamente docencia ordinaria y actividades del centro usando currículo, participantes, patrones temporales, jornada, recreos, centros externos y reglas PT/AL.</small></div>
         <span class="badge ${readiness.ready ? 'badge-success' : 'badge-warning'}">${readiness.ready ? 'Preparado' : `${readiness.items.filter(item => !item.ok).length} pendiente(s)`}</span>
       </div>
       <div class="global-readiness-list">${readiness.items.map(renderReadinessItem).join('')}</div>
-      <div class="global-generator-note"><strong>Qué hace esta primera versión</strong><span>Genera el horario de las clases con un único docente por materia. Las coordinaciones, planes y programas cuentan para la carga semanal del profesor, pero todavía no se colocan como bloques horarios porque aún no tienen franjas o participantes definidos.</span></div>
+      <div class="global-generator-note"><strong>Qué coloca ahora</strong><span>Además de las materias, el generador coloca Biblioteca, Lectura, coordinaciones y demás actividades activas. Si una actividad tiene varios docentes asignados, reserva una única franja común para todos. Si está asociada a clases, también evita solaparla con su docencia.</span></div>
       <div class="button-row global-generator-actions">
         <button class="button button-primary" type="button" data-generate-global ${readiness.ready ? '' : 'disabled'}>⚙ Generar propuesta global</button>
+        <button class="button" type="button" data-go="temporalPatterns">Patrones temporales</button>
         <button class="button" type="button" data-go="professionals">Revisar profesorado</button>
         <button class="button" type="button" data-go="classSchedules">Ver horario actual</button>
       </div>
@@ -94,7 +97,13 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
     if (event.currentTarget.disabled) return;
     await onGenerateGlobal(readSettings(root.querySelector('#centerPlanningForm'), settings));
   });
-  root.querySelector('[data-apply-global]')?.addEventListener('click', () => onApplyGlobal());
+  const applyButton = root.querySelector('[data-apply-global]');
+  applyButton?.addEventListener('click', async () => {
+    await onApplyGlobal();
+    if (!applyButton.isConnected && globalProposal?.ok) {
+      await persistGeneratedActivitySlots(settings, globalProposal.activitySchedules || []);
+    }
+  });
   root.querySelector('[data-discard-global]')?.addEventListener('click', () => onDiscardGlobal());
   root.querySelector('#centerPlanningForm')?.addEventListener('submit', async event => {
     event.preventDefault();
@@ -150,16 +159,18 @@ function renderGlobalProposal(proposal) {
   if (!proposal) return '<div class="global-proposal-empty">Todavía no se ha calculado ninguna propuesta global.</div>';
   if (!proposal.ok) {
     const unresolved = proposal.unresolved || [];
-    return `<div class="global-proposal-result is-error"><strong>No se ha encontrado una propuesta completa</strong><span>${unresolved.length ? `${unresolved.length} elemento(s) no han podido colocarse.` : 'Revisa los requisitos pendientes antes de generar.'}</span>${unresolved.length ? `<div class="global-unresolved-list">${unresolved.slice(0,12).map(item => `<span>${escapeHtml(item.task ? `${item.task.grupoClase} · ${item.task.materia} (${item.task.duration} min): ${item.reason}` : item.reason || item.conflict?.message || 'Sin hueco')}</span>`).join('')}${unresolved.length > 12 ? `<span>… y ${unresolved.length - 12} más</span>` : ''}</div>` : ''}<div class="button-row"><button class="button" type="button" data-discard-global>Descartar resultado</button></div></div>`;
+    return `<div class="global-proposal-result is-error"><strong>No se ha encontrado una propuesta completa</strong><span>${unresolved.length ? `${unresolved.length} elemento(s) no han podido colocarse.` : 'Revisa los requisitos pendientes antes de generar.'}</span>${unresolved.length ? `<div class="global-unresolved-list">${unresolved.slice(0,12).map(item => `<span>${escapeHtml(item.task ? `${taskLabel(item.task)} (${item.task.duration} min): ${item.reason}` : item.reason || item.conflict?.message || 'Sin hueco')}</span>`).join('')}${unresolved.length > 12 ? `<span>… y ${unresolved.length - 12} más</span>` : ''}</div>` : ''}<div class="button-row"><button class="button" type="button" data-discard-global>Descartar resultado</button></div></div>`;
   }
 
   const summary = summarizeGenerated(proposal.classSchedules || []);
+  const activities = proposal.activitySchedules || [];
   return `<div class="global-proposal-result is-success">
     <div class="global-proposal-stats">
-      <span><b>${proposal.stats.classes}</b> clases</span><span><b>${proposal.stats.subjects}</b> clase/asignatura</span><span><b>${proposal.stats.blocks}</b> bloques</span><span><b>${formatDuration(proposal.stats.minutes)}</b> lectivos</span><span><b>${proposal.stats.ptalAligned}</b> bloques coinciden con PT/AL</span>
+      <span><b>${proposal.stats.classes}</b> clases</span><span><b>${proposal.stats.subjects}</b> clase/asignatura</span><span><b>${proposal.stats.blocks}</b> bloques lectivos</span><span><b>${formatDuration(proposal.stats.minutes)}</b> docencia</span><span><b>${proposal.stats.activities || 0}</b> actividades</span><span><b>${proposal.stats.activityBlocks || 0}</b> bloques de actividad</span><span><b>${proposal.stats.ptalAligned}</b> bloques coinciden con PT/AL</span>
     </div>
-    <div class="global-proposal-warning"><strong>Vista previa</strong><span>Aplicar sustituirá los horarios ordinarios actuales de las clases participantes por esta propuesta. Las sesiones PT/AL no se modifican.</span></div>
-    <div class="table-wrap"><table><thead><tr><th>Clase</th><th>Asignatura</th><th>Propuesta semanal</th><th>Docente</th></tr></thead><tbody>${summary.slice(0,80).map(row => `<tr><td><strong>${escapeHtml(row.grupoClase)}</strong></td><td>${escapeHtml(row.materia)}</td><td>${row.slots.map(slot => `<span class="weekly-summary-slot"><b>${escapeHtml(slot.dia.slice(0,3))}</b> ${escapeHtml(slot.inicio)}–${escapeHtml(slot.fin)}</span>`).join(' ')}</td><td>${escapeHtml(row.docente || '—')}</td></tr>`).join('')}</tbody></table></div>
+    <div class="global-proposal-warning"><strong>Vista previa conjunta</strong><span>Aplicar sustituirá los horarios ordinarios de las clases participantes y guardará las franjas propuestas de las actividades. Las sesiones PT/AL no se modifican.</span></div>
+    <details open><summary><strong>Docencia ordinaria</strong></summary><div class="table-wrap"><table><thead><tr><th>Clase</th><th>Asignatura</th><th>Propuesta semanal</th><th>Docente</th></tr></thead><tbody>${summary.slice(0,80).map(row => `<tr><td><strong>${escapeHtml(row.grupoClase)}</strong></td><td>${escapeHtml(row.materia)}</td><td>${row.slots.map(slot => `<span class="weekly-summary-slot"><b>${escapeHtml(slot.dia.slice(0,3))}</b> ${escapeHtml(slot.inicio)}–${escapeHtml(slot.fin)}</span>`).join(' ')}</td><td>${escapeHtml(row.docente || '—')}</td></tr>`).join('')}</tbody></table></div></details>
+    <details ${activities.length ? 'open' : ''}><summary><strong>Actividades del centro · ${activities.length} bloque(s)</strong></summary><div class="table-wrap"><table><thead><tr><th>Actividad</th><th>Día</th><th>Hora</th><th>Docentes simultáneos</th><th>Clases relacionadas</th></tr></thead><tbody>${activities.map(entry => `<tr><td><strong>${escapeHtml(entry.activityName)}</strong></td><td>${escapeHtml(entry.dia)}</td><td>${escapeHtml(entry.inicio)}–${escapeHtml(entry.fin)}</td><td>${(entry.teacherNames || []).map(escapeHtml).join(', ') || '—'}</td><td>${(entry.classGroupIds || []).map(escapeHtml).join(', ') || '—'}</td></tr>`).join('') || '<tr><td colspan="5">No hay actividades activas que colocar.</td></tr>'}</tbody></table></div></details>
     <div class="button-row global-proposal-buttons"><button class="button button-primary" type="button" data-apply-global>Aplicar propuesta global</button><button class="button" type="button" data-discard-global>Descartar</button></div>
   </div>`;
 }
@@ -207,6 +218,27 @@ function readCurriculumInputs(form) {
     curriculum[course][subject] = Math.round(hours * 60);
   });
   return curriculum;
+}
+
+async function persistGeneratedActivitySlots(settings, schedules) {
+  const byActivity = new Map();
+  for (const entry of schedules) {
+    if (!byActivity.has(entry.activityId)) byActivity.set(entry.activityId, []);
+    byActivity.get(entry.activityId).push({
+      dia:entry.dia,
+      inicio:entry.inicio,
+      fin:entry.fin,
+      teacherIds:[...(entry.teacherIds || [])]
+    });
+  }
+  const weeklyActivities = settings.weeklyActivities.map(activity => activity.active === false
+    ? activity
+    : { ...activity, scheduledSlots:byActivity.get(activity.id) || [] });
+  await saveCenterPlanningSettings({ ...settings, weeklyActivities });
+}
+
+function taskLabel(task) {
+  return task.kind === 'activity' ? `Actividad · ${task.activityName}` : `${task.grupoClase} · ${task.materia}`;
 }
 
 function formatDifference(minutes) {
