@@ -47,18 +47,16 @@ export async function importShareFile(file) {
   } catch {
     throw new Error('El archivo no contiene un JSON válido.');
   }
+  return applySharePackage(payload);
+}
+
+export async function applySharePackage(payload) {
   const data = validateSharePackage(payload);
   await replaceCoreData(data);
   await put('settings', data.schoolSettings);
   await put('settings', data.automationSettings);
   await put('settings', data.centerPlanningSettings);
-  return {
-    students: data.students.length,
-    professionals: data.professionals.length,
-    groups: data.groups.length,
-    sessions: data.sessions.length,
-    classSchedules: data.classSchedules.length
-  };
+  return shareCounts(data);
 }
 
 export function validateSharePackage(payload) {
@@ -143,6 +141,16 @@ export function validateSharePackage(payload) {
     schoolSettings: structuredClone(data.schoolSettings),
     automationSettings: structuredClone(data.automationSettings),
     centerPlanningSettings: structuredClone(data.centerPlanningSettings)
+  };
+}
+
+function shareCounts(data) {
+  return {
+    students:data.students.length,
+    professionals:data.professionals.length,
+    groups:data.groups.length,
+    sessions:data.sessions.length,
+    classSchedules:data.classSchedules.length
   };
 }
 
