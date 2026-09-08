@@ -1,4 +1,15 @@
-import { bootstrapBackendConnection, checkBackendHealth, loadBackendSettings, pushAcademicConfiguration, saveBackendSettings } from './backend-service.js';
+import {
+  backendConfigured,
+  bootstrapBackendConnection,
+  checkBackendHealth,
+  createAcademicYear,
+  createPlanningScenario,
+  listAcademicYears,
+  listPlanningScenarios,
+  loadBackendSettings,
+  pushAcademicConfiguration,
+  saveBackendSettings
+} from './backend-service.js';
 import { renderIntegrationView } from './integration-view.js';
 import { toJsonCompatible } from './gestor-serialization.js';
 import { loadState } from './repository.js';
@@ -25,7 +36,8 @@ document.addEventListener('click', event => {
 async function openIntegration() {
   try {
     const state = await loadState();
-    const settings = loadBackendSettings();
+    const resolved = await resolveAcademicContext(loadBackendSettings());
+    const settings = resolved.settings;
     pageTitle.textContent = 'Integración GestorEscuela';
     document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === 'integration'));
     summaryStrip?.classList.add('hidden');
@@ -37,6 +49,7 @@ async function openIntegration() {
       state,
       settings,
       status:connectionStatus,
+      academicContext:resolved.context,
       onSave:async value => {
         saveBackendSettings(value);
         connectionStatus = null;
@@ -71,6 +84,56 @@ async function openIntegration() {
         }
         await openIntegration();
       },
+      onCreateAcademicYear:async payload => {
+        const current = loadBackendSettings();
+        const label = String(payload?.label || '').trim();
+        if (!label) {
+          showToast('Indica la etiqueta del curso académico.', 'error');
+          return;
+        }
+        try {
+          const academicYear = await createAcademicYear(current, {
+            label,
+            start_date:payload?.start_date || null,
+            end_date:payload?.end_date || null
+          });
+          saveBackendSettings({ ...current, academicYearId:academicYear.id, scenarioId:'' });
+          showToast(`Curso ${academicYear.label} creado y seleccionado.`);
+        } catch (error) {
+          showToast(error.message || 'No se pudo crear el curso académico.', 'error');
+        }
+        await openIntegration();
+      },
+      onSelectAcademicYear:async academicYearId => {
+        const current = loadBackendSettings();
+        saveBackendSettings({ ...current, academicYearId:String(academicYearId || ''), scenarioId:'' });
+        await openIntegration();
+      },
+      onCreateScenario:async payload => {
+        const current = loadBackendSettings();
+        const name = String(payload?.name || '').trim();
+        if (!current.academicYearId) {
+          showToast('Selecciona primero un curso académico.', 'error');
+          return;
+        }
+        if (!name) {
+          showToast('Indica el nombre del escenario.', 'error');
+          return;
+        }
+        try {
+          const scenario = await createPlanningScenario(current, current.academicYearId, { name });
+          saveBackendSettings({ ...current, scenarioId:scenario.id });
+          showToast(`Escenario “${scenario.name}” creado y seleccionado.`);
+        } catch (error) {
+          showToast(error.message || 'No se pudo crear el escenario.', 'error');
+        }
+        await openIntegration();
+      },
+      onSelectScenario:async scenarioId => {
+        const current = loadBackendSettings();
+        saveBackendSettings({ ...current, scenarioId:String(scenarioId || '') });
+        await openIntegration();
+      },
       onSync:async (value, adapter) => {
         const saved = saveBackendSettings(value);
         if (!adapter.report.ready) {
@@ -93,6 +156,38 @@ async function openIntegration() {
   } catch (error) {
     console.error(error);
     viewRoot.innerHTML = `<section class="card"><div class="empty-state"><strong>No se pudo abrir la integración</strong>${escapeText(error.message || 'Error inesperado.')}</div></section>`;
+  }
+}
+
+async function resolveAcademicContext(settings) {
+  if (!backendConfigured(settings)) {
+    return { settings, context:{ years:[], scenarios:[], error:'' } };
+  }
+
+  try {
+    const years = await listAcademicYears(settings);
+    let nextSettings = { ...settings };
+    if (nextSettings.academicYearId && !years.some(item => item.id === nextSettings.academicYearId)) {
+      nextSettings = saveBackendSettings({ ...nextSettings, academicYearId:'', scenarioId:'' });
+    }
+
+    let scenarios = [];
+    if (nextSettings.academicYearId) {
+      scenarios = await listPlanningScenarios(nextSettings, nextSettings.academicYearId);
+      if (nextSettings.scenarioId && !scenarios.some(item => item.id === nextSettings.scenarioId)) {
+        nextSettings = saveBackendSettings({ ...nextSettings, scenarioId:'' });
+      }
+    }
+
+    return {
+      settings:nextSettings,
+      context:{ years, scenarios, error:'' }
+    };
+  } catch (error) {
+    return {
+      settings,
+      context:{ years:[], scenarios:[], error:error.message || 'No se pudo cargar el contexto académico.' }
+    };
   }
 }
 
