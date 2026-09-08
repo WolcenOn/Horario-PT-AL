@@ -22,7 +22,7 @@ test('la aplicación arranca y permite navegar por las áreas principales', asyn
 test('el formulario de actividades mantiene legibles los días en escritorio', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-view="centerActivities"]').click();
-  await expect(page.getByRole('heading', { name:'Actividades del centro' })).toBeVisible();
+  await expect(page.locator('#pageTitle')).toHaveText('Actividades del centro');
   await page.locator('[data-add-center-activity]').click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('heading', { name:'Nueva actividad del centro' })).toBeVisible();
