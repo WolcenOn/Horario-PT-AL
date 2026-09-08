@@ -59,34 +59,22 @@ export async function bootstrapBackendConnection({ baseUrl, schoolName, email, d
   if (!cleanEmail) throw new Error('Indica el correo del administrador inicial.');
   if (!cleanDisplayName) throw new Error('Indica el nombre del administrador inicial.');
 
-  const bootstrapHeaders = {
-    'Content-Type':'application/json',
-    'X-Actor-Role':'ADMIN'
-  };
-
+  const bootstrapHeaders = { 'Content-Type':'application/json', 'X-Actor-Role':'ADMIN' };
   const user = await request(settings, '/users', {
-    method:'POST',
-    headers:bootstrapHeaders,
+    method:'POST', headers:bootstrapHeaders,
     body:JSON.stringify({ email:cleanEmail, display_name:cleanDisplayName }),
-    timeoutMs:15000,
-    auth:false
+    timeoutMs:15000, auth:false
   });
 
   let school;
   try {
     school = await request(settings, '/schools', {
-      method:'POST',
-      headers:bootstrapHeaders,
-      body:JSON.stringify({ name:cleanSchoolName }),
-      timeoutMs:15000,
-      auth:false
+      method:'POST', headers:bootstrapHeaders,
+      body:JSON.stringify({ name:cleanSchoolName }), timeoutMs:15000, auth:false
     });
     await request(settings, `/schools/${encodeURIComponent(school.id)}/memberships`, {
-      method:'PUT',
-      headers:bootstrapHeaders,
-      body:JSON.stringify({ user_id:user.id, role:'ADMIN' }),
-      timeoutMs:15000,
-      auth:false
+      method:'PUT', headers:bootstrapHeaders,
+      body:JSON.stringify({ user_id:user.id, role:'ADMIN' }), timeoutMs:15000, auth:false
     });
   } catch (error) {
     throw new Error(`Se creó el usuario (${user.id}), pero no se pudo completar la vinculación del centro: ${error.message || error}`);
@@ -94,10 +82,7 @@ export async function bootstrapBackendConnection({ baseUrl, schoolName, email, d
 
   return {
     settings:normalizeBackendSettings({
-      enabled:true,
-      baseUrl:settings.baseUrl,
-      schoolId:school.id,
-      actorId:user.id
+      enabled:true, baseUrl:settings.baseUrl, schoolId:school.id, actorId:user.id
     }),
     school,
     user
@@ -112,10 +97,8 @@ export async function listAcademicYears(settings) {
 export async function createAcademicYear(settings, payload) {
   const value = requireConfigured(settings);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/academic-years`, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify(payload),
-    timeoutMs:15000
+    method:'POST', headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(payload), timeoutMs:15000
   });
 }
 
@@ -129,20 +112,31 @@ export async function createPlanningScenario(settings, academicYearId, payload) 
   const value = requireConfigured(settings);
   const yearId = requireAcademicYearId(academicYearId || value.academicYearId);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/academic-years/${encodeURIComponent(yearId)}/scenarios`, {
-    method:'POST',
+    method:'POST', headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(payload), timeoutMs:15000
+  });
+}
+
+export async function fetchPlanningScenarioSnapshot(settings) {
+  const { value, path } = scenarioSnapshotTarget(settings);
+  return request(value, path, { timeoutMs:20000 });
+}
+
+export async function savePlanningScenarioSnapshot(settings, payload, { sourceHash = null } = {}) {
+  const { value, path } = scenarioSnapshotTarget(settings);
+  return request(value, path, {
+    method:'PUT',
     headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify(payload),
-    timeoutMs:15000
+    body:JSON.stringify({ source_hash:sourceHash, payload }),
+    timeoutMs:30000
   });
 }
 
 export async function pushAcademicConfiguration(settings, configuration) {
   const value = requireConfigured(settings);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/academic-configuration`, {
-    method:'PUT',
-    headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify(configuration),
-    timeoutMs:20000
+    method:'PUT', headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(configuration), timeoutMs:20000
   });
 }
 
@@ -154,10 +148,8 @@ export async function fetchAcademicConfiguration(settings) {
 export async function pushRoster(settings, roster) {
   const value = requireConfigured(settings);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/students`, {
-    method:'PUT',
-    headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify(roster),
-    timeoutMs:20000
+    method:'PUT', headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(roster), timeoutMs:20000
   });
 }
 
@@ -175,31 +167,35 @@ export async function listDayPlans(settings, planDate) {
 export async function createDayPlan(settings, payload) {
   const value = requireConfigured(settings);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/day-plans`, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify(payload),
-    timeoutMs:15000
+    method:'POST', headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(payload), timeoutMs:15000
   });
 }
 
 export async function solveAcademicDay(settings, planId, payload) {
   const value = requireConfigured(settings);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/day-plans/${encodeURIComponent(planId)}/solve-academic`, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify(payload),
-    timeoutMs:20000
+    method:'POST', headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(payload), timeoutMs:20000
   });
 }
 
 export async function solveStaffingAllocation(settings, payload) {
   const value = requireConfigured(settings);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/staffing/solve`, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify(payload),
-    timeoutMs:30000
+    method:'POST', headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(payload), timeoutMs:30000
   });
+}
+
+function scenarioSnapshotTarget(settings) {
+  const value = requireConfigured(settings);
+  const yearId = requireAcademicYearId(value.academicYearId);
+  const scenarioId = requireScenarioId(value.scenarioId);
+  return {
+    value,
+    path:`/schools/${encodeURIComponent(value.schoolId)}/academic-years/${encodeURIComponent(yearId)}/scenarios/${encodeURIComponent(scenarioId)}/snapshot`
+  };
 }
 
 function requireConfigured(settings) {
@@ -217,6 +213,12 @@ function requireAcademicYearId(value) {
   return yearId;
 }
 
+function requireScenarioId(value) {
+  const scenarioId = String(value || '').trim();
+  if (!scenarioId) throw new Error('Selecciona primero un escenario de GestorEscuela.');
+  return scenarioId;
+}
+
 async function request(settings, path, options = {}) {
   const { timeoutMs = 10000, auth = true, headers = {}, ...fetchOptions } = options;
   const controller = new AbortController();
@@ -224,10 +226,7 @@ async function request(settings, path, options = {}) {
   try {
     const response = await fetch(`${settings.baseUrl}${path}`, {
       ...fetchOptions,
-      headers:{
-        ...(auth && settings.actorId ? { 'X-Actor-Id':settings.actorId } : {}),
-        ...headers
-      },
+      headers:{ ...(auth && settings.actorId ? { 'X-Actor-Id':settings.actorId } : {}), ...headers },
       signal:controller.signal
     });
     const text = await response.text();
@@ -237,7 +236,9 @@ async function request(settings, path, options = {}) {
     }
     if (!response.ok) {
       const detail = payload && typeof payload === 'object' ? payload.detail : payload;
-      throw new Error(detail || `GestorEscuela respondió con HTTP ${response.status}.`);
+      const error = new Error(detail || `GestorEscuela respondió con HTTP ${response.status}.`);
+      error.status = response.status;
+      throw error;
     }
     return payload;
   } catch (error) {
