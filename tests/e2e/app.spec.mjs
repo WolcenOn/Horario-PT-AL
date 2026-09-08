@@ -33,6 +33,80 @@ test('la integración mantiene el modo offline y muestra el contexto académico'
   expect(errors).toEqual([]);
 });
 
+test('guarda y restaura una copia compartida de un escenario', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => {
+    localStorage.setItem('horario-gestor-escuela-backend', JSON.stringify({
+      enabled:true,
+      baseUrl:'https://gestor.test',
+      schoolId:'school-1',
+      actorId:'actor-1',
+      academicYearId:'year-1',
+      scenarioId:'scenario-1',
+      autoSync:false
+    }));
+  });
+
+  let storedSnapshot = null;
+  await page.route('https://gestor.test/**', async route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname === '/schools/school-1/academic-years') {
+      return route.fulfill({
+        status:200,
+        contentType:'application/json',
+        body:JSON.stringify([{ id:'year-1', school_id:'school-1', label:'2026/27', version:1 }])
+      });
+    }
+    if (url.pathname === '/schools/school-1/academic-years/year-1/scenarios') {
+      return route.fulfill({
+        status:200,
+        contentType:'application/json',
+        body:JSON.stringify([{ id:'scenario-1', school_id:'school-1', academic_year_id:'year-1', name:'Planificación inicial', status:'DRAFT', version:1 }])
+      });
+    }
+    if (url.pathname === '/schools/school-1/academic-years/year-1/scenarios/scenario-1/snapshot') {
+      if (request.method() === 'PUT') {
+        const body = request.postDataJSON();
+        storedSnapshot = {
+          id:'snapshot-1',
+          school_id:'school-1',
+          academic_year_id:'year-1',
+          scenario_id:'scenario-1',
+          version:1,
+          source_hash:body.source_hash,
+          payload:body.payload,
+          updated_by_user_id:'actor-1',
+          created_at:'2026-09-08T10:00:00Z',
+          updated_at:'2026-09-08T10:00:00Z'
+        };
+        return route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify(storedSnapshot) });
+      }
+      if (!storedSnapshot) {
+        return route.fulfill({ status:404, contentType:'application/json', body:JSON.stringify({ detail:'Planning scenario has no saved snapshot' }) });
+      }
+      return route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify(storedSnapshot) });
+    }
+    return route.fulfill({ status:404, contentType:'application/json', body:'{}' });
+  });
+
+  page.on('dialog', dialog => dialog.accept());
+  await page.goto('/');
+  await page.locator('[data-view="integration"]').click();
+  await expect(page.getByText('Este escenario todavía no tiene una copia del proyecto guardada.')).toBeVisible();
+
+  await page.locator('[data-save-scenario-snapshot]').click();
+  await expect(page.getByText(/Versión 1 guardada en PostgreSQL/)).toBeVisible();
+  await expect(page.locator('[data-restore-scenario-snapshot]')).toBeEnabled();
+  expect(storedSnapshot?.payload?.format).toBe('horario-pt-al');
+  expect(storedSnapshot?.payload?.schemaVersion).toBe(5);
+
+  await page.locator('[data-restore-scenario-snapshot]').click();
+  await expect(page.locator('#toastRoot')).toContainText('Escenario cargado:');
+  expect(errors).toEqual([]);
+});
+
 test('el formulario de actividades mantiene legibles los días en escritorio', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-view="centerActivities"]').click();
