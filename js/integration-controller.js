@@ -4,15 +4,18 @@ import {
   checkBackendHealth,
   createAcademicYear,
   createPlanningScenario,
+  fetchPlanningScenarioSnapshot,
   listAcademicYears,
   listPlanningScenarios,
   loadBackendSettings,
   pushAcademicConfiguration,
-  saveBackendSettings
+  saveBackendSettings,
+  savePlanningScenarioSnapshot
 } from './backend-service.js';
 import { renderIntegrationView } from './integration-view.js';
 import { toJsonCompatible } from './gestor-serialization.js';
 import { loadState } from './repository.js';
+import { applySharePackage, createSharePackage } from './sharing.js';
 import { showToast } from './ui.js';
 
 const viewRoot = document.querySelector('#viewRoot');
@@ -23,8 +26,6 @@ const primaryAction = document.querySelector('#primaryActionBtn');
 const printActions = document.querySelector('#calendarPrintActions');
 let connectionStatus = null;
 
-// Captura únicamente la entrada de integración. El resto de la navegación continúa
-// gestionada por app.js y, por tanto, conserva exactamente el comportamiento offline.
 document.addEventListener('click', event => {
   const button = event.target.closest?.('[data-view="integration"]');
   if (!button) return;
@@ -134,13 +135,45 @@ async function openIntegration() {
         saveBackendSettings({ ...current, scenarioId:String(scenarioId || '') });
         await openIntegration();
       },
+      onSaveScenarioSnapshot:async () => {
+        const current = loadBackendSettings();
+        if (!current.academicYearId || !current.scenarioId) {
+          showToast('Selecciona un curso académico y un escenario.', 'error');
+          return;
+        }
+        const accepted = confirm(`Se guardará en el escenario seleccionado una copia completa del proyecto local: ${state.students.length} alumnos, ${state.professionals.length} profesionales, ${state.groups.length} grupos PT/AL, ${state.sessions.length} sesiones y ${state.classSchedules.length} franjas de aula. IndexedDB no se modificará. ¿Continuar?`);
+        if (!accepted) return;
+        try {
+          const snapshot = await savePlanningScenarioSnapshot(current, createSharePackage(state));
+          showToast(`Copia guardada en GestorEscuela · versión ${snapshot.version}.`);
+        } catch (error) {
+          showToast(error.message || 'No se pudo guardar la copia del escenario.', 'error');
+        }
+        await openIntegration();
+      },
+      onRestoreScenarioSnapshot:async snapshot => {
+        if (!snapshot?.payload) {
+          showToast('Este escenario no contiene todavía una copia del proyecto.', 'error');
+          return;
+        }
+        const accepted = confirm(`Se sustituirán los datos de ESTE navegador por la versión ${snapshot.version} guardada en el escenario. Si quieres conservar el estado local actual, cancela y usa “Exportar / compartir” antes de continuar. ¿Cargar escenario?`);
+        if (!accepted) return;
+        try {
+          const counts = await applySharePackage(snapshot.payload);
+          localStorage.setItem('horario-user-cleared', 'true');
+          showToast(`Escenario cargado: ${counts.students} alumnos, ${counts.professionals} profesionales, ${counts.groups} grupos y ${counts.sessions} sesiones.`);
+        } catch (error) {
+          showToast(error.message || 'La copia remota no es válida y no se ha aplicado.', 'error');
+        }
+        await openIntegration();
+      },
       onSync:async (value, adapter) => {
         const saved = saveBackendSettings(value);
         if (!adapter.report.ready) {
           showToast('Corrige los errores del adaptador antes de sincronizar.', 'error');
           return;
         }
-        const accepted = confirm(`Se enviarán ${adapter.report.counts.teachers} docentes, ${adapter.report.counts.groups} grupos-clase y ${adapter.report.counts.activities} actividades a GestorEscuela. La configuración académica remota del centro indicado será sustituida. Los datos locales NO se modificarán. ¿Continuar?`);
+        const accepted = confirm(`Se enviarán ${adapter.report.counts.teachers} docentes, ${adapter.report.counts.groups} grupos-clase y ${adapter.report.counts.activities} actividades a GestorEscuela. La configuración operativa remota del centro indicado será sustituida. Los datos locales NO se modificarán. ¿Continuar?`);
         if (!accepted) return;
         try {
           await pushAcademicConfiguration(saved, toJsonCompatible(adapter.configuration));
@@ -161,7 +194,10 @@ async function openIntegration() {
 
 async function resolveAcademicContext(settings) {
   if (!backendConfigured(settings)) {
-    return { settings, context:{ years:[], scenarios:[], error:'' } };
+    return {
+      settings,
+      context:{ years:[], scenarios:[], snapshot:null, error:'', snapshotError:'' }
+    };
   }
 
   try {
@@ -172,21 +208,34 @@ async function resolveAcademicContext(settings) {
     }
 
     let scenarios = [];
+    let snapshot = null;
+    let snapshotError = '';
     if (nextSettings.academicYearId) {
       scenarios = await listPlanningScenarios(nextSettings, nextSettings.academicYearId);
       if (nextSettings.scenarioId && !scenarios.some(item => item.id === nextSettings.scenarioId)) {
         nextSettings = saveBackendSettings({ ...nextSettings, scenarioId:'' });
       }
     }
+    if (nextSettings.academicYearId && nextSettings.scenarioId) {
+      try {
+        snapshot = await fetchPlanningScenarioSnapshot(nextSettings);
+      } catch (error) {
+        if (error?.status !== 404) snapshotError = error.message || 'No se pudo consultar la copia del escenario.';
+      }
+    }
 
     return {
       settings:nextSettings,
-      context:{ years, scenarios, error:'' }
+      context:{ years, scenarios, snapshot, error:'', snapshotError }
     };
   } catch (error) {
     return {
       settings,
-      context:{ years:[], scenarios:[], error:error.message || 'No se pudo cargar el contexto académico.' }
+      context:{
+        years:[], scenarios:[], snapshot:null,
+        error:error.message || 'No se pudo cargar el contexto académico.',
+        snapshotError:''
+      }
     };
   }
 }
