@@ -5,6 +5,8 @@ export const DEFAULT_BACKEND_SETTINGS = Object.freeze({
   baseUrl:'https://gestorescuela-production.up.railway.app',
   schoolId:'',
   actorId:'',
+  academicYearId:'',
+  scenarioId:'',
   autoSync:false
 });
 
@@ -30,6 +32,8 @@ export function normalizeBackendSettings(value) {
     baseUrl:normalizeBaseUrl(source.baseUrl || DEFAULT_BACKEND_SETTINGS.baseUrl),
     schoolId:String(source.schoolId || '').trim(),
     actorId:String(source.actorId || '').trim(),
+    academicYearId:String(source.academicYearId || '').trim(),
+    scenarioId:String(source.scenarioId || '').trim(),
     autoSync:source.autoSync === true
   };
 }
@@ -98,6 +102,38 @@ export async function bootstrapBackendConnection({ baseUrl, schoolName, email, d
     school,
     user
   };
+}
+
+export async function listAcademicYears(settings) {
+  const value = requireConfigured(settings);
+  return request(value, `/schools/${encodeURIComponent(value.schoolId)}/academic-years`, { timeoutMs:15000 });
+}
+
+export async function createAcademicYear(settings, payload) {
+  const value = requireConfigured(settings);
+  return request(value, `/schools/${encodeURIComponent(value.schoolId)}/academic-years`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(payload),
+    timeoutMs:15000
+  });
+}
+
+export async function listPlanningScenarios(settings, academicYearId = null) {
+  const value = requireConfigured(settings);
+  const yearId = requireAcademicYearId(academicYearId || value.academicYearId);
+  return request(value, `/schools/${encodeURIComponent(value.schoolId)}/academic-years/${encodeURIComponent(yearId)}/scenarios`, { timeoutMs:15000 });
+}
+
+export async function createPlanningScenario(settings, academicYearId, payload) {
+  const value = requireConfigured(settings);
+  const yearId = requireAcademicYearId(academicYearId || value.academicYearId);
+  return request(value, `/schools/${encodeURIComponent(value.schoolId)}/academic-years/${encodeURIComponent(yearId)}/scenarios`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(payload),
+    timeoutMs:15000
+  });
 }
 
 export async function pushAcademicConfiguration(settings, configuration) {
@@ -173,6 +209,12 @@ function requireConfigured(settings) {
   if (!value.schoolId) throw new Error('Falta el ID del centro en GestorEscuela.');
   if (!value.actorId) throw new Error('Falta el ID de usuario (Actor ID) de GestorEscuela.');
   return value;
+}
+
+function requireAcademicYearId(value) {
+  const yearId = String(value || '').trim();
+  if (!yearId) throw new Error('Selecciona primero un curso académico de GestorEscuela.');
+  return yearId;
 }
 
 async function request(settings, path, options = {}) {
