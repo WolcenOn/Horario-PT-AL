@@ -5,9 +5,11 @@ import {
   createAcademicYear,
   createPlanningScenario,
   DEFAULT_BACKEND_SETTINGS,
+  fetchPlanningScenarioSnapshot,
   listAcademicYears,
   listPlanningScenarios,
-  normalizeBackendSettings
+  normalizeBackendSettings,
+  savePlanningScenarioSnapshot
 } from '../js/backend-service.js';
 
 test('usa Railway como backend predeterminado sin activar la conexión', () => {
@@ -44,11 +46,7 @@ test('bootstrap crea usuario, centro y membresía ADMIN y devuelve los UUID', as
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url:String(url), options });
     const payload = responses[calls.length - 1];
-    return {
-      ok:true,
-      status:200,
-      async text() { return JSON.stringify(payload); }
-    };
+    return { ok:true, status:200, async text() { return JSON.stringify(payload); } };
   };
 
   try {
@@ -97,11 +95,7 @@ test('gestiona cursos académicos y escenarios usando el actor configurado', asy
   ];
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url:String(url), options });
-    return {
-      ok:true,
-      status:200,
-      async text() { return JSON.stringify(responses[calls.length - 1]); }
-    };
+    return { ok:true, status:200, async text() { return JSON.stringify(responses[calls.length - 1]); } };
   };
 
   try {
@@ -118,6 +112,52 @@ test('gestiona cursos académicos y escenarios usando el actor configurado', asy
     assert.deepEqual(JSON.parse(calls[1].options.body), { label:'2027/28' });
     assert.equal(calls[3].options.method, 'POST');
     assert.deepEqual(JSON.parse(calls[3].options.body), { name:'Alternativa' });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('guarda y recupera una copia completa del escenario seleccionado', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const settings = normalizeBackendSettings({
+    enabled:true,
+    baseUrl:'https://example.test',
+    schoolId:'school-1',
+    actorId:'actor-1',
+    academicYearId:'year-1',
+    scenarioId:'scenario-1'
+  });
+  const sharePackage = {
+    format:'horario-pt-al',
+    schemaVersion:5,
+    data:{ students:[], professionals:[], groups:[], sessions:[], classSchedules:[] }
+  };
+  const stored = {
+    scenario_id:'scenario-1',
+    version:1,
+    source_hash:null,
+    payload:sharePackage
+  };
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url:String(url), options });
+    return { ok:true, status:200, async text() { return JSON.stringify(stored); } };
+  };
+
+  try {
+    await savePlanningScenarioSnapshot(settings, sharePackage);
+    const loaded = await fetchPlanningScenarioSnapshot(settings);
+
+    assert.equal(calls.length, 2);
+    assert.match(calls[0].url, /\/academic-years\/year-1\/scenarios\/scenario-1\/snapshot$/);
+    assert.equal(calls[0].options.method, 'PUT');
+    assert.equal(calls[0].options.headers['X-Actor-Id'], 'actor-1');
+    assert.deepEqual(JSON.parse(calls[0].options.body), {
+      source_hash:null,
+      payload:sharePackage
+    });
+    assert.equal(calls[1].options.method, undefined);
+    assert.deepEqual(loaded.payload, sharePackage);
   } finally {
     globalThis.fetch = originalFetch;
   }
