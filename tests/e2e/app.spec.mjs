@@ -19,6 +19,20 @@ test('la aplicación arranca y permite navegar por las áreas principales', asyn
   expect(errors).toEqual([]);
 });
 
+test('la integración mantiene el modo offline y muestra el contexto académico', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+
+  await page.goto('/');
+  await page.locator('[data-view="integration"]').click();
+  await expect(page.locator('#pageTitle')).toHaveText('Integración GestorEscuela');
+  await expect(page.getByRole('heading', { name:'Curso académico y escenario' })).toBeVisible();
+  await expect(page.getByText('Conexión necesaria')).toBeVisible();
+  await expect(page.getByText('El modo offline no necesita curso remoto ni escenario.')).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
 test('el formulario de actividades mantiene legibles los días en escritorio', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-view="centerActivities"]').click();
