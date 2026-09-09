@@ -29,6 +29,12 @@ const observer = new MutationObserver(() => {
 observer.observe(root, { childList:true, subtree:true });
 
 document.addEventListener('click', event => {
+  const serviceButton = event.target.closest?.('[data-service-filter]');
+  if (serviceButton && selectedProfessionalId) {
+    selectedProfessionalId = '';
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
   const calendarNav = event.target.closest?.('[data-view="calendar"]');
   if (!calendarNav) return;
   setTimeout(() => void enhanceCalendar(), 0);
@@ -60,6 +66,7 @@ async function enhanceCalendar() {
   }
 
   restoreDefaultCalendarControls();
+  applyEditableServiceFilter();
   const calendar = root.querySelector('.calendar-card');
   if (!calendar) return;
   renderTeacherCalendarToolbar(root, {
@@ -67,6 +74,17 @@ async function enhanceCalendar() {
     selectedProfessionalId:'',
     onChangeProfessional:changeProfessional,
     onOpenPrintManager:() => openPrintManager(state)
+  });
+}
+
+function applyEditableServiceFilter() {
+  root.querySelectorAll('.session-block.is-dimmed').forEach(block => {
+    block.style.visibility = 'hidden';
+    block.style.pointerEvents = 'none';
+  });
+  root.querySelectorAll('.session-block:not(.is-dimmed)').forEach(block => {
+    block.style.visibility = '';
+    block.style.pointerEvents = '';
   });
 }
 
