@@ -139,6 +139,48 @@ test('Horario semanal permite revisar docentes y preparar impresión múltiple',
   expect(errors).toEqual([]);
 });
 
+test('el filtro AL deja las sesiones AL editables sin que PT capture el clic', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+
+  await page.goto('/');
+  await page.locator('[data-service-filter="AL"]').click();
+
+  await expect(page.locator('.session-block.al').first()).toBeVisible();
+  await expect(page.locator('.session-block.pt').first()).toBeHidden();
+
+  await page.locator('.session-block.al').first().click();
+  await expect(page.locator('[data-reference-edit]')).toBeVisible();
+  await page.locator('[data-reference-edit]').click();
+
+  await expect(page.getByRole('dialog')).toBeVisible();
+  const selectedGroup = page.locator('#groupId option:checked');
+  await expect(selectedGroup).toContainText('AL');
+  expect(errors).toEqual([]);
+});
+
+test('editar una profesional AL conserva su tipo y permite cambiar el selector', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+
+  await page.goto('/');
+  await page.locator('[data-view="professionals"]').click();
+  await expect(page.locator('#pageTitle')).toHaveText('Profesorado');
+
+  const row = page.locator('tbody tr').filter({ hasText:'Carmen Ruiz' });
+  await expect(row).toBeVisible();
+  await row.getByRole('button', { name:'Editar' }).click();
+
+  await expect(page.getByRole('dialog')).toBeVisible();
+  const type = page.locator('#tipo');
+  await expect(type).toHaveValue('AL');
+  await type.selectOption('DOCENTE');
+  await expect(type).toHaveValue('DOCENTE');
+  await type.selectOption('AL');
+  await expect(type).toHaveValue('AL');
+  expect(errors).toEqual([]);
+});
+
 test('el formulario de actividades mantiene legibles los días en escritorio', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-view="centerActivities"]').click();
