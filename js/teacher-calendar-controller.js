@@ -1,5 +1,10 @@
 import { loadState } from './repository.js';
-import { activeProfessionals, renderTeacherCalendar, renderTeacherCalendarToolbar } from './teacher-calendar.js';
+import {
+  activeProfessionals,
+  normalizeTeacherSelection,
+  renderTeacherCalendar,
+  renderTeacherCalendarToolbar
+} from './teacher-calendar.js';
 import { printProfessionalSchedules } from './teacher-print.js';
 import { escapeHtml } from './utils.js';
 import { showModal, showToast } from './ui.js';
@@ -11,8 +16,12 @@ const serviceFilter = document.querySelector('.service-filter');
 const primaryAction = document.querySelector('#primaryActionBtn');
 const printActions = document.querySelector('#calendarPrintActions');
 
-const STORAGE_KEY = 'horario-calendar-professional';
-let selectedProfessionalId = localStorage.getItem(STORAGE_KEY) || '';
+const PRIMARY_STORAGE_KEY = 'horario-calendar-professional';
+const COMPARE_STORAGE_KEY = 'horario-calendar-professional-compare';
+let selectedProfessionalIds = normalizeTeacherSelection([
+  localStorage.getItem(PRIMARY_STORAGE_KEY),
+  localStorage.getItem(COMPARE_STORAGE_KEY)
+]);
 let enhancing = false;
 
 const observer = new MutationObserver(() => {
@@ -30,10 +39,7 @@ observer.observe(root, { childList:true, subtree:true });
 
 document.addEventListener('click', event => {
   const serviceButton = event.target.closest?.('[data-service-filter]');
-  if (serviceButton && selectedProfessionalId) {
-    selectedProfessionalId = '';
-    localStorage.removeItem(STORAGE_KEY);
-  }
+  if (serviceButton && selectedProfessionalIds.length) clearTeacherSelection();
 
   const calendarNav = event.target.closest?.('[data-view="calendar"]');
   if (!calendarNav) return;
@@ -45,67 +51,68 @@ setTimeout(() => void enhanceCalendar(), 0);
 async function enhanceCalendar() {
   if (pageTitle?.textContent !== 'Horario semanal') return;
   const state = await loadState();
-  if (selectedProfessionalId && !state.professionals.some(item => item.id === selectedProfessionalId && item.activo !== false)) {
-    selectedProfessionalId = '';
-    localStorage.removeItem(STORAGE_KEY);
-  }
+  const activeIds = new Set(state.professionals.filter(item => item.activo !== false).map(item => item.id));
+  selectedProfessionalIds = normalizeTeacherSelection(selectedProfessionalIds.filter(id => activeIds.has(id)));
+  persistTeacherSelection();
 
-  if (selectedProfessionalId) {
+  if (selectedProfessionalIds.length) {
     hideDefaultCalendarControls();
-    if (root.querySelector('.teacher-calendar-view')?.dataset?.professionalId === selectedProfessionalId) return;
+    const signature = selectedProfessionalIds.join('|');
+    if (root.querySelector('.teacher-calendar-view')?.dataset?.professionalIds === signature) return;
     renderTeacherCalendar(root, {
       state,
-      professionalId:selectedProfessionalId,
-      onChangeProfessional:changeProfessional,
-      onPrintProfessional:printOne,
+      professionalIds:selectedProfessionalIds,
+      onChangeProfessionals:changeProfessionals,
+      onPrintProfessionals:printMany,
       onOpenPrintManager:() => openPrintManager(state)
     });
-    const view = root.querySelector('.teacher-calendar-view');
-    if (view) view.dataset.professionalId = selectedProfessionalId;
     return;
   }
 
   restoreDefaultCalendarControls();
-  applyEditableServiceFilter();
   const calendar = root.querySelector('.calendar-card');
   if (!calendar) return;
   renderTeacherCalendarToolbar(root, {
     state,
-    selectedProfessionalId:'',
-    onChangeProfessional:changeProfessional,
+    selectedProfessionalIds:[],
+    onChangeProfessionals:changeProfessionals,
+    onPrintProfessionals:printMany,
     onOpenPrintManager:() => openPrintManager(state)
   });
 }
 
-function applyEditableServiceFilter() {
-  root.querySelectorAll('.session-block.is-dimmed').forEach(block => {
-    block.style.visibility = 'hidden';
-    block.style.pointerEvents = 'none';
-  });
-  root.querySelectorAll('.session-block:not(.is-dimmed)').forEach(block => {
-    block.style.visibility = '';
-    block.style.pointerEvents = '';
-  });
-}
+async function changeProfessionals(ids) {
+  selectedProfessionalIds = normalizeTeacherSelection(ids);
+  persistTeacherSelection();
 
-async function changeProfessional(id) {
-  selectedProfessionalId = String(id || '');
-  if (selectedProfessionalId) localStorage.setItem(STORAGE_KEY, selectedProfessionalId);
-  else localStorage.removeItem(STORAGE_KEY);
-
-  if (!selectedProfessionalId) {
+  if (!selectedProfessionalIds.length) {
     document.querySelector('[data-view="calendar"]')?.click();
     return;
   }
   await enhanceCalendar();
 }
 
-async function printOne(id) {
+function persistTeacherSelection() {
+  const [primary = '', comparison = ''] = selectedProfessionalIds;
+  if (primary) localStorage.setItem(PRIMARY_STORAGE_KEY, primary);
+  else localStorage.removeItem(PRIMARY_STORAGE_KEY);
+  if (comparison) localStorage.setItem(COMPARE_STORAGE_KEY, comparison);
+  else localStorage.removeItem(COMPARE_STORAGE_KEY);
+}
+
+function clearTeacherSelection() {
+  selectedProfessionalIds = [];
+  persistTeacherSelection();
+}
+
+async function printMany(ids) {
   try {
+    const selection = normalizeTeacherSelection(ids);
+    if (!selection.length) throw new Error('Selecciona al menos un docente.');
     const state = await loadState();
-    printProfessionalSchedules(state, [id]);
+    printProfessionalSchedules(state, selection);
   } catch (error) {
-    showToast(error.message || 'No se pudo abrir la impresión del docente.', 'error');
+    showToast(error.message || 'No se pudo abrir la impresión del profesorado.', 'error');
   }
 }
 
@@ -115,6 +122,7 @@ function openPrintManager(state) {
     showToast('No hay profesorado activo para imprimir.', 'error');
     return;
   }
+  const selected = new Set(selectedProfessionalIds);
   showModal({
     title:'Imprimir horarios del profesorado',
     size:'wide',
@@ -122,7 +130,7 @@ function openPrintManager(state) {
     bodyHtml:`<div class="teacher-print-manager">
       <div class="integration-note"><strong>Una página por docente</strong><span>Puedes imprimir una selección o todo el claustro en un único trabajo de impresión.</span></div>
       <div class="teacher-print-manager-actions"><button class="button" type="button" data-select-all-teachers>Marcar todos</button><button class="button" type="button" data-clear-teachers>Desmarcar</button></div>
-      <div class="teacher-print-grid">${professionals.map(item => `<label><input type="checkbox" name="professionalId" value="${escapeHtml(item.id)}" ${item.id === selectedProfessionalId ? 'checked' : ''}><span><strong>${escapeHtml(item.nombre || item.id)}</strong><small>${escapeHtml(item.especialidad || item.tipo || 'Docente')}</small></span></label>`).join('')}</div>
+      <div class="teacher-print-grid">${professionals.map(item => `<label><input type="checkbox" name="professionalId" value="${escapeHtml(item.id)}" ${selected.has(item.id) ? 'checked' : ''}><span><strong>${escapeHtml(item.nombre || item.id)}</strong><small>${escapeHtml(item.especialidad || item.tipo || 'Docente')}</small></span></label>`).join('')}</div>
     </div>`,
     onOpen:form => {
       form.querySelector('[data-select-all-teachers]')?.addEventListener('click', () => form.querySelectorAll('[name="professionalId"]').forEach(input => { input.checked = true; }));
