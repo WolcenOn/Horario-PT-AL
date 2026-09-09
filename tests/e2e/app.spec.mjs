@@ -107,6 +107,38 @@ test('guarda y restaura una copia compartida de un escenario', async ({ page }) 
   expect(errors).toEqual([]);
 });
 
+test('Horario semanal permite revisar docentes y preparar impresión múltiple', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+
+  await page.goto('/');
+  await expect(page.locator('#pageTitle')).toHaveText('Horario semanal');
+  await expect(page.locator('[data-teacher-calendar-toolbar]')).toBeVisible();
+
+  const select = page.locator('[data-teacher-calendar-select]');
+  const optionCount = await select.locator('option').count();
+  expect(optionCount).toBeGreaterThan(1);
+  const professionalId = await select.locator('option').nth(1).getAttribute('value');
+  expect(professionalId).toBeTruthy();
+
+  await select.selectOption(professionalId);
+  await expect(page.locator('.teacher-calendar-view')).toBeVisible();
+  await expect(page.locator('.teacher-calendar-card')).toBeVisible();
+  await expect(page.locator('[data-print-current-teacher]')).toBeVisible();
+
+  await page.locator('[data-print-teachers]').click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('heading', { name:'Imprimir horarios del profesorado' })).toBeVisible();
+  expect(await page.locator('.teacher-print-grid input[name="professionalId"]').count()).toBeGreaterThan(0);
+  await expect(page.locator('[data-print-all-teachers]')).toBeVisible();
+  await page.getByRole('button', { name:'Cancelar' }).click();
+
+  await page.locator('[data-teacher-calendar-select]').selectOption('');
+  await expect(page.locator('.calendar-card')).toBeVisible();
+  await expect(page.locator('[data-teacher-calendar-toolbar]')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('el formulario de actividades mantiene legibles los días en escritorio', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-view="centerActivities"]').click();
