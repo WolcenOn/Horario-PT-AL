@@ -1,6 +1,7 @@
 import { loadState } from './repository.js';
 import { openProfessionalForm } from './profesionales.js';
 import { renderProfessionalSchedule } from './professional-schedule.js';
+import { printProfessionalSchedules } from './teacher-print.js';
 import { saveProfessional } from './repository.js';
 import { showToast } from './ui.js';
 
@@ -75,6 +76,25 @@ async function openSchedule(id) {
     onBack:() => document.querySelector('[data-view="professionals"]')?.click(),
     onEdit:professionalId => editProfessional(state, professionalId)
   });
+  addPrintButton(state, id);
+}
+
+function addPrintButton(state, id) {
+  const actions = root.querySelector('.professional-schedule-hero .button-row');
+  if (!actions || actions.querySelector('[data-print-professional-schedule]')) return;
+  const button = document.createElement('button');
+  button.className = 'button';
+  button.type = 'button';
+  button.dataset.printProfessionalSchedule = id;
+  button.textContent = '🖨 Imprimir horario';
+  button.addEventListener('click', () => {
+    try {
+      printProfessionalSchedules(state, [id]);
+    } catch (error) {
+      showToast(error.message || 'No se pudo abrir la impresión del docente.', 'error');
+    }
+  });
+  actions.insertBefore(button, actions.lastElementChild || null);
 }
 
 function editProfessional(state, id) {
