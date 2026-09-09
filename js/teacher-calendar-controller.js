@@ -14,7 +14,6 @@ const printActions = document.querySelector('#calendarPrintActions');
 const STORAGE_KEY = 'horario-calendar-professional';
 let selectedProfessionalId = localStorage.getItem(STORAGE_KEY) || '';
 let enhancing = false;
-let stateCache = null;
 
 const observer = new MutationObserver(() => {
   if (enhancing || pageTitle?.textContent !== 'Horario semanal') return;
@@ -29,14 +28,9 @@ const observer = new MutationObserver(() => {
 });
 observer.observe(root, { childList:true, subtree:true });
 
-window.addEventListener('horario-state-changed', () => {
-  stateCache = null;
-});
-
 document.addEventListener('click', event => {
   const calendarNav = event.target.closest?.('[data-view="calendar"]');
   if (!calendarNav) return;
-  stateCache = null;
   setTimeout(() => void enhanceCalendar(), 0);
 }, true);
 
@@ -44,7 +38,7 @@ setTimeout(() => void enhanceCalendar(), 0);
 
 async function enhanceCalendar() {
   if (pageTitle?.textContent !== 'Horario semanal') return;
-  const state = await currentState();
+  const state = await loadState();
   if (selectedProfessionalId && !state.professionals.some(item => item.id === selectedProfessionalId && item.activo !== false)) {
     selectedProfessionalId = '';
     localStorage.removeItem(STORAGE_KEY);
@@ -80,7 +74,6 @@ async function changeProfessional(id) {
   selectedProfessionalId = String(id || '');
   if (selectedProfessionalId) localStorage.setItem(STORAGE_KEY, selectedProfessionalId);
   else localStorage.removeItem(STORAGE_KEY);
-  stateCache = null;
 
   if (!selectedProfessionalId) {
     document.querySelector('[data-view="calendar"]')?.click();
@@ -91,7 +84,7 @@ async function changeProfessional(id) {
 
 async function printOne(id) {
   try {
-    const state = await currentState();
+    const state = await loadState();
     printProfessionalSchedules(state, [id]);
   } catch (error) {
     showToast(error.message || 'No se pudo abrir la impresión del docente.', 'error');
@@ -141,11 +134,6 @@ function openPrintManager(state) {
       return true;
     }
   });
-}
-
-async function currentState() {
-  if (!stateCache) stateCache = await loadState();
-  return stateCache;
 }
 
 function hideDefaultCalendarControls() {
