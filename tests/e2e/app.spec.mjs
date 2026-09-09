@@ -107,7 +107,7 @@ test('guarda y restaura una copia compartida de un escenario', async ({ page }) 
   expect(errors).toEqual([]);
 });
 
-test('Horario semanal permite revisar docentes y preparar impresión múltiple', async ({ page }) => {
+test('Horario semanal compara dos docentes lado a lado y prepara impresión múltiple', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
@@ -115,21 +115,35 @@ test('Horario semanal permite revisar docentes y preparar impresión múltiple',
   await expect(page.locator('#pageTitle')).toHaveText('Horario semanal');
   await expect(page.locator('[data-teacher-calendar-toolbar]')).toBeVisible();
 
-  const select = page.locator('[data-teacher-calendar-select]');
-  const optionCount = await select.locator('option').count();
-  expect(optionCount).toBeGreaterThan(1);
-  const professionalId = await select.locator('option').nth(1).getAttribute('value');
-  expect(professionalId).toBeTruthy();
-
-  await select.selectOption(professionalId);
+  const primary = page.locator('[data-teacher-calendar-select]');
+  await primary.selectOption('prof_pt_ana');
   await expect(page.locator('.teacher-calendar-view')).toBeVisible();
   await expect(page.locator('.teacher-calendar-card')).toBeVisible();
   await expect(page.locator('[data-print-current-teacher]')).toBeVisible();
 
+  const compare = page.locator('[data-teacher-calendar-compare]');
+  await expect(compare).toBeEnabled();
+  await compare.selectOption('prof_pt_maria');
+
+  await expect(page.locator('.teacher-comparison-summary-grid article')).toHaveCount(2);
+  await expect(page.locator('.teacher-comparison-key span')).toHaveCount(2);
+  await expect(page.locator('.teacher-day-column.is-comparison')).toHaveCount(5);
+  await expect(page.locator('.teacher-lane-divider')).toHaveCount(5);
+
+  const anaBlock = page.locator('.teacher-session-block[data-professional-id="prof_pt_ana"]').first();
+  const mariaBlock = page.locator('.teacher-session-block[data-professional-id="prof_pt_maria"]').first();
+  await expect(anaBlock).toBeVisible();
+  await expect(mariaBlock).toBeVisible();
+  const anaWidth = await anaBlock.evaluate(element => element.getBoundingClientRect().width);
+  const mariaWidth = await mariaBlock.evaluate(element => element.getBoundingClientRect().width);
+  const dayWidth = await page.locator('.teacher-day-column').first().evaluate(element => element.getBoundingClientRect().width);
+  expect(anaWidth).toBeLessThan(dayWidth * 0.6);
+  expect(mariaWidth).toBeLessThan(dayWidth * 0.6);
+
   await page.locator('[data-print-teachers]').click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('heading', { name:'Imprimir horarios del profesorado' })).toBeVisible();
-  expect(await page.locator('.teacher-print-grid input[name="professionalId"]').count()).toBeGreaterThan(0);
+  expect(await page.locator('.teacher-print-grid input[name="professionalId"]:checked').count()).toBe(2);
   await expect(page.locator('[data-print-all-teachers]')).toBeVisible();
   await page.getByRole('button', { name:'Cancelar' }).click();
 
