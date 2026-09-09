@@ -65,6 +65,34 @@
 .professional-external-summary { display: grid; gap: 3px; min-width: 170px; }
 .professional-external-summary span { display: block; padding: 3px 6px; border-radius: 6px; background: var(--warning-soft); color: var(--warning); font-size: .72rem; white-space: nowrap; }
 
+.class-schedule-view-switcher { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.85rem 1rem; }
+.class-schedule-view-switcher > div:first-child { display:grid; gap:.15rem; }
+.class-schedule-view-switcher small { color:var(--muted); }
+.segmented-control { display:inline-flex; border:1px solid var(--border); border-radius:.65rem; overflow:hidden; background:var(--surface-soft); }
+.segmented-control button { border:0; border-right:1px solid var(--border); background:transparent; padding:.55rem .8rem; font:inherit; font-size:.8rem; font-weight:750; cursor:pointer; }
+.segmented-control button:last-child { border-right:0; }
+.segmented-control button.is-active { background:var(--primary); color:white; }
+.class-schedule-calendar-view { display:grid; gap:1rem; }
+.class-schedule-calendar-toolbar { display:flex; align-items:end; justify-content:space-between; gap:1rem; padding:.9rem 1rem; }
+.class-schedule-calendar-toolbar label { display:grid; gap:.3rem; min-width:min(360px,70vw); font-size:.78rem; font-weight:750; color:var(--muted); }
+.class-schedule-calendar-toolbar select { min-height:40px; }
+.class-schedule-calendar-stats { display:flex; gap:.55rem; flex-wrap:wrap; }
+.class-schedule-calendar-stats span { display:flex; align-items:baseline; gap:.3rem; padding:.5rem .65rem; border:1px solid var(--border); border-radius:.6rem; background:var(--surface-soft); font-size:.75rem; color:var(--muted); }
+.class-schedule-calendar-stats strong { color:var(--text); font-size:.95rem; }
+.class-schedule-calendar-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:1rem 1.1rem .2rem; }
+.class-schedule-calendar-heading h2 { margin:.1rem 0 0; }
+.class-schedule-day-column { position:relative; }
+.class-schedule-calendar-block { position:absolute; left:4px; right:4px; z-index:3; display:grid; align-content:start; gap:.08rem; min-width:0; border:1px solid #aabcc8; border-radius:8px; background:#eef3f6; padding:.32rem .38rem; overflow:hidden; text-align:left; color:inherit; font:inherit; box-shadow:0 1px 2px rgb(0 0 0 / .06); cursor:pointer; }
+.class-schedule-calendar-block:hover { border-color:var(--primary); box-shadow:0 0 0 2px rgb(42 91 116 / .12); }
+.class-schedule-calendar-block strong,.class-schedule-calendar-block small { display:block; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.class-schedule-calendar-block strong { font-size:.76rem; }
+.class-schedule-calendar-block small { font-size:.66rem; }
+.class-schedule-calendar-block .session-time { font-weight:750; }
+.class-schedule-recess-band { position:absolute; left:0; right:0; z-index:1; display:flex; align-items:center; justify-content:center; border-top:1px dashed #d0a43b; border-bottom:1px dashed #d0a43b; background:rgb(255 244 216 / .7); color:#6f5213; pointer-events:none; }
+.class-schedule-recess-band span { padding:.08rem .28rem; border-radius:.3rem; background:rgb(255 255 255 / .82); font-size:.62rem; font-weight:800; }
+.class-schedule-calendar-legend { flex-wrap:wrap; }
+.class-schedule-recess-dot { display:inline-block; width:.75rem; height:.75rem; border:1px dashed #d0a43b; border-radius:.2rem; margin-right:.3rem; vertical-align:-.08rem; background:#fff4d8; }
+
 @media (max-width: 820px) {
   .recess-settings-grid { grid-template-columns: 1fr; }
   .session-student-list { font-size: .65rem; }
@@ -74,6 +102,8 @@
   .school-course-line-row { grid-template-columns: minmax(130px, 1fr) 80px; }
   .school-course-line-row .school-class-preview { grid-column: 1 / -1; }
   .external-center-grid { grid-template-columns: 76px minmax(120px, 1.3fr) minmax(92px, 1fr) minmax(92px, 1fr); gap: 6px; }
+  .class-schedule-view-switcher,.class-schedule-calendar-toolbar { align-items:stretch; display:grid; }
+  .class-schedule-calendar-toolbar label { min-width:0; width:100%; }
 }
 
 @media (max-width: 620px) {
@@ -84,4 +114,6 @@
   .school-course-line-row { grid-template-columns: 1fr 76px; }
   .external-center-grid { grid-template-columns: 72px 1fr; }
   .external-center-grid > strong:nth-child(3), .external-center-grid > strong:nth-child(4) { display: none; }
+  .segmented-control { width:100%; }
+  .segmented-control button { flex:1; }
 }
