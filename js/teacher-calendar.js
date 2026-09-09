@@ -116,6 +116,10 @@ function bindToolbar(root, selected, { onChangeProfessionals, onPrintProfessiona
   const secondary = root.querySelector('[data-teacher-calendar-compare]');
   const emit = () => {
     const first = String(primary?.value || '');
+    if (!first) {
+      onChangeProfessionals?.([]);
+      return;
+    }
     const second = String(secondary?.value || '');
     onChangeProfessionals?.(normalizeTeacherSelection([first, second]));
   };
