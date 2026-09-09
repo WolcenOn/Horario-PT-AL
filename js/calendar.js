@@ -9,7 +9,11 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, selected
   const groupMap = new Map(state.groups.map(group => [group.id, group]));
   const professionalMap = new Map(state.professionals.map(professional => [professional.id, professional]));
   const studentMap = new Map(state.students.map(student => [student.id, student]));
-  const validSessions = state.sessions.filter(session => Number.isFinite(timeToMinutes(session.inicio)) && Number.isFinite(timeToMinutes(session.fin)));
+  const visibleSessions = state.sessions.filter(session => {
+    const group = groupMap.get(session.groupId);
+    return group && (serviceFilter === 'ALL' || group.tipo === serviceFilter);
+  });
+  const validSessions = visibleSessions.filter(session => Number.isFinite(timeToMinutes(session.inicio)) && Number.isFinite(timeToMinutes(session.fin)));
   const minSession = Math.min(DEFAULT_CALENDAR_START, ...validSessions.map(session => timeToMinutes(session.inicio)));
   const maxSession = Math.max(DEFAULT_CALENDAR_END, ...validSessions.map(session => timeToMinutes(session.fin)));
   const start = Math.floor(minSession / 30) * 30;
@@ -23,7 +27,7 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, selected
 
   const conflictSessionIds = new Set(conflicts.flatMap(conflict => conflict.sessionIds));
   const columns = DAYS.map(day => {
-    const blocks = state.sessions.filter(session => session.dia === day.id).map(session => {
+    const blocks = visibleSessions.filter(session => session.dia === day.id).map(session => {
       const group = groupMap.get(session.groupId);
       if (!group) return '';
       const top = (timeToMinutes(session.inicio) - start) * CALENDAR_PX_PER_MINUTE;
@@ -35,10 +39,9 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, selected
         .map(id => studentMap.get(id))
         .filter(Boolean)
         .sort((a, b) => fullName(a).localeCompare(fullName(b), 'es', { sensitivity:'base' }));
-      const dimmed = serviceFilter !== 'ALL' && group.tipo !== serviceFilter;
       const selected = selectedSessionId === session.id;
 
-      return `<button class="session-block ${group.tipo.toLowerCase()} ${conflictSessionIds.has(session.id) ? 'has-conflict' : ''} ${dimmed ? 'is-dimmed' : ''} ${selected ? 'is-selected' : ''}" style="top:${top}px;height:${blockHeight}px" data-session-id="${session.id}" type="button" title="Arrastrar para mover · Pulsar para consultar horario ordinario">
+      return `<button class="session-block ${group.tipo.toLowerCase()} ${conflictSessionIds.has(session.id) ? 'has-conflict' : ''} ${selected ? 'is-selected' : ''}" style="top:${top}px;height:${blockHeight}px" data-session-id="${session.id}" type="button" title="Arrastrar para mover · Pulsar para consultar horario ordinario">
         <strong>${conflictSessionIds.has(session.id) ? '⚠ ' : ''}${escapeHtml(group.nombre)}</strong>
         <small class="session-time">${session.inicio}–${session.fin}</small>
         <small>${escapeHtml(professional?.nombre || 'Sin profesional')}</small>
@@ -80,7 +83,7 @@ export function renderCalendar(root, { state, serviceFilter, conflicts, selected
     if (event.button !== 0) return;
     const block = event.target.closest('.session-block');
     if (!block) return;
-    const session = state.sessions.find(item => item.id === block.dataset.sessionId);
+    const session = visibleSessions.find(item => item.id === block.dataset.sessionId);
     if (!session) return;
     const sessionStart = timeToMinutes(session.inicio);
     const sessionEnd = timeToMinutes(session.fin);
