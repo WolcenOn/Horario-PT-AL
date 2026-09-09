@@ -111,10 +111,11 @@ function renderCalendarView(state) {
     </section>
     ${selectedGroup ? `<section class="card calendar-card class-schedule-calendar-card">
       <div class="class-schedule-calendar-heading"><div><span class="eyebrow">Horario ordinario semanal</span><h2>${escapeHtml(selectedGroup)}</h2></div>${recess ? `<span class="badge badge-neutral">Recreo ${escapeHtml(recess.inicio)}–${escapeHtml(recess.fin)}</span>` : ''}</div>
+      ${entries.length ? '' : '<div class="class-schedule-calendar-empty"><strong>Clase todavía sin franjas ordinarias</strong><span>Puedes conservar esta vista mientras completas el horario desde “Listado”.</span></div>'}
       <div class="calendar-head"><div>Hora</div>${DAYS.map(day => `<div>${escapeHtml(day.label)}</div>`).join('')}</div>
       <div class="calendar-scroll"><div class="calendar-body"><div class="time-ruler" style="height:${height}px">${labels.join('')}</div>${columns}</div></div>
       <div class="calendar-legend class-schedule-calendar-legend"><span><i class="teacher-legend-dot class"></i>Asignatura / docencia ordinaria</span><span><i class="class-schedule-recess-dot"></i>Recreo</span><span>Pulsa un bloque para editar esa asignatura semanal en el listado.</span></div>
-    </section>` : `<section class="card"><div class="empty-state"><strong>No hay clases disponibles</strong>Configura primero la estructura del centro o carga algún horario ordinario.</div></section>`}
+    </section>` : `<section class="card"><div class="empty-state"><strong>No hay clases disponibles</strong>Configura primero la estructura del centro o añade alumnado con su grupo-clase ordinario.</div></section>`}
   </div>`;
 
   root.querySelector('[data-class-schedule-mode="list"]')?.addEventListener('click', showListView);
@@ -146,8 +147,14 @@ function openEntryInList(entryId) {
 
 function classGroupsForState(state) {
   const configured = configuredClassGroups(state.schoolSettings);
-  const loaded = [...new Set((state.classSchedules || []).map(item => String(item.grupoClase || '').trim()).filter(Boolean))];
-  return [...new Set([...configured, ...loaded])].sort(compareClassGroups);
+  const scheduled = (state.classSchedules || [])
+    .map(item => String(item.grupoClase || '').trim())
+    .filter(Boolean);
+  const enrolled = (state.students || [])
+    .filter(item => item.activo !== false)
+    .map(item => String(item.grupoClase || '').trim())
+    .filter(Boolean);
+  return [...new Set([...configured, ...scheduled, ...enrolled])].sort(compareClassGroups);
 }
 
 function compareClassGroups(a, b) {
