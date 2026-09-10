@@ -9,6 +9,16 @@ import {
 const state = {
   schoolSettings:{ lineas:{ '1º':1 } },
   centerPlanningSettings:{ mode:'global', generation:{ start:'09:00', end:'14:00' } },
+  automationSettings:{
+    id:'automation',
+    courseRules:{
+      '1º':{
+        confirmed:true,
+        subjectPriorities:{ Matemáticas:'high' },
+        subjectPolicies:{ Matemáticas:{ extraction:'pt' } }
+      }
+    }
+  },
   professionals:[{
     id:'prof-secret',
     nombre:'Ana Profesora',
@@ -49,6 +59,8 @@ test('el contexto para IA anonimiza personas y conserva restricciones útiles', 
   assert.equal(context.students[0].horasPTObjetivoMin, 90);
   assert.equal(context.supportGroups[0].professional, 'PROF_1');
   assert.deepEqual(context.supportGroups[0].students, ['ALUMNO_1']);
+  assert.equal(context.supportRules.courseRules['1º'].subjectPriorities.Matemáticas, 'high');
+  assert.equal(context.supportRules.courseRules['1º'].subjectPolicies.Matemáticas.extraction, 'pt');
 });
 
 test('el prompt no expone nombres, correo ni diagnóstico del ejemplo', () => {
@@ -60,4 +72,6 @@ test('el prompt no expone nombres, correo ni diagnóstico del ejemplo', () => {
   assert.equal(prompt.includes(AI_CONFIG_SCHEMA), true);
   assert.equal(prompt.includes('No des de alta un centro nuevo'), true);
   assert.equal(prompt.includes('Devuelve JSON válido'), true);
+  assert.equal(prompt.includes('subjectPolicies'), true);
+  assert.equal(prompt.includes('subjectPriorities'), true);
 });
