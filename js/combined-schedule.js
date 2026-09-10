@@ -1,6 +1,6 @@
 import { DAYS } from './constants.js';
 import { classEntriesForInterval } from './class-schedules.js';
-import { canExtractForSupport, normalizeSupportPolicy } from './support-policy.js';
+import { canExtractForSupport, resolveSupportPolicy } from './support-policy.js';
 import { overlapInterval, timeToMinutes } from './utils.js';
 
 const DAY_ORDER = new Map(DAYS.map((day, index) => [day.id, index]));
@@ -21,7 +21,7 @@ export function buildCombinedScheduleProjection(state) {
 
   for (const item of supportItems) {
     item.status = combinedStatus([
-      ...item.studentChecks.map(check => check.status),
+      ...(item.studentChecks.length ? item.studentChecks.map(check => check.status) : ['warning']),
       ...(item.overlaps.length ? ['blocked'] : [])
     ]);
   }
@@ -71,7 +71,7 @@ function buildSupportItem(session, context) {
     studentIds,
     studentChecks,
     overlaps:[],
-    status:combinedStatus(studentChecks.map(check => check.status))
+    status:combinedStatus(studentChecks.length ? studentChecks.map(check => check.status) : ['warning'])
   };
 }
 
@@ -94,9 +94,11 @@ function evaluateStudentSource(student, session, supportType, context) {
   }
 
   const sources = entries.map(entry => {
-    const rawPolicy = context.courseRules?.[student.curso]?.subjectPriorities?.[entry.materia] ?? 'medium';
-    const policy = normalizeSupportPolicy(rawPolicy);
-    const allowed = canExtractForSupport(rawPolicy, supportType);
+    const rule = context.courseRules?.[student.curso] || {};
+    const preference = rule.subjectPriorities?.[entry.materia] ?? 'medium';
+    const extraction = rule.subjectPolicies?.[entry.materia]?.extraction ?? rule.subjectPolicies?.[entry.materia] ?? null;
+    const policy = resolveSupportPolicy(preference, extraction);
+    const allowed = canExtractForSupport(policy, supportType);
     return {
       entry,
       policy,
