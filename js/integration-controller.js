@@ -123,7 +123,7 @@ async function openIntegration() {
       },
       onSelectScenario:async scenarioId => {
         const current = loadBackendSettings();
-        saveBackendSettings({ ...current, scenarioId:String(scenarioId || ''), scenarioId:String(scenarioId || '') });
+        saveBackendSettings({ ...current, scenarioId:String(scenarioId || '') });
         await openIntegration();
       },
       onSaveScenarioSnapshot:async () => {
