@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="./css/school.css">
   <link rel="stylesheet" href="./css/automation.css">
   <link rel="stylesheet" href="./css/center-planning.css">
+  <link rel="stylesheet" href="./css/setup-wizard.css">
   <link rel="stylesheet" href="./css/integration.css">
   <link rel="stylesheet" href="./css/capacity-study.css">
   <link rel="stylesheet" href="./css/rosters.css">
@@ -31,6 +32,7 @@
         </div>
       </div>
       <nav class="nav-list">
+        <button class="nav-item" data-view="setupWizard" type="button">🧭 <span>Asistente inicial</span></button>
         <button class="nav-item is-active" data-view="calendar" type="button">📅 <span>Horario semanal</span></button>
         <button class="nav-item" data-view="classRosters" type="button">🏫 <span>Clases y alumnado</span></button>
         <button class="nav-item" data-view="students" type="button">👤 <span>Alumnos</span></button>
@@ -91,6 +93,7 @@
   <div id="modalRoot"></div>
   <div id="toastRoot" class="toast-root" aria-live="polite" aria-atomic="true"></div>
   <script type="module" src="./js/app.js"></script>
+  <script type="module" src="./js/setup-wizard-controller.js"></script>
   <script type="module" src="./js/class-rosters-controller.js"></script>
   <script type="module" src="./js/class-schedule-calendar-controller.js"></script>
   <script type="module" src="./js/center-activities-controller.js"></script>
