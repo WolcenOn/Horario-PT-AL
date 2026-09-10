@@ -62,16 +62,18 @@ export function buildSetupWizardProgress(state) {
       detail:recessesReady ? `Recreos configurados para ${stages.map(stageLabel).join(' y ')}.` : structureReady ? `Falta configurar: ${missingRecesses.map(stageLabel).join(', ') || 'las etapas utilizadas'}.` : 'Se comprobará cuando hayas definido las clases.'
     },
     {
-      id:'advanced', phase:'essential', number:5, title:'Restricciones especiales, solo si las usas',
+      id:'advanced', phase:'essential', number:5, title:'Opcional · restricciones especiales',
       ok:advancedReady, target:advancedTarget(activitiesItem, patternsItem, gridItem), actionLabel:advancedReady ? 'Revisar ajustes' : 'Resolver ajustes',
-      description:'Patrones temporales, actividades del centro y duraciones especiales son opcionales; solo bloquean si los has configurado de forma incompatible.',
+      description:'Solo necesitas entrar aquí si usas actividades, días obligatorios, duraciones especiales u otras restricciones.',
       detail:advancedReady ? 'No hay ajustes avanzados incompatibles.' : firstMissingMessage([activitiesItem, patternsItem, gridItem])
     },
     {
-      id:'generate', phase:'essential', number:6, title:'Generar el horario ordinario',
-      ok:globalReady, target:'centerPlanning', actionLabel:globalReady ? (ordinarySchedulePresent ? 'Recalcular / revisar horario' : 'Generar primer horario') : 'Ver qué falta',
-      description:'Cuando los pasos anteriores estén listos, genera una propuesta completa y revísala antes de aplicarla.',
-      detail:globalReady ? (ordinarySchedulePresent ? `${state.classSchedules.length} bloque(s) ordinarios cargados. Puedes recalcularlos cuando quieras.` : 'Todo listo: ya puedes pulsar “Generar propuesta global”.') : `${global.items.filter(item => !item.ok).length + (recessesReady ? 0 : 1)} comprobación(es) pendientes.`
+      id:'generate', phase:'essential', number:6, title:ordinarySchedulePresent ? 'Revisar y recalcular el horario' : 'Generar el horario ordinario',
+      ok:globalReady, target:'centerPlanning', actionLabel:globalReady ? (ordinarySchedulePresent ? 'Recalcular horario' : 'Generar primer horario') : 'Ver qué falta',
+      description:ordinarySchedulePresent
+        ? 'Si detectas que falta algo, corrige solo ese dato y vuelve a calcular. El horario actual se conserva hasta que apliques la nueva propuesta.'
+        : 'Cuando los pasos anteriores estén listos, genera una propuesta completa y revísala antes de aplicarla.',
+      detail:globalReady ? (ordinarySchedulePresent ? `${state.classSchedules.length} bloque(s) ordinarios cargados. Puedes recalcularlos sin borrar el horario actual.` : 'Todo listo: ya puedes pulsar “Generar propuesta global”.') : `${global.items.filter(item => !item.ok).length + (recessesReady ? 0 : 1)} comprobación(es) pendientes.`
     },
     {
       id:'support', phase:'support', number:7, title:'Necesidades y grupos PT/AL',
@@ -119,29 +121,31 @@ export function renderSetupWizard(root, { state, onNavigate, onEditRecesses }) {
     <section class="card setup-wizard-hero">
       <div class="setup-wizard-hero-copy">
         <p class="eyebrow">Asistente de puesta en marcha</p>
-        <h2>Configura el centro paso a paso</h2>
+        <h2>Configura, calcula y corrige sin empezar de nuevo</h2>
         <p>Empieza por lo imprescindible y deja los ajustes finos para después. <strong>No necesitas cargar horarios ordinarios ni sesiones PT/AL para generar el primer horario completo.</strong></p>
         <div class="setup-wizard-progress" aria-label="Progreso de configuración esencial">
           <div><span>Configuración esencial</span><strong>${progress.essentialCompleted}/${progress.essentialTotal}</strong></div>
           <progress max="100" value="${percent}">${percent}%</progress>
         </div>
         <div class="button-row">
-          <button class="button button-primary" type="button" data-wizard-go="${escapeHtml(progress.nextEssential.target)}">${escapeHtml(progress.globalReady ? 'Ir a generar horario' : `Continuar: ${progress.nextEssential.title}`)}</button>
+          <button class="button button-primary" type="button" data-wizard-go="${escapeHtml(progress.nextEssential.target)}">${escapeHtml(progress.globalReady ? (progress.ordinarySchedulePresent ? 'Revisar / recalcular horario' : 'Ir a generar horario') : `Continuar: ${progress.nextEssential.title}`)}</button>
           <button class="button" type="button" data-wizard-go="automation">Ir a ajustes PT/AL</button>
         </div>
       </div>
       <div class="setup-wizard-result ${progress.globalReady ? 'is-ready' : ''}">
         <span>${progress.globalReady ? '✓' : '→'}</span>
-        <strong>${progress.globalReady ? 'Ya puedes calcular' : 'Sigue el siguiente paso'}</strong>
-        <small>${progress.globalReady ? 'El generador global tiene los datos básicos necesarios.' : 'El asistente te llevará siempre al primer requisito pendiente.'}</small>
+        <strong>${progress.globalReady ? (progress.ordinarySchedulePresent ? 'Puedes recalcular cuando quieras' : 'Ya puedes calcular') : 'Sigue el siguiente paso'}</strong>
+        <small>${progress.globalReady ? (progress.ordinarySchedulePresent ? 'Cambia solo lo necesario y genera otra propuesta. El horario actual no se borra automáticamente.' : 'El generador global tiene los datos básicos necesarios.') : 'El asistente te llevará siempre al primer requisito pendiente.'}</small>
       </div>
     </section>
 
     <section class="setup-wizard-intro-grid">
       <article class="card"><strong>1 · Lo imprescindible</strong><span>Clases, jornada, currículo, profesorado y recreos.</span></article>
-      <article class="card"><strong>2 · Generar y revisar</strong><span>La aplicación construye el horario ordinario; tú decides si aplicarlo.</span></article>
-      <article class="card"><strong>3 · Añadir PT/AL</strong><span>Después puedes incorporar apoyos, prioridades y optimización automática.</span></article>
+      <article class="card"><strong>2 · Calcular y revisar</strong><span>La aplicación propone un horario y tú decides si aplicarlo.</span></article>
+      <article class="card"><strong>3 · Corregir y recalcular</strong><span>Si falta algo, modifica solo ese dato y vuelve a calcular.</span></article>
     </section>
+
+    ${progress.ordinarySchedulePresent ? renderRecalculationCard(state) : ''}
 
     ${renderPhase('Configuración esencial', 'Completa esta parte para construir un horario del centro desde cero.', essential)}
     ${renderPhase('Apoyos PT/AL', 'Esta segunda fase mejora y coordina los apoyos. No bloquea la creación del horario ordinario.', support)}
@@ -156,6 +160,26 @@ export function renderSetupWizard(root, { state, onNavigate, onEditRecesses }) {
     if (target === 'recesses') onEditRecesses();
     else onNavigate(target);
   }));
+}
+
+function renderRecalculationCard(state) {
+  const blocks = (state.classSchedules || []).length;
+  return `<section class="card setup-recalculation-card" data-wizard-recalculation>
+    <div class="setup-recalculation-copy">
+      <p class="eyebrow">Ciclo de revisión</p>
+      <h2>¿Has visto algo que falta o quieres cambiar?</h2>
+      <p>No borres el horario. Corrige únicamente el dato necesario y vuelve a calcular. <strong>La propuesta nueva no sustituye los ${blocks} bloques actuales hasta que pulses “Aplicar propuesta”.</strong></p>
+    </div>
+    <div class="setup-recalculation-actions">
+      <button class="button" type="button" data-wizard-go="centerPlanning">Jornada / currículo</button>
+      <button class="button" type="button" data-wizard-go="professionals">Profesorado</button>
+      <button class="button" type="button" data-wizard-go="temporalPatterns">Restricciones</button>
+      <button class="button button-primary" type="button" data-wizard-go="centerPlanning">⚙ Recalcular horario</button>
+    </div>
+    <div class="setup-recalculation-flow" aria-label="Flujo para recalcular">
+      <span>1 · Corrige</span><b>→</b><span>2 · Recalcula</span><b>→</b><span>3 · Revisa</span><b>→</b><span>4 · Aplica si mejora</span>
+    </div>
+  </section>`;
 }
 
 function renderPhase(title, subtitle, steps) {
