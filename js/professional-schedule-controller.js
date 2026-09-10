@@ -1,16 +1,12 @@
-import { loadState } from './repository.js';
+import { loadState, saveProfessional } from './repository.js';
 import { openProfessionalForm } from './profesionales.js';
 import { renderProfessionalSchedule } from './professional-schedule.js';
 import { printProfessionalSchedules } from './teacher-print.js';
-import { saveProfessional } from './repository.js';
 import { showToast } from './ui.js';
+import { applyViewShell } from './view-shell.js';
 
 const root = document.querySelector('#viewRoot');
 const pageTitle = document.querySelector('#pageTitle');
-const summaryStrip = document.querySelector('#summaryStrip');
-const serviceFilter = document.querySelector('.service-filter');
-const primaryAction = document.querySelector('#primaryActionBtn');
-const printActions = document.querySelector('#calendarPrintActions');
 
 let openProfessionalId = null;
 let enhancing = false;
@@ -63,12 +59,7 @@ async function openSchedule(id) {
     return;
   }
   openProfessionalId = id;
-  pageTitle.textContent = 'Horario individual';
-  document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === 'professionals'));
-  summaryStrip?.classList.add('hidden');
-  serviceFilter?.classList.add('hidden');
-  primaryAction?.classList.add('hidden');
-  printActions?.classList.add('hidden');
+  applyViewShell({ view:'professionals', title:'Horario individual' });
 
   renderProfessionalSchedule(root, {
     state,
