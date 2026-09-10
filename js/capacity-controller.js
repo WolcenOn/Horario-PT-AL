@@ -4,13 +4,9 @@ import { loadState, saveCenterPlanningSettings, saveProfessional } from './repos
 import { normalizeCenterPlanningSettings, normalizeProfessionalProfile } from './center-planning.js';
 import { buildStaffingSolverPayload } from './staffing-adapter.js';
 import { showToast } from './ui.js';
+import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
-const pageTitle = document.querySelector('#pageTitle');
-const summaryStrip = document.querySelector('#summaryStrip');
-const serviceFilter = document.querySelector('.service-filter');
-const primaryAction = document.querySelector('#primaryActionBtn');
-const printActions = document.querySelector('#calendarPrintActions');
 let optimizerStatus = null;
 let optimizerResult = null;
 
@@ -26,12 +22,7 @@ async function openCapacityStudy() {
   const state = await loadState();
   const settings = loadBackendSettings();
   const staffing = buildStaffingSolverPayload(state);
-  pageTitle.textContent = 'Estudio de plantilla';
-  document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === 'capacityStudy'));
-  summaryStrip?.classList.add('hidden');
-  serviceFilter?.classList.add('hidden');
-  primaryAction?.classList.add('hidden');
-  printActions?.classList.add('hidden');
+  applyViewShell({ view:'capacityStudy', title:'Estudio de plantilla' });
 
   const render = () => renderCapacityStudy(viewRoot, {
     state,
