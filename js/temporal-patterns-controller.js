@@ -2,13 +2,9 @@ import { normalizeCenterPlanningSettings } from './center-planning.js';
 import { loadState, saveCenterPlanningSettings } from './repository.js';
 import { openSubjectPatternForm, renderTemporalPatterns } from './temporal-patterns-view.js';
 import { showToast } from './ui.js';
+import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
-const pageTitle = document.querySelector('#pageTitle');
-const summaryStrip = document.querySelector('#summaryStrip');
-const serviceFilter = document.querySelector('.service-filter');
-const primaryAction = document.querySelector('#primaryActionBtn');
-const printActions = document.querySelector('#calendarPrintActions');
 
 document.addEventListener('click', event => {
   const button = event.target.closest?.('[data-view="temporalPatterns"]');
@@ -21,12 +17,7 @@ document.addEventListener('click', event => {
 async function openTemporalPatterns() {
   let state = await loadState();
   const render = () => {
-    pageTitle.textContent = 'Patrones temporales';
-    document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === 'temporalPatterns'));
-    summaryStrip?.classList.add('hidden');
-    serviceFilter?.classList.add('hidden');
-    primaryAction?.classList.add('hidden');
-    printActions?.classList.add('hidden');
+    applyViewShell({ view:'temporalPatterns', title:'Patrones temporales' });
     renderTemporalPatterns(viewRoot, {
       state,
       onEditSubject:editSubject,
