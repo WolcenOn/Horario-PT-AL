@@ -3,11 +3,11 @@ import { test, expect } from '@playwright/test';
 test('la optimización separa reglas duras de extracción y preferencias', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => localStorage.setItem('horario-user-cleared', 'true'));
 
   await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
   await page.evaluate(async () => {
-    localStorage.setItem('horario-user-cleared', 'true');
-
     const db = await new Promise((resolve, reject) => {
       const request = indexedDB.open('HorarioPTAL', 2);
       request.onsuccess = () => resolve(request.result);
@@ -59,6 +59,7 @@ test('la optimización separa reglas duras de extracción y preferencias', async
     db.close();
   });
   await page.reload();
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
 
   await page.locator('[data-view="automation"]').scrollIntoViewIfNeeded();
   await page.locator('[data-view="automation"]').click();
