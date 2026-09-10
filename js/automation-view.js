@@ -3,6 +3,14 @@ import { COURSE_OPTIONS } from './education.js';
 import { SUBJECT_PRIORITIES, buildReadinessReport, courseRuleDraft, normalizeAutomationSettings, subjectsForCourse } from './automation-core.js';
 import { escapeHtml } from './utils.js';
 
+const EXTRACTION_OPTIONS = [
+  { value:'ptal', label:'PT y AL' },
+  { value:'pt', label:'Solo PT' },
+  { value:'al', label:'Solo AL' },
+  { value:'blocked', label:'No extraíble' }
+];
+const PREFERENCE_OPTIONS = SUBJECT_PRIORITIES.filter(option => option.value !== 'blocked');
+
 export function renderAutomationManager(root, {
   state,
   automationSettings,
@@ -54,8 +62,8 @@ export function renderAutomationManager(root, {
       <section class="card">
         <div class="card-header">
           <div>
-            <h2>Prioridades y horas permitidas por curso</h2>
-            <small>“Prioridad” significa cuánto interesa conservar al alumno dentro del aula ordinaria durante esa materia.</small>
+            <h2>Extracción, preferencias y horas permitidas</h2>
+            <small>“Extracción” es una regla dura: decide si el alumnado puede salir de esa materia a PT y/o AL. “Preferencia” solo ordena los huecos permitidos.</small>
           </div>
           <span class="badge badge-neutral">${readiness.courses.length} cursos</span>
         </div>
@@ -64,7 +72,7 @@ export function renderAutomationManager(root, {
             ${readiness.courses.map(course => renderCourseRule(state, settings, course)).join('')}
           </div>
           <div class="automation-form-actions">
-            <span class="muted">Las franjas vacías significan “no programar sesiones ese día”. Puedes copiar una franja y cambiar después solo el día excepcional.</span>
+            <span class="muted">Las franjas vacías significan “no programar sesiones ese día”. Una preferencia nunca bloquea por sí sola una franja; para prohibir una extracción usa “No extraíble”.</span>
             <button class="button" type="button" data-use-center-hours-all data-center-start="${escapeHtml(centerWindow.inicio)}" data-center-end="${escapeHtml(centerWindow.fin)}">↳ Usar ${escapeHtml(centerWindow.inicio)}–${escapeHtml(centerWindow.fin)} en todos los cursos</button>
             <button class="button button-primary" type="submit">Guardar reglas de cursos</button>
           </div>` : `
@@ -171,11 +179,20 @@ function renderCourseRule(state, settings, course) {
         </div>
       </div>
       <div>
-        <h4>Prioridad de las asignaturas</h4>
+        <h4>Reglas por asignatura</h4>
+        <small class="field-hint automation-policy-hint">Define primero si se puede salir de la materia y, solo después, qué preferencia tiene entre los huecos permitidos.</small>
         ${subjects.length ? `<div class="subject-priority-list">
+          <div class="subject-policy-head" aria-hidden="true"><span>Materia</span><span>Extracción</span><span>Preferencia</span></div>
           ${subjects.map(subject => {
-            const priority = draft.subjectPriorities?.[subject] || 'medium';
-            return `<label class="subject-priority-row"><span>${escapeHtml(subject)}</span><select data-subject-priority="${escapeHtml(subject)}">${SUBJECT_PRIORITIES.map(option => `<option value="${option.value}" ${priority === option.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select></label>`;
+            const storedPriority = draft.subjectPriorities?.[subject] || 'medium';
+            const priority = storedPriority === 'blocked' ? 'high' : storedPriority;
+            const explicitExtraction = draft.subjectPolicies?.[subject]?.extraction || draft.subjectPolicies?.[subject];
+            const extraction = explicitExtraction || (storedPriority === 'blocked' ? 'blocked' : 'ptal');
+            return `<div class="subject-priority-row subject-policy-row">
+              <span>${escapeHtml(subject)}</span>
+              <label><small>Extracción</small><select data-subject-extraction="${escapeHtml(subject)}" aria-label="Extracción permitida en ${escapeHtml(subject)}">${EXTRACTION_OPTIONS.map(option => `<option value="${option.value}" ${extraction === option.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select></label>
+              <label><small>Preferencia</small><select data-subject-priority="${escapeHtml(subject)}" aria-label="Preferencia de ${escapeHtml(subject)}">${PREFERENCE_OPTIONS.map(option => `<option value="${option.value}" ${priority === option.value ? 'selected' : ''}>${escapeHtml(option.label.replace(' · buena franja para PT/AL','').replace(' · aceptable','').replace(' · mejor evitar',''))}</option>`).join('')}</select></label>
+            </div>`;
           }).join('')}
         </div>` : `<div class="automation-inline-warning">No se han detectado materias. Configura la carga curricular del curso en Plan del centro.</div>`}
       </div>
@@ -191,7 +208,7 @@ function renderProposal(state, proposal) {
     const unresolved = proposal.unresolved || [];
     return `<section class="card automation-proposal is-error">
       <div class="card-header"><div><h2>No se ha encontrado una solución completa</h2><small>El horario actual no se ha modificado.</small></div><span class="badge badge-danger">${unresolved.length} sin resolver</span></div>
-      <p>Prueba ampliando las franjas permitidas, rebajando alguna materia de “Bloqueada”, completando disponibilidades o revisando grupos que comparten alumnado/profesional.</p>
+      <p>Prueba ampliando las franjas permitidas, revisando materias marcadas como “No extraíble”, completando disponibilidades o comprobando grupos que comparten alumnado/profesional.</p>
       ${unresolved.length ? `<ul class="automation-unresolved-list">${unresolved.slice(0,10).map(item => {
         if (item.conflict) return `<li>${escapeHtml(item.conflict.message)}</li>`;
         const group = groupMap.get(item.groupId);
@@ -246,7 +263,11 @@ function readRulesFromForm(root, previousSettings) {
     section.querySelectorAll('[data-subject-priority]').forEach(select => {
       subjectPriorities[select.dataset.subjectPriority] = select.value;
     });
-    courseRules[course] = { confirmed:true, allowedWindows, subjectPriorities };
+    const subjectPolicies = {};
+    section.querySelectorAll('[data-subject-extraction]').forEach(select => {
+      subjectPolicies[select.dataset.subjectExtraction] = { extraction:select.value };
+    });
+    courseRules[course] = { confirmed:true, allowedWindows, subjectPriorities, subjectPolicies };
   }
   return { id:'automation', courseRules };
 }
