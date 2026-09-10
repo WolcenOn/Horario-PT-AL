@@ -46,6 +46,7 @@ export function buildAiCenterConfigurationContext(state) {
   return {
     schoolSettings:cloneJson(state.schoolSettings || {}),
     centerPlanningSettings:cloneJson(state.centerPlanningSettings || {}),
+    supportRules:cloneJson(state.automationSettings || { id:'automation', courseRules:{} }),
     professionals,
     students,
     supportGroups:groups,
@@ -96,6 +97,7 @@ export function buildAiCenterConfigurationPrompt(state) {
     '- No inventes docentes, alumnos, clases, cursos ni disponibilidades.',
     '- Si falta un dato imprescindible, inclúyelo en questions en lugar de inventarlo.',
     '- Conserva los minutos y las restricciones proporcionadas.',
+    '- Respeta supportRules: subjectPolicies expresa la compatibilidad dura de extracción y subjectPriorities expresa la preferencia heredada.',
     '- Para extracción usa solo blocked, pt, al o ptal.',
     '- Para preferencia usa solo preferred, neutral o avoid.',
     '- Devuelve JSON válido y nada fuera del JSON.',
