@@ -1,10 +1,15 @@
 import { test, expect } from '@playwright/test';
 
+async function openApp(page) {
+  await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
+}
+
 test('la aplicación arranca y permite navegar por las áreas principales', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await page.goto('/');
+  await openApp(page);
   await expect(page.locator('#pageTitle')).toHaveText('Horario semanal');
   await expect(page.locator('[data-view="professionals"]')).toBeVisible();
   await expect(page.locator('[data-view="centerActivities"]')).toBeVisible();
@@ -23,7 +28,7 @@ test('la cuenta y sincronización mantiene el modo offline y muestra el contexto
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await page.goto('/');
+  await openApp(page);
   await page.locator('[data-view="integration"]').click();
   await expect(page.locator('#pageTitle')).toHaveText('Cuenta y sincronización');
   await expect(page.getByRole('heading', { name:'Curso académico y escenario' })).toBeVisible();
@@ -92,7 +97,7 @@ test('guarda y restaura una copia compartida de un escenario', async ({ page }) 
   });
 
   page.on('dialog', dialog => dialog.accept());
-  await page.goto('/');
+  await openApp(page);
   await page.locator('[data-view="integration"]').click();
   await expect(page.getByText('Este escenario todavía no tiene una copia del proyecto guardada.')).toBeVisible();
 
@@ -111,7 +116,7 @@ test('Horario semanal compara dos docentes lado a lado y prepara impresión múl
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await page.goto('/');
+  await openApp(page);
   await expect(page.locator('#pageTitle')).toHaveText('Horario semanal');
   await expect(page.locator('[data-teacher-calendar-toolbar]')).toBeVisible();
 
@@ -157,7 +162,7 @@ test('el filtro AL deja las sesiones AL editables sin que PT capture el clic', a
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await page.goto('/');
+  await openApp(page);
   await page.locator('[data-service-filter="AL"]').click();
 
   await expect(page.locator('.session-block.al').first()).toBeVisible();
@@ -177,7 +182,7 @@ test('editar una profesional AL conserva su tipo y permite cambiar el selector',
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await page.goto('/');
+  await openApp(page);
   await page.locator('[data-view="professionals"]').click();
   await expect(page.locator('#pageTitle')).toHaveText('Profesorado');
 
@@ -196,7 +201,7 @@ test('editar una profesional AL conserva su tipo y permite cambiar el selector',
 });
 
 test('el formulario de actividades mantiene legibles los días en escritorio', async ({ page }) => {
-  await page.goto('/');
+  await openApp(page);
   await page.locator('[data-view="centerActivities"]').click();
   await expect(page.locator('#pageTitle')).toHaveText('Actividades del centro');
   await page.locator('[data-add-center-activity]').click();
