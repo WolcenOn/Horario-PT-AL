@@ -4,9 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Horario PT / AL · Integración</title>
+  <title>Planificador del centro · Integración</title>
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/layout.css">
+  <link rel="stylesheet" href="./css/product-shell.css">
   <link rel="stylesheet" href="./css/calendar.css">
   <link rel="stylesheet" href="./css/school.css">
   <link rel="stylesheet" href="./css/automation.css">
@@ -25,29 +26,52 @@
   <div id="appShell" class="app-shell">
     <aside id="sidebar" class="sidebar" aria-label="Navegación principal">
       <div class="brand">
-        <div class="brand-mark" aria-hidden="true">PA</div>
+        <div class="brand-mark" aria-hidden="true">PC</div>
         <div class="brand-copy">
-          <strong>Horario PT / AL</strong>
-          <small>Rama de integración</small>
+          <strong>Planificador del centro</strong>
+          <small>Horario, apoyos y operativa</small>
         </div>
       </div>
       <nav class="nav-list">
-        <button class="nav-item" data-view="setupWizard" type="button">🧭 <span>Asistente inicial</span></button>
-        <button class="nav-item is-active" data-view="calendar" type="button">📅 <span>Horario semanal</span></button>
-        <button class="nav-item" data-view="classRosters" type="button">🏫 <span>Clases y alumnado</span></button>
-        <button class="nav-item" data-view="students" type="button">👤 <span>Alumnos</span></button>
-        <button class="nav-item" data-view="professionals" type="button">🧑‍🏫 <span>Profesorado</span></button>
-        <button class="nav-item" data-view="groups" type="button">👥 <span>Grupos PT/AL</span></button>
-        <button class="nav-item" data-view="sessions" type="button">🕒 <span>Sesiones PT/AL</span></button>
-        <button class="nav-item" data-view="classSchedules" type="button">🗓️ <span>Horarios de aula</span></button>
-        <button class="nav-item" data-view="centerPlanning" type="button">🏛️ <span>Plan del centro</span></button>
-        <button class="nav-item" data-view="centerActivities" type="button">🧩 <span>Actividades del centro</span></button>
-        <button class="nav-item" data-view="temporalPatterns" type="button">🧭 <span>Patrones temporales</span></button>
-        <button class="nav-item" data-view="capacityStudy" type="button">📊 <span>Estudio de plantilla</span></button>
-        <button class="nav-item" data-view="automation" type="button">⚙️ <span>Configuración automática</span><span id="automationNavBadge" class="nav-badge" aria-label="Estado de configuración">!</span></button>
-        <button class="nav-item" data-view="alerts" type="button">⚠️ <span>Conflictos</span></button>
-        <button class="nav-item" data-view="operations" type="button">🚨 <span>Operativa diaria</span></button>
-        <button class="nav-item" data-view="integration" type="button">🔌 <span>GestorEscuela</span></button>
+        <div class="nav-section" role="group" aria-label="Inicio">
+          <div class="nav-section-label">Inicio</div>
+          <button class="nav-item" data-view="setupWizard" type="button">🧭 <span>Asistente inicial</span></button>
+        </div>
+
+        <div class="nav-section" role="group" aria-label="Horario">
+          <div class="nav-section-label">Horario</div>
+          <button class="nav-item is-active" data-view="calendar" type="button">📅 <span>Horario de apoyos</span></button>
+          <button class="nav-item" data-view="classSchedules" type="button">🗓️ <span>Horario de aulas</span></button>
+          <button class="nav-item" data-view="alerts" type="button">⚠️ <span>Conflictos</span></button>
+        </div>
+
+        <div class="nav-section" role="group" aria-label="Centro">
+          <div class="nav-section-label">Centro</div>
+          <button class="nav-item" data-view="classRosters" type="button">🏫 <span>Clases y alumnado</span></button>
+          <button class="nav-item" data-view="professionals" type="button">🧑‍🏫 <span>Profesorado</span></button>
+          <button class="nav-item" data-view="centerPlanning" type="button">🏛️ <span>Planificación académica</span></button>
+          <button class="nav-item" data-view="centerActivities" type="button">🧩 <span>Actividades del centro</span></button>
+          <button class="nav-item" data-view="temporalPatterns" type="button">🧭 <span>Patrones temporales</span></button>
+          <button class="nav-item" data-view="capacityStudy" type="button">📊 <span>Plantilla y reparto</span></button>
+        </div>
+
+        <div class="nav-section" role="group" aria-label="Apoyos PT y AL">
+          <div class="nav-section-label">Apoyos PT/AL</div>
+          <button class="nav-item" data-view="students" type="button">👤 <span>Necesidades de apoyo</span></button>
+          <button class="nav-item" data-view="groups" type="button">👥 <span>Grupos PT/AL</span></button>
+          <button class="nav-item" data-view="sessions" type="button">🕒 <span>Sesiones de apoyo</span></button>
+          <button class="nav-item" data-view="automation" type="button">⚙️ <span>Optimización PT/AL</span><span id="automationNavBadge" class="nav-badge" aria-label="Estado de configuración">!</span></button>
+        </div>
+
+        <div class="nav-section" role="group" aria-label="Operativa">
+          <div class="nav-section-label">Operativa</div>
+          <button class="nav-item" data-view="operations" type="button">🚨 <span>Operativa diaria</span></button>
+        </div>
+
+        <div class="nav-section" role="group" aria-label="Cuenta y datos">
+          <div class="nav-section-label">Cuenta y datos</div>
+          <button class="nav-item" data-view="integration" type="button">🔌 <span>GestorEscuela</span></button>
+        </div>
       </nav>
       <div class="sidebar-footer">
         <div class="sidebar-data-actions">
@@ -67,7 +91,7 @@
         <div class="topbar-title">
           <button id="sidebarToggleBtn" class="icon-button sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Ocultar menú lateral">☰</button>
           <div>
-            <p class="eyebrow">Organización semanal</p>
+            <p class="eyebrow">Centro, horario y apoyos</p>
             <h1 id="pageTitle">Horario semanal</h1>
           </div>
         </div>
