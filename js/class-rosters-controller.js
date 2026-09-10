@@ -7,13 +7,9 @@ import { buildGestorEscuelaConfiguration } from './gestor-adapter.js';
 import { buildRosterPayload } from './roster-adapter.js';
 import { loadState, saveSchoolSettings, saveStudent } from './repository.js';
 import { showToast } from './ui.js';
+import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
-const pageTitle = document.querySelector('#pageTitle');
-const summaryStrip = document.querySelector('#summaryStrip');
-const serviceFilter = document.querySelector('.service-filter');
-const primaryAction = document.querySelector('#primaryActionBtn');
-const printActions = document.querySelector('#calendarPrintActions');
 let syncStatus = null;
 
 document.addEventListener('click', event => {
@@ -28,12 +24,7 @@ async function openClassRosters() {
   let state = await loadState();
   const backendSettings = loadBackendSettings();
   const render = () => {
-    pageTitle.textContent = 'Clases y alumnado';
-    document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === 'classRosters'));
-    summaryStrip?.classList.add('hidden');
-    serviceFilter?.classList.add('hidden');
-    primaryAction?.classList.add('hidden');
-    printActions?.classList.add('hidden');
+    applyViewShell({ view:'classRosters', title:'Clases y alumnado' });
     renderClassRosters(viewRoot, {
       state,
       backendReady:backendConfigured(backendSettings),
