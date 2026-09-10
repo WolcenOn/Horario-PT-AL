@@ -3,6 +3,7 @@ import { classEntriesForInterval } from './class-schedules.js';
 import { COURSE_OPTIONS, classesForCourse, recessForStage, recessOverlaps, schoolStructureConfigured, stageForCourse } from './education.js';
 import { detectConflicts } from './conflicts.js';
 import { sessionDuration } from './hours.js';
+import { canExtractForSupport, EXTRACTION_MODES, resolveSupportPolicy } from './support-policy.js';
 import { overlapInterval, timeToMinutes, minutesToTime } from './utils.js';
 
 export const AUTOMATION_SETTINGS_ID = 'automation';
@@ -14,7 +15,6 @@ export const SUBJECT_PRIORITIES = [
 ];
 
 const PRIORITY_VALUES = new Set(SUBJECT_PRIORITIES.map(item => item.value));
-const PRIORITY_SCORE = new Map(SUBJECT_PRIORITIES.map(item => [item.value, item.score]));
 const DAY_ORDER = new Map(DAYS.map((day, index) => [day.id, index]));
 const COURSE_VALUES = new Set(COURSE_OPTIONS.map(option => option.value));
 const STEP_MINUTES = 15;
@@ -84,7 +84,8 @@ export function courseRuleDraft(state, settings, course) {
   return {
     confirmed:false,
     allowedWindows,
-    subjectPriorities:Object.fromEntries(subjectsForCourse(state, course).map(subject => [subject, 'medium']))
+    subjectPriorities:Object.fromEntries(subjectsForCourse(state, course).map(subject => [subject, 'medium'])),
+    subjectPolicies:{}
   };
 }
 
@@ -326,7 +327,7 @@ function buildCandidates(template, state, settings, groupMap, professionalMap, s
       for (let minute = first; minute + duration <= end; minute += STEP_MINUTES) {
         const inicio = minutesToTime(minute);
         const fin = minutesToTime(minute + duration);
-        const evaluation = evaluateCandidate(students, day.id, inicio, fin, state, settings);
+        const evaluation = evaluateCandidate(students, day.id, inicio, fin, state, settings, group.tipo);
         if (!evaluation.valid) continue;
         candidates.push({ dia:day.id, inicio, fin, score:evaluation.score });
       }
@@ -336,7 +337,7 @@ function buildCandidates(template, state, settings, groupMap, professionalMap, s
   return candidates.sort((a, b) => b.score - a.score || (DAY_ORDER.get(a.dia) ?? 99) - (DAY_ORDER.get(b.dia) ?? 99) || a.inicio.localeCompare(b.inicio));
 }
 
-function evaluateCandidate(students, dia, inicio, fin, state, settings) {
+function evaluateCandidate(students, dia, inicio, fin, state, settings, supportType) {
   let score = 0;
   for (const student of students) {
     const stage = stageForCourse(student.curso);
@@ -355,9 +356,12 @@ function evaluateCandidate(students, dia, inicio, fin, state, settings) {
       continue;
     }
     for (const entry of entries) {
-      const priority = settings.courseRules[student.curso]?.subjectPriorities?.[entry.materia] || 'medium';
-      if (priority === 'blocked') return { valid:false, score:-Infinity };
-      score += PRIORITY_SCORE.get(priority) ?? 0;
+      const rule = settings.courseRules[student.curso] || {};
+      const preference = rule.subjectPriorities?.[entry.materia] || 'medium';
+      const extraction = rule.subjectPolicies?.[entry.materia]?.extraction ?? rule.subjectPolicies?.[entry.materia] ?? null;
+      const policy = resolveSupportPolicy(preference, extraction);
+      if (!canExtractForSupport(policy, supportType)) return { valid:false, score:-Infinity };
+      score += policy.score ?? 0;
     }
   }
   return { valid:true, score };
@@ -398,7 +402,12 @@ function normalizeCourseRule(value) {
   for (const [subject, priority] of Object.entries(raw.subjectPriorities || {})) {
     if (subject && PRIORITY_VALUES.has(priority)) subjectPriorities[subject] = priority;
   }
-  return { confirmed:raw.confirmed === true, allowedWindows, subjectPriorities };
+  const subjectPolicies = {};
+  for (const [subject, rawPolicy] of Object.entries(raw.subjectPolicies || {})) {
+    const extraction = typeof rawPolicy === 'string' ? rawPolicy : rawPolicy?.extraction;
+    if (subject && EXTRACTION_MODES.includes(extraction)) subjectPolicies[subject] = { extraction };
+  }
+  return { confirmed:raw.confirmed === true, allowedWindows, subjectPriorities, subjectPolicies };
 }
 
 function hasAllowedWindow(rule) {
