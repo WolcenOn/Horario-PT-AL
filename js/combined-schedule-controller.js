@@ -1,12 +1,8 @@
 import { loadState } from './repository.js';
 import { renderCombinedSchedule } from './combined-schedule-view.js';
+import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
-const pageTitle = document.querySelector('#pageTitle');
-const summaryStrip = document.querySelector('#summaryStrip');
-const serviceFilter = document.querySelector('.service-filter');
-const primaryAction = document.querySelector('#primaryActionBtn');
-const printActions = document.querySelector('#calendarPrintActions');
 
 let opened = false;
 
@@ -21,12 +17,7 @@ document.addEventListener('click', event => {
 async function openCombinedSchedule() {
   const state = await loadState();
   opened = true;
-  pageTitle.textContent = 'Horario combinado';
-  document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === 'combinedCalendar'));
-  summaryStrip?.classList.add('hidden');
-  serviceFilter?.classList.add('hidden');
-  primaryAction?.classList.add('hidden');
-  printActions?.classList.add('hidden');
+  applyViewShell({ view:'combinedCalendar', title:'Horario combinado' });
   renderCombinedSchedule(viewRoot, { state });
 }
 
