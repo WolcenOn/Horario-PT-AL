@@ -4,13 +4,9 @@ import { toJsonCompatible } from './gestor-serialization.js';
 import { renderOperationsView } from './operations-view.js';
 import { loadState } from './repository.js';
 import { showToast } from './ui.js';
+import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
-const pageTitle = document.querySelector('#pageTitle');
-const summaryStrip = document.querySelector('#summaryStrip');
-const serviceFilter = document.querySelector('.service-filter');
-const primaryAction = document.querySelector('#primaryActionBtn');
-const printActions = document.querySelector('#calendarPrintActions');
 let operationStatus = null;
 let latestResult = null;
 
@@ -27,12 +23,7 @@ async function openOperations() {
     const state = await loadState();
     const settings = loadBackendSettings();
     const adapter = buildGestorEscuelaConfiguration(state);
-    pageTitle.textContent = 'Operativa diaria';
-    document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === 'operations'));
-    summaryStrip?.classList.add('hidden');
-    serviceFilter?.classList.add('hidden');
-    primaryAction?.classList.add('hidden');
-    printActions?.classList.add('hidden');
+    applyViewShell({ view:'operations', title:'Operativa diaria' });
 
     renderOperationsView(viewRoot, {
       state,
@@ -68,7 +59,7 @@ async function solveAbsence({ settings, adapter, request }) {
       plan = await createDayPlan(settings, {
         plan_date:request.date,
         source_hash:null,
-        notes:'Creado desde Horario PT / AL · rama de integración',
+        notes:'Creado desde Planificador del centro · rama de integración',
         payload:{ source:'horario-pt-al' }
       });
     }
