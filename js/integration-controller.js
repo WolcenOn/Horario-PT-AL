@@ -17,13 +17,9 @@ import { toJsonCompatible } from './gestor-serialization.js';
 import { loadState } from './repository.js';
 import { applySharePackage, createSharePackage } from './sharing.js';
 import { showToast } from './ui.js';
+import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
-const pageTitle = document.querySelector('#pageTitle');
-const summaryStrip = document.querySelector('#summaryStrip');
-const serviceFilter = document.querySelector('.service-filter');
-const primaryAction = document.querySelector('#primaryActionBtn');
-const printActions = document.querySelector('#calendarPrintActions');
 let connectionStatus = null;
 
 document.addEventListener('click', event => {
@@ -39,12 +35,7 @@ async function openIntegration() {
     const state = await loadState();
     const resolved = await resolveAcademicContext(loadBackendSettings());
     const settings = resolved.settings;
-    pageTitle.textContent = 'Integración GestorEscuela';
-    document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === 'integration'));
-    summaryStrip?.classList.add('hidden');
-    serviceFilter?.classList.add('hidden');
-    primaryAction?.classList.add('hidden');
-    printActions?.classList.add('hidden');
+    applyViewShell({ view:'integration', title:'Cuenta y sincronización' });
 
     renderIntegrationView(viewRoot, {
       state,
@@ -132,7 +123,7 @@ async function openIntegration() {
       },
       onSelectScenario:async scenarioId => {
         const current = loadBackendSettings();
-        saveBackendSettings({ ...current, scenarioId:String(scenarioId || '') });
+        saveBackendSettings({ ...current, scenarioId:String(scenarioId || ''), scenarioId:String(scenarioId || '') });
         await openIntegration();
       },
       onSaveScenarioSnapshot:async () => {
@@ -188,7 +179,7 @@ async function openIntegration() {
     });
   } catch (error) {
     console.error(error);
-    viewRoot.innerHTML = `<section class="card"><div class="empty-state"><strong>No se pudo abrir la integración</strong>${escapeText(error.message || 'Error inesperado.')}</div></section>`;
+    viewRoot.innerHTML = `<section class="card"><div class="empty-state"><strong>No se pudo abrir la sincronización</strong>${escapeText(error.message || 'Error inesperado.')}</div></section>`;
   }
 }
 
