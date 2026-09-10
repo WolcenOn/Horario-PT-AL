@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 test('la barra lateral mantiene accesibles las opciones largas en un portatil compacto', async ({ page }) => {
   await page.setViewportSize({ width:1024, height:768 });
   await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
 
   const sidebar = page.locator('#sidebar');
   const automation = page.locator('[data-view="automation"]');
@@ -18,5 +19,5 @@ test('la barra lateral mantiene accesibles las opciones largas en un portatil co
 
   await automation.scrollIntoViewIfNeeded();
   await automation.click();
-  await expect(page.locator('#pageTitle')).toHaveText('Configuración automática');
+  await expect(page.locator('#pageTitle')).toHaveText('Optimización PT/AL');
 });
