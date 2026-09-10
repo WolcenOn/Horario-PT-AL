@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('la navegación presenta el producto como planificador del centro', async ({ page }) => {
+test('la navegación y el resumen presentan el producto como planificador del centro', async ({ page }) => {
   await page.setViewportSize({ width:1024, height:768 });
   await page.goto('/');
 
@@ -26,6 +26,14 @@ test('la navegación presenta el producto como planificador del centro', async (
 
   const accountSection = page.locator('.nav-section[aria-label="Cuenta y datos"]');
   await expect(accountSection.getByText('Cuenta y sincronización')).toBeVisible();
+
+  await expect(page.locator('#summaryStrip .metric span')).toHaveText([
+    'Clases con horario',
+    'Profesorado activo',
+    'Conflictos / avisos',
+    'Apoyos pendientes'
+  ]);
+  await expect(page.locator('#summaryStrip')).toContainText('Necesidades PT/AL pendientes por alumno');
 });
 
 test('las vistas independientes comparten el mismo estado de cabecera y lo restauran al volver al horario', async ({ page }) => {
