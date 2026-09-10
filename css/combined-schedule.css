@@ -1,0 +1,60 @@
+.combined-schedule-view { display: grid; gap: 14px; }
+.combined-schedule-hero { padding: 18px; display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }
+.combined-schedule-hero h2 { margin: 0 0 8px; }
+.combined-schedule-hero p { margin: 0; line-height: 1.5; max-width: 760px; }
+.combined-layer-legend { display: grid; gap: 7px; min-width: 190px; }
+.combined-layer-legend span { border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; background: var(--surface-muted); font-size: .78rem; }
+.combined-layer-legend .is-pt { background: var(--pt-soft); }
+.combined-layer-legend .is-al { background: var(--al-soft); }
+
+.combined-schedule-summary { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 9px; }
+.combined-metric { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.combined-metric span { color: var(--muted); font-size: .78rem; }
+.combined-metric strong { font-size: 1.05rem; }
+.combined-metric.is-warning { border-color: #ead9a2; }
+.combined-metric.is-blocked { border-color: #e5b9bb; }
+.combined-metric.is-ok { border-color: #bfdac9; }
+
+.combined-explanation { padding: 13px 15px; display: flex; gap: 10px; align-items: baseline; }
+.combined-explanation span { color: var(--muted); line-height: 1.45; }
+.combined-days { display: grid; gap: 12px; }
+.combined-session-list { padding: 0 14px 14px; display: grid; gap: 10px; }
+.combined-session { border: 1px solid var(--border); border-radius: 11px; padding: 12px; display: grid; gap: 10px; background: var(--surface); }
+.combined-session.is-warning { border-color: #ead9a2; }
+.combined-session.is-blocked { border-color: #e5b9bb; background: #fffafa; }
+.combined-session header { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.combined-session-time { display: flex; align-items: center; gap: 8px; }
+.combined-support-badge, .combined-status { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; font-size: .7rem; font-weight: 800; }
+.combined-support-badge.is-pt { background: var(--pt-soft); color: #154c65; }
+.combined-support-badge.is-al { background: var(--al-soft); color: #4d4074; }
+.combined-status.is-ok { background: var(--success-soft); color: var(--success); }
+.combined-status.is-warning { background: #fff7dd; color: #705a13; }
+.combined-status.is-blocked { background: #fbe9ea; color: #8a3034; }
+.combined-session-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: .78rem; color: var(--muted); }
+.combined-overlap-warning { display: grid; gap: 4px; background: #fff0f0; border-radius: 9px; padding: 9px 10px; color: #7a2d31; font-size: .78rem; }
+.combined-student-list { display: grid; gap: 8px; }
+.combined-student-row { display: grid; grid-template-columns: minmax(140px,.8fr) minmax(240px,1.5fr) minmax(180px,1fr); gap: 10px; align-items: center; border-top: 1px solid var(--border); padding-top: 9px; }
+.combined-student-row > div:first-child strong, .combined-student-row > div:first-child small { display: block; }
+.combined-student-row > div:first-child small { color: var(--muted); margin-top: 2px; }
+.combined-source-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.combined-source { display: inline-grid; gap: 1px; border: 1px solid var(--border); border-radius: 8px; padding: 5px 7px; background: var(--surface-muted); }
+.combined-source small { color: var(--muted); font-size: .67rem; }
+.combined-source.is-warning { border-color: #ead9a2; }
+.combined-source.is-blocked { border-color: #e5b9bb; background: #fff1f1; }
+.combined-student-message { font-size: .74rem; color: var(--muted); line-height: 1.4; }
+.combined-student-row.is-blocked .combined-student-message { color: #8a3034; font-weight: 700; }
+
+@media (max-width: 1050px) {
+  .combined-schedule-summary { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .combined-student-row { grid-template-columns: 1fr 1.6fr; }
+  .combined-student-message { grid-column: 1 / -1; }
+}
+
+@media (max-width: 720px) {
+  .combined-schedule-hero { flex-direction: column; }
+  .combined-layer-legend { width: 100%; }
+  .combined-schedule-summary { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .combined-explanation { align-items: flex-start; flex-direction: column; }
+  .combined-student-row { grid-template-columns: 1fr; }
+  .combined-student-message { grid-column: auto; }
+}
