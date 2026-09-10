@@ -10,8 +10,9 @@ import { buildReadinessReport, generateAutomaticProposal } from './automation-co
 import { generateGlobalProposal } from './global-scheduler.js';
 import { renderCalendar } from './calendar.js';
 import { renderAlerts } from './alerts.js';
-import { calculateStudentHours, deriveStudentStatus, totalsFromHours } from './hours.js';
+import { calculateStudentHours, totalsFromHours } from './hours.js';
 import { conflictStudentIds, detectConflicts } from './conflicts.js';
+import { configuredClassGroups } from './education.js';
 import { ensureSeedData, loadDemoData } from './seed.js';
 import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, replaceClassSchedules, replaceSessions, saveAutomationSettings, saveCenterPlanningSettings, saveClassSchedule, saveGroup, saveProfessional, saveSchoolSettings, saveSession, saveStudent } from './repository.js';
 import { put, resetDatabase } from './db.js';
@@ -19,16 +20,14 @@ import { downloadSharePackage, importShareFile } from './sharing.js';
 import { printCalendar } from './print.js';
 import { escapeHtml, formatDuration } from './utils.js';
 import { showToast } from './ui.js';
+import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
-const pageTitle = document.querySelector('#pageTitle');
 const primaryActionBtn = document.querySelector('#primaryActionBtn');
 const summaryStrip = document.querySelector('#summaryStrip');
 const appShell = document.querySelector('#appShell');
 const sidebarToggleBtn = document.querySelector('#sidebarToggleBtn');
 const importDataInput = document.querySelector('#importDataInput');
-const calendarPrintActions = document.querySelector('#calendarPrintActions');
-const serviceFilterControl = document.querySelector('.service-filter');
 const automationNavBadge = document.querySelector('#automationNavBadge');
 
 let currentView = 'calendar';
@@ -41,13 +40,13 @@ let globalProposal = null;
 
 const VIEW_TITLES = {
   calendar:'Horario semanal',
-  students:'Alumnos',
+  students:'Necesidades de apoyo',
   professionals:'Profesorado',
   groups:'Grupos PT/AL',
   sessions:'Sesiones PT/AL',
   classSchedules:'Horarios de aula',
-  centerPlanning:'Plan del centro',
-  automation:'Configuración automática',
+  centerPlanning:'Planificación académica',
+  automation:'Optimización PT/AL',
   alerts:'Conflictos'
 };
 
@@ -78,7 +77,6 @@ async function refresh({ toast } = {}) {
 }
 
 function renderSummary() {
-  const incomplete = [...derived.hoursMap.values()].filter(hours => deriveStudentStatus(hours, derived.conflictStudents.has(hours.studentId)) !== 'Completo').length;
   const studentMap = new Map(state.students.map(student => [student.id, student]));
   const pendingStudents = [...derived.hoursMap.values()]
     .filter(hours => hours.ptPending > 0 || hours.alPending > 0)
@@ -89,6 +87,13 @@ function renderSummary() {
       const pendingB = Math.max(0, b.hours.ptPending) + Math.max(0, b.hours.alPending);
       return pendingB - pendingA || `${a.student.apellidos || ''} ${a.student.nombre || ''}`.localeCompare(`${b.student.apellidos || ''} ${b.student.nombre || ''}`, 'es');
     });
+
+  const configuredClasses = configuredClassGroups(state.schoolSettings);
+  const scheduledClasses = [...new Set((state.classSchedules || []).map(entry => String(entry.grupoClase || '').trim()).filter(Boolean))];
+  const knownClasses = new Set([...configuredClasses, ...scheduledClasses]);
+  const classTotal = knownClasses.size;
+  const activeProfessionals = (state.professionals || []).filter(item => item.activo !== false).length;
+  const classCoverage = classTotal ? `${scheduledClasses.length}/${classTotal}` : String(scheduledClasses.length);
 
   const pendingMarkup = pendingStudents.length
     ? `<div class="pending-student-list" aria-label="Alumnos con horas pendientes">
@@ -104,15 +109,15 @@ function renderSummary() {
     : `<div class="pending-all-complete">✓ No hay alumnos con horas PT/AL pendientes.</div>`;
 
   summaryStrip.innerHTML = `
-    <div class="metric ${derived.totals.ptPending > 0 ? 'is-warning':''}"><span>PT pendiente</span><strong>${formatSignedPending(derived.totals.ptPending)}</strong></div>
-    <div class="metric ${derived.totals.alPending > 0 ? 'is-warning':''}"><span>AL pendiente</span><strong>${formatSignedPending(derived.totals.alPending)}</strong></div>
+    <div class="metric ${classTotal && scheduledClasses.length < classTotal ? 'is-warning':''}"><span>Clases con horario</span><strong>${classCoverage}</strong></div>
+    <div class="metric"><span>Profesorado activo</span><strong>${activeProfessionals}</strong></div>
     <div class="metric ${derived.conflicts.length ? 'is-danger':''}"><span>Conflictos / avisos</span><strong>${derived.conflicts.length}</strong></div>
-    <div class="metric ${incomplete ? 'is-warning':''}"><span>Alumnos no completos</span><strong>${incomplete}</strong></div>
+    <div class="metric ${pendingStudents.length ? 'is-warning':''}"><span>Apoyos pendientes</span><strong>${pendingStudents.length}</strong></div>
     <div class="pending-overview">
       <div class="pending-overview-heading">
         <div>
-          <strong>Horas pendientes por alumno</strong>
-          <small>Ordenado por mayor necesidad pendiente. Se actualiza al mover o editar sesiones.</small>
+          <strong>Necesidades PT/AL pendientes por alumno</strong>
+          <small>PT ${formatSignedPending(derived.totals.ptPending)} · AL ${formatSignedPending(derived.totals.alPending)}. Ordenado por mayor necesidad pendiente.</small>
         </div>
         <span class="badge ${pendingStudents.length ? 'badge-warning' : 'badge-success'}">${pendingStudents.length} pendiente${pendingStudents.length === 1 ? '' : 's'}</span>
       </div>
@@ -126,19 +131,21 @@ function updateAutomationBadge() {
   const missing = readiness.items.filter(item => !item.ok).length;
   automationNavBadge.textContent = readiness.ready ? '✓' : String(missing);
   automationNavBadge.classList.toggle('is-ready', readiness.ready);
-  automationNavBadge.title = readiness.ready ? 'Configuración automática preparada' : `${missing} apartado(s) pendientes para la configuración automática`;
+  automationNavBadge.title = readiness.ready ? 'Optimización PT/AL preparada' : `${missing} apartado(s) pendientes para la optimización PT/AL`;
   automationNavBadge.setAttribute('aria-label', automationNavBadge.title);
 }
 
 function renderCurrentView() {
-  pageTitle.textContent = VIEW_TITLES[currentView];
-  document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === currentView));
   document.querySelectorAll('[data-service-filter]').forEach(button => button.classList.toggle('is-active', button.dataset.serviceFilter === serviceFilter));
-  calendarPrintActions?.classList.toggle('hidden', currentView !== 'calendar');
   const focusedConfigView = currentView === 'automation' || currentView === 'centerPlanning';
-  summaryStrip.classList.toggle('hidden', focusedConfigView);
-  serviceFilterControl?.classList.toggle('hidden', focusedConfigView);
-  primaryActionBtn.classList.toggle('hidden', focusedConfigView);
+  applyViewShell({
+    view:currentView,
+    title:VIEW_TITLES[currentView],
+    showSummary:!focusedConfigView,
+    showServiceFilter:!focusedConfigView,
+    showPrimaryAction:!focusedConfigView,
+    showPrintActions:currentView === 'calendar'
+  });
 
   const actionLabels = {
     students:'+ Nuevo alumno',
@@ -282,7 +289,7 @@ async function saveAutomaticSettings(value) {
   await saveAutomationSettings(value);
   autoProposal = null;
   globalProposal = null;
-  await refresh({ toast:'Prioridades y franjas de configuración automática guardadas.' });
+  await refresh({ toast:'Prioridades y franjas de optimización PT/AL guardadas.' });
 }
 
 async function saveCenterPlanning(value) {
