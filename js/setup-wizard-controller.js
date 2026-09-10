@@ -1,13 +1,9 @@
 import { loadState } from './repository.js';
 import { analyzeGlobalDistributionLimits, describeDistributionIssue } from './global-recovery.js';
 import { renderSetupWizard } from './setup-wizard.js';
+import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
-const pageTitle = document.querySelector('#pageTitle');
-const summaryStrip = document.querySelector('#summaryStrip');
-const serviceFilter = document.querySelector('.service-filter');
-const primaryAction = document.querySelector('#primaryActionBtn');
-const printActions = document.querySelector('#calendarPrintActions');
 
 let opened = false;
 let enhancingFailure = false;
@@ -47,12 +43,7 @@ failureObserver.observe(viewRoot, { childList:true, subtree:true });
 async function openSetupWizard() {
   opened = true;
   const state = await loadState();
-  pageTitle.textContent = 'Asistente de configuración';
-  document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('is-active', button.dataset.view === 'setupWizard'));
-  summaryStrip?.classList.add('hidden');
-  serviceFilter?.classList.add('hidden');
-  primaryAction?.classList.add('hidden');
-  printActions?.classList.add('hidden');
+  applyViewShell({ view:'setupWizard', title:'Asistente de configuración' });
 
   renderSetupWizard(viewRoot, {
     state,
