@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'horario-gestor-escuela-backend';
+const AUTH_TOKEN_STORAGE_KEY = 'horario-gestor-escuela-access-token';
 
 export const DEFAULT_BACKEND_SETTINGS = Object.freeze({
   enabled:false,
@@ -7,21 +8,27 @@ export const DEFAULT_BACKEND_SETTINGS = Object.freeze({
   actorId:'',
   academicYearId:'',
   scenarioId:'',
-  autoSync:false
+  autoSync:false,
+  accessToken:''
 });
 
 export function loadBackendSettings() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return normalizeBackendSettings(raw ? JSON.parse(raw) : null);
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    const accessToken = readSessionToken();
+    return normalizeBackendSettings({ ...(raw ? JSON.parse(raw) : {}), accessToken });
   } catch {
-    return { ...DEFAULT_BACKEND_SETTINGS };
+    return { ...DEFAULT_BACKEND_SETTINGS, accessToken:readSessionToken() };
   }
 }
 
 export function saveBackendSettings(value) {
   const normalized = normalizeBackendSettings(value);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  if (typeof localStorage !== 'undefined') {
+    const { accessToken: _accessToken, ...persistent } = normalized;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistent));
+  }
+  writeSessionToken(normalized.accessToken);
   return normalized;
 }
 
@@ -34,13 +41,78 @@ export function normalizeBackendSettings(value) {
     actorId:String(source.actorId || '').trim(),
     academicYearId:String(source.academicYearId || '').trim(),
     scenarioId:String(source.scenarioId || '').trim(),
-    autoSync:source.autoSync === true
+    autoSync:source.autoSync === true,
+    accessToken:String(source.accessToken || '').trim()
   };
 }
 
 export function backendConfigured(settings) {
   const value = normalizeBackendSettings(settings);
-  return Boolean(value.enabled && value.baseUrl && value.schoolId && value.actorId);
+  return Boolean(value.enabled && value.baseUrl && value.schoolId && (value.accessToken || value.actorId));
+}
+
+export function backendSettingsFromAuth(settings, auth, { schoolId = '' } = {}) {
+  const base = normalizeBackendSettings(settings);
+  const memberships = Array.isArray(auth?.memberships) ? auth.memberships : [];
+  const requestedSchool = String(schoolId || '').trim();
+  const responseSchool = String(auth?.school?.id || '').trim();
+  const onlyMembershipSchool = memberships.length === 1 ? String(memberships[0]?.school_id || '').trim() : '';
+  const selectedSchool = requestedSchool || responseSchool || onlyMembershipSchool || base.schoolId;
+  return normalizeBackendSettings({
+    ...base,
+    enabled:true,
+    schoolId:selectedSchool,
+    actorId:'',
+    accessToken:auth?.access_token || base.accessToken
+  });
+}
+
+export async function loginBackend({ baseUrl, email, password }) {
+  const settings = normalizeBackendSettings({ baseUrl });
+  const cleanEmail = String(email || '').trim();
+  const cleanPassword = String(password || '');
+  if (!cleanEmail) throw new Error('Indica tu correo electrónico.');
+  if (!cleanPassword) throw new Error('Indica tu contraseña.');
+  return request(settings, '/auth/login', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify({ email:cleanEmail, password:cleanPassword }),
+    timeoutMs:15000,
+    auth:false
+  });
+}
+
+export async function registerSchoolBackend({ baseUrl, email, password, displayName, schoolName }) {
+  const settings = normalizeBackendSettings({ baseUrl });
+  const payload = {
+    email:String(email || '').trim(),
+    password:String(password || ''),
+    display_name:String(displayName || '').trim(),
+    school_name:String(schoolName || '').trim()
+  };
+  if (!payload.email) throw new Error('Indica el correo del administrador.');
+  if (payload.password.length < 10) throw new Error('La contraseña debe tener al menos 10 caracteres.');
+  if (!payload.display_name) throw new Error('Indica el nombre del administrador.');
+  if (!payload.school_name) throw new Error('Indica el nombre del centro.');
+  return request(settings, '/auth/register-school', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(payload),
+    timeoutMs:15000,
+    auth:false
+  });
+}
+
+export async function fetchCurrentAuth(settings) {
+  const value = requireBearer(settings);
+  return request(value, '/auth/me', { timeoutMs:15000 });
+}
+
+export async function logoutBackend(settings) {
+  const value = requireBearer(settings);
+  const result = await request(value, '/auth/logout', { method:'POST', timeoutMs:15000 });
+  writeSessionToken('');
+  return result;
 }
 
 export async function checkBackendHealth(settings, { timeoutMs = 8000 } = {}) {
@@ -203,7 +275,14 @@ function requireConfigured(settings) {
   if (!value.enabled) throw new Error('La conexión con GestorEscuela está desactivada.');
   if (!value.baseUrl) throw new Error('Falta la URL del backend GestorEscuela.');
   if (!value.schoolId) throw new Error('Falta el ID del centro en GestorEscuela.');
-  if (!value.actorId) throw new Error('Falta el ID de usuario (Actor ID) de GestorEscuela.');
+  if (!value.accessToken && !value.actorId) throw new Error('Inicia sesión o configura temporalmente el Actor ID de GestorEscuela.');
+  return value;
+}
+
+function requireBearer(settings) {
+  const value = normalizeBackendSettings(settings);
+  if (!value.baseUrl) throw new Error('Falta la URL del backend GestorEscuela.');
+  if (!value.accessToken) throw new Error('Inicia sesión en GestorEscuela.');
   return value;
 }
 
@@ -224,9 +303,16 @@ async function request(settings, path, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const authHeaders = auth
+      ? settings.accessToken
+        ? { Authorization:`Bearer ${settings.accessToken}` }
+        : settings.actorId
+          ? { 'X-Actor-Id':settings.actorId }
+          : {}
+      : {};
     const response = await fetch(`${settings.baseUrl}${path}`, {
       ...fetchOptions,
-      headers:{ ...(auth && settings.actorId ? { 'X-Actor-Id':settings.actorId } : {}), ...headers },
+      headers:{ ...authHeaders, ...headers },
       signal:controller.signal
     });
     const text = await response.text();
@@ -253,4 +339,23 @@ async function request(settings, path, options = {}) {
 function normalizeBaseUrl(value) {
   const text = String(value || '').trim();
   return text ? text.replace(/\/+$/, '') : '';
+}
+
+function readSessionToken() {
+  try {
+    return typeof sessionStorage !== 'undefined' ? String(sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || '').trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+function writeSessionToken(value) {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    const token = String(value || '').trim();
+    if (token) sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+    else sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    // El modo offline debe seguir funcionando incluso si el navegador bloquea sessionStorage.
+  }
 }
