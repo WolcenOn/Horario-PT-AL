@@ -31,6 +31,17 @@ export function normalizeSupportPolicy(value) {
   };
 }
 
+export function resolveSupportPolicy(preferenceValue, extractionOverride = null) {
+  const base = normalizeSupportPolicy(preferenceValue);
+  const extraction = EXTRACTION_MODES.includes(extractionOverride) ? extractionOverride : base.extraction;
+  return {
+    extraction,
+    preference:base.preference,
+    score:extraction === 'blocked' ? null : PREFERENCE_SCORES[base.preference],
+    legacyValue:base.legacyValue
+  };
+}
+
 export function canExtractForSupport(value, supportType) {
   const policy = normalizeSupportPolicy(value);
   const type = String(supportType || '').toUpperCase();
