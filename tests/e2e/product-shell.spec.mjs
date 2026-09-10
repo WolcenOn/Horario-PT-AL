@@ -23,6 +23,9 @@ test('la navegación presenta el producto como planificador del centro', async (
   const centerSection = page.locator('.nav-section[aria-label="Centro"]');
   await expect(centerSection.getByText('Planificación académica')).toBeVisible();
   await expect(centerSection.getByText('Plantilla y reparto')).toBeVisible();
+
+  const accountSection = page.locator('.nav-section[aria-label="Cuenta y datos"]');
+  await expect(accountSection.getByText('Cuenta y sincronización')).toBeVisible();
 });
 
 test('las vistas independientes comparten el mismo estado de cabecera y lo restauran al volver al horario', async ({ page }) => {
@@ -31,7 +34,12 @@ test('las vistas independientes comparten el mismo estado de cabecera y lo resta
   for (const [view, title] of [
     ['setupWizard', 'Asistente de configuración'],
     ['combinedCalendar', 'Horario combinado'],
-    ['operations', 'Operativa diaria']
+    ['classRosters', 'Clases y alumnado'],
+    ['centerActivities', 'Actividades del centro'],
+    ['temporalPatterns', 'Patrones temporales'],
+    ['capacityStudy', 'Estudio de plantilla'],
+    ['operations', 'Operativa diaria'],
+    ['integration', 'Cuenta y sincronización']
   ]) {
     const nav = page.locator(`.nav-item[data-view="${view}"]`);
     await nav.scrollIntoViewIfNeeded();
