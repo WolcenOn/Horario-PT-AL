@@ -1,15 +1,16 @@
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 235px minmax(0, 1fr); transition: grid-template-columns .22s ease; }
 .app-shell.is-sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
-.sidebar { width: 235px; background: #203746; color: white; padding: 20px 14px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow: hidden; transition: transform .22s ease, box-shadow .22s ease; z-index: 60; }
+.sidebar { width: 235px; background: #203746; color: white; padding: 20px 14px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; transition: transform .22s ease, box-shadow .22s ease; z-index: 60; }
 .app-shell.is-sidebar-collapsed .sidebar { transform: translateX(-100%); pointer-events: none; }
 .brand { display: flex; gap: 10px; align-items: center; padding: 2px 7px 20px; white-space: nowrap; }
 .brand-mark { width: 42px; min-width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; background: rgba(255,255,255,.12); font-weight: 800; }
 .brand strong { display: block; font-size: .96rem; }
 .brand small { color: rgba(255,255,255,.65); font-size: .74rem; }
-.nav-list { display: grid; gap: 5px; }
-.nav-item { border: 0; background: transparent; color: rgba(255,255,255,.76); border-radius: 9px; padding: 11px 12px; text-align: left; display: flex; align-items: center; gap: 9px; font-weight: 650; white-space: nowrap; }
+.nav-list { display: grid; gap: 5px; min-width: 0; }
+.nav-item { border: 0; background: transparent; color: rgba(255,255,255,.76); border-radius: 9px; padding: 11px 12px; text-align: left; display: flex; align-items: center; gap: 9px; font-weight: 650; white-space: normal; line-height: 1.25; }
+.nav-item > span:not(.nav-badge) { min-width: 0; }
 .nav-item:hover, .nav-item.is-active { color: white; background: rgba(255,255,255,.11); }
-.sidebar-footer { margin-top: auto; display: grid; gap: 10px; padding: 10px 3px 0; }
+.sidebar-footer { margin-top: auto; display: grid; gap: 10px; padding: 10px 3px 0; flex: 0 0 auto; }
 .sidebar-footer .button { border-color: rgba(255,255,255,.2); color: white; }
 .sidebar-footer .sidebar-danger { border-color: rgba(255,174,174,.42); color: #ffd3d3; }
 .sidebar-footer .sidebar-danger:hover { background: rgba(166,61,64,.24); border-color: rgba(255,174,174,.65); }
