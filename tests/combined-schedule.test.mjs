@@ -10,7 +10,10 @@ function baseState() {
           subjectPriorities:{
             Matemáticas:'low',
             'Educación Física':'blocked',
-            Lengua:{ extraction:'pt', preference:'avoid' }
+            Lengua:'high'
+          },
+          subjectPolicies:{
+            Lengua:{ extraction:'pt' }
           }
         }
       }
@@ -57,15 +60,20 @@ test('marca como bloqueada una extracción sobre una materia no extraíble', () 
   assert.equal(projection.supportItems[0].studentChecks[0].sources[0].allowed, false);
 });
 
-test('distingue tipo de apoyo en la política nueva', () => {
+test('distingue tipo de apoyo con una regla dura y conserva la preferencia aparte', () => {
   const ptState = baseState();
   ptState.sessions = [{ id:'sp1', groupId:'gpt', dia:'martes', inicio:'09:10', fin:'09:40' }];
-  assert.equal(buildCombinedScheduleProjection(ptState).supportItems[0].status, 'warning');
+  const ptSource = buildCombinedScheduleProjection(ptState).supportItems[0].studentChecks[0].sources[0];
+  assert.equal(ptSource.allowed, true);
+  assert.equal(ptSource.policy.preference, 'avoid');
+  assert.equal(ptSource.status, 'warning');
 
   const alState = baseState();
   alState.groups[1].studentIds = ['s1'];
   alState.sessions = [{ id:'sa1', groupId:'gal', dia:'martes', inicio:'09:10', fin:'09:40' }];
-  assert.equal(buildCombinedScheduleProjection(alState).supportItems[0].status, 'blocked');
+  const alSource = buildCombinedScheduleProjection(alState).supportItems[0].studentChecks[0].sources[0];
+  assert.equal(alSource.allowed, false);
+  assert.equal(alSource.policy.preference, 'avoid');
 });
 
 test('bloquea solapes de apoyo cuando comparten alumno aunque PT y AL sean profesionales distintos', () => {
