@@ -9,7 +9,7 @@ test('el asistente inicial explica el flujo y navega al primer paso', async ({ p
   await page.locator('[data-view="setupWizard"]').click();
 
   await expect(page.locator('#pageTitle')).toHaveText('Asistente de configuración');
-  await expect(page.getByRole('heading', { name:'Configura el centro paso a paso' })).toBeVisible();
+  await expect(page.getByRole('heading', { name:'Configura, calcula y corrige sin empezar de nuevo' })).toBeVisible();
   await expect(page.getByText('No necesitas cargar horarios ordinarios ni sesiones PT/AL para generar el primer horario completo.')).toBeVisible();
   await expect(page.locator('[data-wizard-step]')).toHaveCount(9);
   await expect(page.locator('[data-wizard-step="structure"]')).toBeVisible();
