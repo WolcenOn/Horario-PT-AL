@@ -8,13 +8,10 @@ import {
 import { printProfessionalSchedules } from './teacher-print.js';
 import { escapeHtml } from './utils.js';
 import { showModal, showToast } from './ui.js';
+import { applyViewShell } from './view-shell.js';
 
 const root = document.querySelector('#viewRoot');
 const pageTitle = document.querySelector('#pageTitle');
-const summaryStrip = document.querySelector('#summaryStrip');
-const serviceFilter = document.querySelector('.service-filter');
-const primaryAction = document.querySelector('#primaryActionBtn');
-const printActions = document.querySelector('#calendarPrintActions');
 
 const PRIMARY_STORAGE_KEY = 'horario-calendar-professional';
 const COMPARE_STORAGE_KEY = 'horario-calendar-professional-compare';
@@ -163,15 +160,16 @@ function openPrintManager(state) {
 }
 
 function hideDefaultCalendarControls() {
-  summaryStrip?.classList.add('hidden');
-  serviceFilter?.classList.add('hidden');
-  primaryAction?.classList.add('hidden');
-  printActions?.classList.add('hidden');
+  applyViewShell({ view:'calendar', title:'Horario semanal' });
 }
 
 function restoreDefaultCalendarControls() {
-  summaryStrip?.classList.remove('hidden');
-  serviceFilter?.classList.remove('hidden');
-  primaryAction?.classList.remove('hidden');
-  printActions?.classList.remove('hidden');
+  applyViewShell({
+    view:'calendar',
+    title:'Horario semanal',
+    showSummary:true,
+    showServiceFilter:true,
+    showPrimaryAction:true,
+    showPrintActions:true
+  });
 }
