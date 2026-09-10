@@ -1,14 +1,19 @@
 import {
   backendConfigured,
+  backendSettingsFromAuth,
   bootstrapBackendConnection,
   checkBackendHealth,
   createAcademicYear,
   createPlanningScenario,
+  fetchCurrentAuth,
   fetchPlanningScenarioSnapshot,
   listAcademicYears,
   listPlanningScenarios,
   loadBackendSettings,
+  loginBackend,
+  logoutBackend,
   pushAcademicConfiguration,
+  registerSchoolBackend,
   saveBackendSettings,
   savePlanningScenarioSnapshot
 } from './backend-service.js';
@@ -21,6 +26,7 @@ import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
 let connectionStatus = null;
+let authStatus = null;
 
 document.addEventListener('click', event => {
   const button = event.target.closest?.('[data-view="integration"]');
@@ -33,7 +39,8 @@ document.addEventListener('click', event => {
 async function openIntegration() {
   try {
     const state = await loadState();
-    const resolved = await resolveAcademicContext(loadBackendSettings());
+    const authResolved = await resolveAuthContext(loadBackendSettings());
+    const resolved = await resolveAcademicContext(authResolved.settings);
     const settings = resolved.settings;
     applyViewShell({ view:'integration', title:'Cuenta y sincronización' });
 
@@ -41,11 +48,71 @@ async function openIntegration() {
       state,
       settings,
       status:connectionStatus,
+      authContext:{ ...authResolved.context, status:authStatus },
       academicContext:resolved.context,
+      onLogin:async payload => {
+        authStatus = { kind:'pending', message:'Comprobando correo y contraseña…' };
+        await openIntegration();
+        try {
+          const auth = await loginBackend(payload);
+          const current = loadBackendSettings();
+          const next = backendSettingsFromAuth({ ...current, baseUrl:payload.baseUrl }, auth);
+          saveBackendSettings(next);
+          authStatus = { kind:'ok', message:'Sesión iniciada correctamente.' };
+          connectionStatus = null;
+          showToast('Sesión iniciada. Ya puedes trabajar con el centro conectado.');
+        } catch (error) {
+          authStatus = { kind:'error', message:error.message || 'No se pudo iniciar sesión.' };
+          showToast(authStatus.message, 'error');
+        }
+        await openIntegration();
+      },
+      onRegister:async payload => {
+        authStatus = { kind:'pending', message:'Creando la cuenta administradora y el centro…' };
+        await openIntegration();
+        try {
+          const auth = await registerSchoolBackend(payload);
+          const current = loadBackendSettings();
+          const next = backendSettingsFromAuth({ ...current, baseUrl:payload.baseUrl }, auth);
+          saveBackendSettings(next);
+          authStatus = { kind:'ok', message:'Centro creado y sesión iniciada.' };
+          connectionStatus = null;
+          showToast('Centro creado. La sesión administradora ya está activa.');
+        } catch (error) {
+          authStatus = { kind:'error', message:error.message || 'No se pudo crear el centro.' };
+          showToast(authStatus.message, 'error');
+        }
+        await openIntegration();
+      },
+      onLogout:async () => {
+        const current = loadBackendSettings();
+        try {
+          if (current.accessToken) await logoutBackend(current);
+        } catch (error) {
+          console.warn('No se pudo revocar la sesión remota; se cerrará localmente.', error);
+        }
+        saveBackendSettings({
+          ...current,
+          enabled:false,
+          accessToken:'',
+          actorId:'',
+          academicYearId:'',
+          scenarioId:''
+        });
+        authStatus = null;
+        connectionStatus = null;
+        showToast('Sesión cerrada en este navegador.');
+        await openIntegration();
+      },
+      onSelectMembership:async schoolId => {
+        const current = loadBackendSettings();
+        saveBackendSettings({ ...current, schoolId:String(schoolId || ''), academicYearId:'', scenarioId:'' });
+        await openIntegration();
+      },
       onSave:async value => {
         saveBackendSettings(value);
         connectionStatus = null;
-        showToast(value.enabled ? 'Conexión GestorEscuela guardada. El modo offline sigue disponible.' : 'Funciones online desactivadas. La aplicación continúa en modo offline.');
+        showToast(value.enabled ? 'Conexión avanzada guardada. El modo offline sigue disponible.' : 'Funciones online desactivadas. La aplicación continúa en modo offline.');
         await openIntegration();
       },
       onTest:async value => {
@@ -61,17 +128,17 @@ async function openIntegration() {
         await openIntegration();
       },
       onBootstrap:async value => {
-        const accepted = confirm('Se crearán en GestorEscuela un usuario administrador, un centro y su pertenencia ADMIN. No se modificará ningún dato local. ¿Continuar?');
+        const accepted = confirm('Este método legacy creará un usuario, un centro y una pertenencia ADMIN sin contraseña. Úsalo solo para compatibilidad con instalaciones anteriores. ¿Continuar?');
         if (!accepted) return;
-        connectionStatus = { kind:'pending', message:'Creando centro y administrador…' };
+        connectionStatus = { kind:'pending', message:'Creando vínculo legacy…' };
         await openIntegration();
         try {
           const result = await bootstrapBackendConnection(value);
           saveBackendSettings(result.settings);
-          connectionStatus = { kind:'ok', message:`Centro vinculado: ${result.school.name}. School ID y Actor ID guardados en este navegador.` };
-          showToast('Centro y administrador vinculados con GestorEscuela.');
+          connectionStatus = { kind:'ok', message:`Centro vinculado en modo legacy: ${result.school.name}.` };
+          showToast('Vínculo legacy creado. Conviene migrarlo después a una cuenta con sesión.');
         } catch (error) {
-          connectionStatus = { kind:'error', message:error.message || 'No se pudo crear el vínculo inicial.' };
+          connectionStatus = { kind:'error', message:error.message || 'No se pudo crear el vínculo legacy.' };
           showToast(connectionStatus.message, 'error');
         }
         await openIntegration();
@@ -158,8 +225,8 @@ async function openIntegration() {
         }
         await openIntegration();
       },
-      onSync:async (value, adapter) => {
-        const saved = saveBackendSettings(value);
+      onSync:async (_value, adapter) => {
+        const current = loadBackendSettings();
         if (!adapter.report.ready) {
           showToast('Corrige los errores del adaptador antes de sincronizar.', 'error');
           return;
@@ -167,7 +234,7 @@ async function openIntegration() {
         const accepted = confirm(`Se enviarán ${adapter.report.counts.teachers} docentes, ${adapter.report.counts.groups} grupos-clase y ${adapter.report.counts.activities} actividades a GestorEscuela. La configuración operativa remota del centro indicado será sustituida. Los datos locales NO se modificarán. ¿Continuar?`);
         if (!accepted) return;
         try {
-          await pushAcademicConfiguration(saved, toJsonCompatible(adapter.configuration));
+          await pushAcademicConfiguration(current, toJsonCompatible(adapter.configuration));
           connectionStatus = { kind:'ok', message:'Configuración académica sincronizada correctamente.' };
           showToast('Configuración enviada a GestorEscuela. Los datos locales permanecen intactos.');
         } catch (error) {
@@ -180,6 +247,25 @@ async function openIntegration() {
   } catch (error) {
     console.error(error);
     viewRoot.innerHTML = `<section class="card"><div class="empty-state"><strong>No se pudo abrir la sincronización</strong>${escapeText(error.message || 'Error inesperado.')}</div></section>`;
+  }
+}
+
+async function resolveAuthContext(settings) {
+  if (!settings.accessToken) {
+    return { settings, context:{ session:null, error:'' } };
+  }
+  try {
+    const session = await fetchCurrentAuth(settings);
+    const nextSettings = backendSettingsFromAuth(settings, { ...session, access_token:settings.accessToken });
+    const saved = nextSettings.schoolId !== settings.schoolId ? saveBackendSettings(nextSettings) : nextSettings;
+    return { settings:saved, context:{ session, error:'' } };
+  } catch (error) {
+    if (error?.status === 401) {
+      const cleared = saveBackendSettings({ ...settings, enabled:false, accessToken:'', actorId:'', academicYearId:'', scenarioId:'' });
+      authStatus = { kind:'error', message:'La sesión ha caducado. Vuelve a iniciar sesión.' };
+      return { settings:cleared, context:{ session:null, error:'' } };
+    }
+    return { settings, context:{ session:null, error:error.message || 'No se pudo verificar la sesión.' } };
   }
 }
 
