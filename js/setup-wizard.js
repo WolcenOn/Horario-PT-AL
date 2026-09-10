@@ -93,14 +93,14 @@ export function buildSetupWizardProgress(state) {
     }
   ];
 
-  const essentialSteps = steps.filter(step => step.phase === 'essential' && step.id !== 'generate');
-  const essentialCompleted = essentialSteps.filter(step => step.ok).length;
-  const nextEssential = essentialSteps.find(step => !step.ok) || steps.find(step => step.id === 'generate');
+  const progressSteps = steps.filter(step => ['structure','plan','teachers','recesses'].includes(step.id));
+  const essentialCompleted = progressSteps.filter(step => step.ok).length;
+  const nextEssential = steps.filter(step => step.phase === 'essential' && step.id !== 'generate').find(step => !step.ok) || steps.find(step => step.id === 'generate');
 
   return {
     steps,
     essentialCompleted,
-    essentialTotal:essentialSteps.length,
+    essentialTotal:progressSteps.length,
     globalReady,
     ordinarySchedulePresent,
     nextEssential,
