@@ -8,7 +8,7 @@ test('la barra lateral mantiene accesibles las opciones largas en un portatil co
   const automation = page.locator('[data-view="automation"]');
 
   await expect(sidebar).toBeVisible();
-  await expect(automation).toContainText('Configuración automática');
+  await expect(automation).toContainText('Optimización PT/AL');
 
   const overflowY = await sidebar.evaluate(element => getComputedStyle(element).overflowY);
   expect(overflowY).toBe('auto');
