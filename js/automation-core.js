@@ -46,10 +46,14 @@ export function subjectsForCourse(state, course) {
   const classGroups = new Set((state.students || [])
     .filter(student => student.activo !== false && student.curso === course && student.grupoClase)
     .map(student => normalizeText(student.grupoClase)));
-  return [...new Set((state.classSchedules || [])
+  const scheduledSubjects = (state.classSchedules || [])
     .filter(entry => classGroups.has(normalizeText(entry.grupoClase)))
     .map(entry => entry.materia?.trim())
-    .filter(Boolean))]
+    .filter(Boolean);
+  const curriculumSubjects = Object.keys(state.centerPlanningSettings?.curriculum?.[course] || {})
+    .map(subject => subject.trim())
+    .filter(Boolean);
+  return [...new Set([...scheduledSubjects, ...curriculumSubjects])]
     .sort((a, b) => a.localeCompare(b, 'es', { sensitivity:'base' }));
 }
 
@@ -58,6 +62,9 @@ export function courseRuleDraft(state, settings, course) {
   const stored = normalized.courseRules[course];
   if (stored) return stored;
 
+  const generation = state.centerPlanningSettings?.generation || {};
+  const fallbackStart = validTime(generation.start) ? generation.start : '09:00';
+  const fallbackEnd = validTime(generation.end) ? generation.end : '14:00';
   const classGroups = new Set((state.students || [])
     .filter(student => student.activo !== false && student.curso === course && student.grupoClase)
     .map(student => normalizeText(student.grupoClase)));
@@ -65,14 +72,14 @@ export function courseRuleDraft(state, settings, course) {
   for (const day of DAYS) {
     const entries = (state.classSchedules || []).filter(entry => classGroups.has(normalizeText(entry.grupoClase)) && entry.dia === day.id);
     if (!entries.length) {
-      allowedWindows[day.id] = { inicio:'', fin:'' };
+      allowedWindows[day.id] = { inicio:fallbackStart, fin:fallbackEnd };
       continue;
     }
     const starts = entries.map(entry => timeToMinutes(entry.inicio)).filter(Number.isFinite);
     const ends = entries.map(entry => timeToMinutes(entry.fin)).filter(Number.isFinite);
     allowedWindows[day.id] = starts.length && ends.length
       ? { inicio:minutesToTime(Math.min(...starts)), fin:minutesToTime(Math.max(...ends)) }
-      : { inicio:'', fin:'' };
+      : { inicio:fallbackStart, fin:fallbackEnd };
   }
   return {
     confirmed:false,
@@ -151,10 +158,10 @@ export function buildReadinessReport(state, settings) {
     return !sessions.length || sessions.some(session => sessionDuration(session) <= 0);
   });
   const sessionsItem = makeItem(
-    'sessions', 'Sesiones plantilla', activeGroups.length > 0 && groupsWithoutTemplate.length === 0,
+    'sessions', 'Plantilla de sesiones PT/AL', activeGroups.length > 0 && groupsWithoutTemplate.length === 0,
     groupsWithoutTemplate.length
-      ? `${groupsWithoutTemplate.length} grupo(s) necesitan al menos una sesión válida. Su número y duración se usarán como plantilla.`
-      : `${state.sessions?.length || 0} sesión(es) disponibles como plantilla de frecuencia y duración.`,
+      ? `${groupsWithoutTemplate.length} grupo(s) todavía no indican cuántas sesiones de apoyo necesitan ni su duración. Este dato solo lo necesita el ajuste PT/AL; el generador global de horarios ordinarios no exige sesiones previas.`
+      : `${state.sessions?.length || 0} sesión(es) disponibles como plantilla de frecuencia y duración para el ajuste PT/AL.`,
     'sessions'
   );
 
@@ -166,14 +173,17 @@ export function buildReadinessReport(state, settings) {
       if (!hasEntry) missingClassDays.push(`${grupoClase} · ${day.label}`);
     }
   }
+  const globalMode = state.centerPlanningSettings?.mode === 'global';
   const classSchedulesItem = makeItem(
     'classSchedules', 'Horarios ordinarios', classGroups.length > 0 && missingClassDays.length === 0,
     classGroups.length === 0
       ? 'No hay grupos/clases ordinarias asociados a los alumnos.'
       : missingClassDays.length
-        ? `Faltan horarios en ${missingClassDays.length} combinación(es) clase/día. Ej.: ${missingClassDays.slice(0,3).join(', ')}${missingClassDays.length > 3 ? '…' : ''}`
+        ? globalMode
+          ? `El ajuste PT/AL necesita conocer las materias ya colocadas. Faltan ${missingClassDays.length} combinación(es) clase/día, pero no tienes que introducirlas a mano: genera primero el horario desde Plan del centro.`
+          : `Faltan horarios en ${missingClassDays.length} combinación(es) clase/día. Ej.: ${missingClassDays.slice(0,3).join(', ')}${missingClassDays.length > 3 ? '…' : ''}`
         : `${classGroups.length} clase(s) con horario cargado de lunes a viernes.`,
-    'classSchedules'
+    globalMode ? 'centerPlanning' : 'classSchedules'
   );
 
   const stages = [...new Set(usedStudents.map(student => stageForCourse(student.curso)).filter(Boolean))];
@@ -403,6 +413,10 @@ function validWindow(window) {
 
 function hasAvailability(professional) {
   return DAYS.some(day => (professional.disponibilidad?.[day.id] || []).some(validWindow));
+}
+
+function validTime(value) {
+  return typeof value === 'string' && /^\d{2}:\d{2}$/.test(value) && Number.isFinite(timeToMinutes(value));
 }
 
 function normalizeText(value) {
