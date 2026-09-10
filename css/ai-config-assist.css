@@ -1,0 +1,14 @@
+.ai-config-assist-card { padding: 18px; display: grid; gap: 14px; }
+.ai-config-assist-copy h2 { margin: 0 0 8px; }
+.ai-config-assist-copy p { margin: 0 0 8px; line-height: 1.5; }
+.ai-config-assist-actions { justify-content: flex-start; }
+.ai-config-prompt-result { display: grid; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+.ai-config-prompt-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.ai-config-prompt-heading strong, .ai-config-prompt-heading small { display: block; }
+.ai-config-prompt-heading small { margin-top: 3px; color: var(--muted); }
+.ai-config-prompt-output { width: 100%; min-height: 320px; resize: vertical; border: 1px solid var(--border-strong); border-radius: 10px; padding: 12px; background: var(--surface-muted); color: var(--text); font: .78rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+@media (max-width: 720px) {
+  .ai-config-prompt-heading { align-items: stretch; flex-direction: column; }
+  .ai-config-prompt-output { min-height: 260px; }
+}
