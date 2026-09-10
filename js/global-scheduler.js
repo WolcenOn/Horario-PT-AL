@@ -8,6 +8,12 @@ import { minutesToTime, overlapInterval, timeToMinutes } from './utils.js';
 
 const DAY_INDEX = new Map(DAYS.map((day, index) => [day.id, index]));
 const PRIORITY_SCORE = { low:90, medium:20, high:-100 };
+const REPAIR_ATTEMPTS = 4;
+const REPAIR_MAX_NODES = 8000;
+const REPAIR_MAX_DEPTH = 10;
+const REPAIR_MAX_BLOCKERS = 3;
+const REPAIR_ROOT_CANDIDATES = 18;
+const REPAIR_NESTED_CANDIDATES = 10;
 
 export function buildGlobalReadiness(state, rawSettings = state.centerPlanningSettings) {
   const settings = normalizeCenterPlanningSettings(rawSettings);
@@ -122,7 +128,7 @@ export function generateGlobalProposal(state, rawSettings = state.centerPlanning
     };
   }
 
-  let best = { assigned:[], unresolved:tasks, score:-Infinity };
+  let best = { assigned:[], unresolved:tasks, score:-Infinity, searchStrategy:'greedy' };
   const attempts = Math.min(48, Math.max(10, tasks.length));
   for (let attempt = 0; attempt < attempts; attempt++) {
     const result = greedyAttempt(tasks, candidatesByTask, readiness.settings, attempt);
@@ -131,9 +137,18 @@ export function generateGlobalProposal(state, rawSettings = state.centerPlanning
   }
 
   if (best.unresolved.length) {
+    const repaired = repairGreedyResult(best, candidatesByTask);
+    if (repaired && repaired.unresolved.length < best.unresolved.length) best = repaired;
+  }
+
+  if (best.unresolved.length) {
     return {
       ...emptyProposal(state, readiness),
-      unresolved:best.unresolved.map(task => ({ task, reason:'Los huecos posibles entran en conflicto con otra clase, actividad o con alguno de sus docentes durante la construcción de la propuesta.' })),
+      searchStrategy:best.searchStrategy || 'greedy',
+      unresolved:best.unresolved.map(task => ({
+        task,
+        reason:'Existen huecos individuales, pero la búsqueda greedy y el backtracking acotado no han encontrado una combinación global sin conflictos. Puede ser una limitación de búsqueda; no implica por sí sola que la configuración sea imposible.'
+      })),
       partial:best.assigned.map(item => item.entry)
     };
   }
@@ -170,6 +185,7 @@ export function generateGlobalProposal(state, rawSettings = state.centerPlanning
     unresolved:[],
     conflicts,
     score:best.score,
+    searchStrategy:best.searchStrategy || 'greedy',
     stats:{
       classes:readiness.participatingClasses.length,
       subjects:new Set(classTasks.map(task => `${task.grupoClase}\u0000${task.materia}`)).size,
@@ -338,7 +354,161 @@ function greedyAttempt(tasks, candidatesByTask, settings, attempt) {
     assigned.push({ task, candidate:selected.candidate, entry });
     score += selected.score;
   }
-  return { assigned, unresolved, score };
+  return { assigned, unresolved, score, searchStrategy:'greedy' };
+}
+
+function repairGreedyResult(greedyResult, candidatesByTask) {
+  let bestRepair = null;
+  for (let attempt = 0; attempt < REPAIR_ATTEMPTS; attempt++) {
+    let assigned = [...greedyResult.assigned];
+    const pending = [...greedyResult.unresolved].sort((a, b) => {
+      const scarcity = (candidatesByTask.get(a.id)?.length || 0) - (candidatesByTask.get(b.id)?.length || 0);
+      return scarcity || pseudoOrder(a.id, 1000 + attempt) - pseudoOrder(b.id, 1000 + attempt);
+    });
+    const unresolved = [];
+    const context = { nodes:0 };
+
+    for (const task of pending) {
+      const repaired = tryRepairTask(task, assigned, candidatesByTask, 1000 + attempt, context, new Set(), 0);
+      if (!repaired) {
+        unresolved.push(task);
+        if (context.nodes >= REPAIR_MAX_NODES) break;
+        continue;
+      }
+      assigned = repaired;
+    }
+
+    if (unresolved.length < pending.length && context.nodes < REPAIR_MAX_NODES) {
+      for (let index = unresolved.length - 1; index >= 0; index--) {
+        const task = unresolved[index];
+        const repaired = tryRepairTask(task, assigned, candidatesByTask, 2000 + attempt, context, new Set(), 0);
+        if (!repaired) continue;
+        assigned = repaired;
+        unresolved.splice(index, 1);
+      }
+    }
+
+    const result = {
+      assigned,
+      unresolved,
+      score:scoreAssignment(assigned, 3000 + attempt),
+      searchStrategy:'repair-backtracking',
+      searchNodes:context.nodes
+    };
+    if (!bestRepair || result.unresolved.length < bestRepair.unresolved.length || (result.unresolved.length === bestRepair.unresolved.length && result.score > bestRepair.score)) {
+      bestRepair = result;
+    }
+    if (!result.unresolved.length) return result;
+  }
+  return bestRepair;
+}
+
+function tryRepairTask(task, assigned, candidatesByTask, attempt, context, path, depth) {
+  if (context.nodes >= REPAIR_MAX_NODES || depth > REPAIR_MAX_DEPTH || path.has(task.id)) return null;
+  context.nodes++;
+  const limit = depth === 0 ? REPAIR_ROOT_CANDIDATES : REPAIR_NESTED_CANDIDATES;
+  const options = (candidatesByTask.get(task.id) || [])
+    .map(candidate => ({ candidate, score:dynamicScore(task, candidate, assigned, attempt) }))
+    .sort((a, b) => b.score - a.score || a.candidate.start - b.candidate.start)
+    .slice(0, limit);
+
+  for (const option of options) {
+    const blockers = repairBlockingItems(task, option.candidate, assigned);
+    if (blockers.length > REPAIR_MAX_BLOCKERS || blockers.some(item => path.has(item.task.id))) continue;
+    const blockerIds = new Set(blockers.map(item => item.task.id));
+    let nextAssigned = assigned.filter(item => !blockerIds.has(item.task.id));
+    if (runtimeOverlap(task, option.candidate, nextAssigned)) continue;
+    if (sameFamilyDayCount(task, option.candidate, nextAssigned) >= task.maxSessionsPerDay) continue;
+    nextAssigned.push(makeAssignedItem(task, option.candidate));
+
+    const nextPath = new Set(path);
+    nextPath.add(task.id);
+    const orderedBlockers = [...blockers].sort((a, b) => {
+      const scarcity = (candidatesByTask.get(a.task.id)?.length || 0) - (candidatesByTask.get(b.task.id)?.length || 0);
+      return scarcity || a.task.id.localeCompare(b.task.id);
+    });
+    let failed = false;
+    for (const blocker of orderedBlockers) {
+      const repaired = tryRepairTask(blocker.task, nextAssigned, candidatesByTask, attempt + depth + 1, context, nextPath, depth + 1);
+      if (!repaired) {
+        failed = true;
+        break;
+      }
+      nextAssigned = repaired;
+    }
+    if (!failed) return nextAssigned;
+  }
+  return null;
+}
+
+function repairBlockingItems(task, candidate, assigned) {
+  const blockers = runtimeBlockingItems(task, candidate, assigned);
+  const blockerIds = new Set(blockers.map(item => item.task.id));
+  const sameFamily = assigned.filter(item => item.task.familyId === task.familyId && item.candidate.dia === candidate.dia);
+  const alreadyRemoved = sameFamily.filter(item => blockerIds.has(item.task.id)).length;
+  const remaining = sameFamily.length - alreadyRemoved;
+  const excess = Math.max(0, remaining - Math.max(0, task.maxSessionsPerDay - 1));
+  if (excess > 0) {
+    const movable = sameFamily
+      .filter(item => !blockerIds.has(item.task.id))
+      .sort((a, b) => a.candidate.baseScore - b.candidate.baseScore || a.candidate.start - b.candidate.start);
+    for (const item of movable.slice(0, excess)) {
+      blockers.push(item);
+      blockerIds.add(item.task.id);
+    }
+  }
+  return blockers;
+}
+
+function runtimeBlockingItems(task, candidate, assigned) {
+  const teacherIds = new Set(task.teachers.map(teacher => teacher.id));
+  const classIds = new Set(task.classGroupIds.map(normalize));
+  return assigned.filter(item => {
+    if (item.candidate.dia !== candidate.dia) return false;
+    if (!overlapInterval(candidate.start, candidate.end, item.candidate.start, item.candidate.end)) return false;
+    if (item.task.teachers.some(teacher => teacherIds.has(teacher.id))) return true;
+    return item.task.classGroupIds.some(group => classIds.has(normalize(group)));
+  });
+}
+
+function makeAssignedItem(task, candidate) {
+  const entry = task.kind === 'class'
+    ? {
+        id:`global-${safeId(task.grupoClase)}-${safeId(task.materia)}-${task.sequence + 1}`,
+        grupoClase:task.grupoClase,
+        materia:task.materia,
+        dia:candidate.dia,
+        inicio:candidate.inicio,
+        fin:candidate.fin,
+        professionalId:task.teacher.id,
+        docente:task.teacher.nombre || '',
+        aula:task.aula,
+        observaciones:task.observaciones
+      }
+    : {
+        id:`global-activity-${safeId(task.activityId)}-${task.sequence + 1}`,
+        activityId:task.activityId,
+        activityName:task.activityName,
+        category:task.category,
+        dia:candidate.dia,
+        inicio:candidate.inicio,
+        fin:candidate.fin,
+        teacherIds:task.teachers.map(teacher => teacher.id),
+        teacherNames:task.teachers.map(teacher => teacher.nombre || teacher.id),
+        classGroupIds:[...task.classGroupIds]
+      };
+  return { task, candidate, entry };
+}
+
+function scoreAssignment(assigned, attempt) {
+  const ordered = [...assigned].sort((a, b) => a.task.id.localeCompare(b.task.id));
+  const placed = [];
+  let score = 0;
+  for (const item of ordered) {
+    score += dynamicScore(item.task, item.candidate, placed, attempt);
+    placed.push(item);
+  }
+  return score;
 }
 
 function dynamicScore(task, candidate, assigned, attempt) {
