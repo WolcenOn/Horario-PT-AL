@@ -16,6 +16,14 @@
 .setup-wizard-intro-grid article { padding:15px; display:grid; gap:5px; }
 .setup-wizard-intro-grid strong { font-size:.86rem; }
 .setup-wizard-intro-grid span { color:var(--muted); font-size:.78rem; line-height:1.45; }
+.setup-recalculation-card { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr); gap:16px 22px; padding:18px; border-color:#b8d9c5; background:#fbfefc; }
+.setup-recalculation-copy h2 { margin:2px 0 6px; font-size:1.08rem; }
+.setup-recalculation-copy p { margin:0; color:var(--muted); line-height:1.5; }
+.setup-recalculation-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; align-content:center; }
+.setup-recalculation-actions .button { justify-content:center; }
+.setup-recalculation-flow { grid-column:1 / -1; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding-top:12px; border-top:1px solid var(--border); color:var(--muted); font-size:.78rem; }
+.setup-recalculation-flow span { font-weight:800; color:var(--text); }
+.setup-recalculation-flow b { color:var(--muted); }
 .setup-wizard-phase .card-header h2 { margin:0 0 3px; }
 .setup-wizard-step-list { display:grid; gap:9px; padding:0 14px 14px; }
 .setup-wizard-step { display:grid; grid-template-columns:38px minmax(0,1fr) auto; gap:12px; align-items:center; border:1px solid var(--border); border-radius:11px; padding:12px; background:white; }
@@ -33,9 +41,13 @@
 @media (max-width:900px) {
   .setup-wizard-hero { grid-template-columns:1fr; }
   .setup-wizard-intro-grid { grid-template-columns:1fr; }
+  .setup-recalculation-card { grid-template-columns:1fr; }
 }
 @media (max-width:680px) {
   .setup-wizard-step { grid-template-columns:34px minmax(0,1fr); }
   .setup-wizard-step > .button { grid-column:2; justify-self:start; }
   .setup-wizard-hero { padding:16px; }
+  .setup-recalculation-actions { grid-template-columns:1fr; }
+  .setup-recalculation-flow { display:grid; grid-template-columns:1fr; }
+  .setup-recalculation-flow b { display:none; }
 }
