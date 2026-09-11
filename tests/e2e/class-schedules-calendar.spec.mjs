@@ -8,15 +8,15 @@ test('Horarios de aula alterna listado y vista semanal por clase', async ({ page
   await page.locator('[data-view="classSchedules"]').click();
   await expect(page.locator('#pageTitle')).toHaveText('Horarios de aula');
   await expect(page.locator('[data-class-schedule-view-switcher]')).toBeVisible();
+  await expect(page.locator('[data-class-schedule-group-navigation]')).toBeVisible();
   await expect(page.getByRole('button', { name:'Listado' })).toHaveClass(/is-active/);
+  expect(await page.locator('[data-class-schedule-group-navigation] [data-view-class-week]').count()).toBeGreaterThan(0);
 
   await page.getByRole('button', { name:'Vista semanal' }).click();
   await expect(page.locator('.class-schedule-calendar-view')).toBeVisible();
   await expect(page.locator('.class-schedule-calendar-card')).toBeVisible();
-
-  const groupSelect = page.locator('[data-class-schedule-calendar-group]');
-  await expect(groupSelect).toBeVisible();
-  expect(await groupSelect.locator('option').count()).toBeGreaterThan(0);
+  await expect(page.locator('[data-class-schedule-group-bar]')).toBeVisible();
+  expect(await page.locator('[data-class-schedule-group-bar] [data-view-class-week]').count()).toBeGreaterThan(0);
 
   await expect(page.locator('.class-schedule-day-column')).toHaveCount(5);
   await expect(page.locator('.calendar-head')).toContainText('Lunes');
