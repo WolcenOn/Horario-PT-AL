@@ -1,7 +1,6 @@
 import {
   backendConfigured,
   backendSettingsFromAuth,
-  bootstrapBackendConnection,
   checkBackendHealth,
   createAcademicYear,
   createPlanningScenario,
@@ -60,7 +59,9 @@ async function openIntegration() {
           saveBackendSettings(next);
           authStatus = { kind:'ok', message:'Sesión iniciada correctamente.' };
           connectionStatus = null;
-          showToast('Sesión iniciada. Ya puedes trabajar con el centro conectado.');
+          showToast(next.schoolId
+            ? 'Sesión iniciada. Ya puedes trabajar con el centro conectado.'
+            : 'Sesión iniciada. Selecciona el centro con el que quieres trabajar.');
         } catch (error) {
           authStatus = { kind:'error', message:error.message || 'No se pudo iniciar sesión.' };
           showToast(authStatus.message, 'error');
@@ -96,6 +97,7 @@ async function openIntegration() {
           enabled:false,
           accessToken:'',
           actorId:'',
+          schoolId:'',
           academicYearId:'',
           scenarioId:''
         });
@@ -106,7 +108,17 @@ async function openIntegration() {
       },
       onSelectMembership:async schoolId => {
         const current = loadBackendSettings();
-        saveBackendSettings({ ...current, schoolId:String(schoolId || ''), academicYearId:'', scenarioId:'' });
+        const membershipIds = new Set(
+          (authResolved.context.session?.memberships || [])
+            .map(item => String(item?.school_id || '').trim())
+            .filter(Boolean)
+        );
+        const selected = String(schoolId || '').trim();
+        if (selected && !membershipIds.has(selected)) {
+          showToast('Ese centro no pertenece a la sesión actual.', 'error');
+          return;
+        }
+        saveBackendSettings({ ...current, schoolId:selected, academicYearId:'', scenarioId:'' });
         await openIntegration();
       },
       onSave:async value => {
@@ -124,22 +136,6 @@ async function openIntegration() {
           connectionStatus = { kind:'ok', message:response?.status === 'ok' ? 'GestorEscuela respondió correctamente.' : 'El servidor respondió.' };
         } catch (error) {
           connectionStatus = { kind:'error', message:error.message || 'No se pudo conectar.' };
-        }
-        await openIntegration();
-      },
-      onBootstrap:async value => {
-        const accepted = confirm('Este método legacy creará un usuario, un centro y una pertenencia ADMIN sin contraseña. Úsalo solo para compatibilidad con instalaciones anteriores. ¿Continuar?');
-        if (!accepted) return;
-        connectionStatus = { kind:'pending', message:'Creando vínculo legacy…' };
-        await openIntegration();
-        try {
-          const result = await bootstrapBackendConnection(value);
-          saveBackendSettings(result.settings);
-          connectionStatus = { kind:'ok', message:`Centro vinculado en modo legacy: ${result.school.name}.` };
-          showToast('Vínculo legacy creado. Conviene migrarlo después a una cuenta con sesión.');
-        } catch (error) {
-          connectionStatus = { kind:'error', message:error.message || 'No se pudo crear el vínculo legacy.' };
-          showToast(connectionStatus.message, 'error');
         }
         await openIntegration();
       },
@@ -261,7 +257,7 @@ async function resolveAuthContext(settings) {
     return { settings:saved, context:{ session, error:'' } };
   } catch (error) {
     if (error?.status === 401) {
-      const cleared = saveBackendSettings({ ...settings, enabled:false, accessToken:'', actorId:'', academicYearId:'', scenarioId:'' });
+      const cleared = saveBackendSettings({ ...settings, enabled:false, accessToken:'', actorId:'', schoolId:'', academicYearId:'', scenarioId:'' });
       authStatus = { kind:'error', message:'La sesión ha caducado. Vuelve a iniciar sesión.' };
       return { settings:cleared, context:{ session:null, error:'' } };
     }
