@@ -54,10 +54,18 @@ export function backendConfigured(settings) {
 export function backendSettingsFromAuth(settings, auth, { schoolId = '' } = {}) {
   const base = normalizeBackendSettings(settings);
   const memberships = Array.isArray(auth?.memberships) ? auth.memberships : [];
+  const membershipSchoolIds = new Set(
+    memberships
+      .map(item => String(item?.school_id || '').trim())
+      .filter(Boolean)
+  );
   const requestedSchool = String(schoolId || '').trim();
   const responseSchool = String(auth?.school?.id || '').trim();
   const onlyMembershipSchool = memberships.length === 1 ? String(memberships[0]?.school_id || '').trim() : '';
-  const selectedSchool = requestedSchool || responseSchool || onlyMembershipSchool || base.schoolId;
+  const validRequestedSchool = membershipSchoolIds.has(requestedSchool) ? requestedSchool : '';
+  const validResponseSchool = membershipSchoolIds.has(responseSchool) ? responseSchool : '';
+  const validStoredSchool = membershipSchoolIds.has(base.schoolId) ? base.schoolId : '';
+  const selectedSchool = validRequestedSchool || validResponseSchool || onlyMembershipSchool || validStoredSchool;
   return normalizeBackendSettings({
     ...base,
     enabled:true,
