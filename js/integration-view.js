@@ -13,6 +13,8 @@ export function renderIntegrationView(root, {
   onLogin,
   onRegister,
   onLogout,
+  onLogoutAll,
+  onRevokeSession,
   onSelectMembership,
   onCreateAcademicYear,
   onSelectAcademicYear,
@@ -31,7 +33,7 @@ export function renderIntegrationView(root, {
     : { years:[], scenarios:[], snapshot:null, error:'', snapshotError:'' };
   const auth = authContext && typeof authContext === 'object'
     ? authContext
-    : { session:null, error:'', status:null };
+    : { session:null, sessions:[], sessionsError:'', error:'', status:null };
   const hasBearerSession = Boolean(normalized.accessToken);
   const legacyConfigured = Boolean(!hasBearerSession && normalized.actorId && normalized.schoolId);
   const modeLabel = hasBearerSession ? 'Sesión activa' : legacyConfigured ? 'Compatibilidad' : normalized.enabled ? 'Online pendiente' : 'Offline';
@@ -95,6 +97,10 @@ export function renderIntegrationView(root, {
   root.querySelector('[data-save-scenario-snapshot]')?.addEventListener('click', async () => onSaveScenarioSnapshot());
   root.querySelector('[data-restore-scenario-snapshot]')?.addEventListener('click', async () => onRestoreScenarioSnapshot(context.snapshot));
   root.querySelector('[data-logout-backend]')?.addEventListener('click', async () => onLogout());
+  root.querySelector('[data-logout-all-backend]')?.addEventListener('click', async () => onLogoutAll());
+  root.querySelectorAll('[data-revoke-auth-session]').forEach(button => {
+    button.addEventListener('click', async () => onRevokeSession(button.dataset.revokeAuthSession));
+  });
 
   const membershipSelect = root.querySelector('[data-auth-school-select]');
   membershipSelect?.addEventListener('change', async () => onSelectMembership(membershipSelect.value));
@@ -163,7 +169,8 @@ function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured 
           <div><span>Centro activo</span><strong>${settings.schoolId ? escapeHtml(shortId(settings.schoolId)) : 'Selecciona un centro'}</strong><small>${selectedMembership ? escapeHtml(selectedMembership.role || '') : 'La sesión puede pertenecer a más de un centro.'}</small></div>
         </div>
         ${memberships.length > 1 ? `<div class="form-field"><label for="authSchoolSelect">Centro de trabajo</label><select id="authSchoolSelect" data-auth-school-select><option value="">Selecciona un centro…</option>${memberships.map(item => `<option value="${escapeHtml(item.school_id)}" ${String(item.school_id) === settings.schoolId ? 'selected' : ''}>${escapeHtml(shortId(item.school_id))} · ${escapeHtml(item.role || 'Miembro')}</option>`).join('')}</select><span class="field-hint">Solo puedes seleccionar centros incluidos en la sesión autenticada.</span></div>` : ''}
-        <div class="button-row"><button class="button" type="button" data-logout-backend>Cerrar sesión</button></div>
+        ${renderSessionManagement(auth)}
+        <div class="button-row"><button class="button" type="button" data-logout-backend>Cerrar esta sesión</button><button class="button button-danger" type="button" data-logout-all-backend>Cerrar todas las sesiones</button></div>
       </div>
     </section>`;
   }
@@ -189,6 +196,35 @@ function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured 
       ${legacyConfigured ? '<div class="integration-note integration-wide"><strong>Conexión de transición activa</strong><span>Este navegador conserva una conexión Actor ID creada anteriormente. Puede seguir utilizándose durante la migración, pero las altas nuevas ya requieren una cuenta con contraseña.</span></div>' : ''}
     </div>
   </section>`;
+}
+
+function renderSessionManagement(auth) {
+  const sessions = Array.isArray(auth.sessions) ? auth.sessions : [];
+  if (auth.sessionsError) {
+    return `<div class="integration-status is-error"><strong>⚠ No se pudieron consultar tus sesiones</strong><span>${escapeHtml(auth.sessionsError)}</span></div>`;
+  }
+  if (!sessions.length) {
+    return '<div class="integration-note"><strong>Sesiones de la cuenta</strong><span>No hay información de sesiones disponible todavía.</span></div>';
+  }
+  const visible = sessions.slice(0, 8);
+  return `<div class="integration-auth-sessions">
+    <div class="section-title"><div><strong>Sesiones de la cuenta</strong><small>Puedes cerrar sesiones de otros navegadores sin afectar a esta.</small></div><span class="badge badge-neutral">${sessions.length}</span></div>
+    <div class="integration-auth-session-list">
+      ${visible.map(item => renderAuthSession(item)).join('')}
+    </div>
+    ${sessions.length > visible.length ? `<span class="field-hint">Se muestran las ${visible.length} sesiones más recientes de ${sessions.length}.</span>` : ''}
+  </div>`;
+}
+
+function renderAuthSession(item) {
+  const revoked = Boolean(item?.revoked_at);
+  const current = item?.current === true;
+  const statusLabel = current ? 'Esta sesión' : revoked ? 'Revocada' : 'Activa';
+  const statusClass = current ? 'badge-success' : revoked ? 'badge-neutral' : 'badge-warning';
+  return `<div class="integration-auth-session ${revoked ? 'is-revoked' : ''}">
+    <div><div class="integration-auth-session-title"><strong>${escapeHtml(statusLabel)}</strong><span class="badge ${statusClass}">${escapeHtml(statusLabel)}</span></div><small>Última actividad: ${escapeHtml(formatTimestamp(item?.last_seen_at))} · Caduca: ${escapeHtml(formatTimestamp(item?.expires_at))}</small></div>
+    ${!current && !revoked ? `<button class="button" type="button" data-revoke-auth-session="${escapeHtml(item?.id || '')}">Cerrar sesión</button>` : ''}
+  </div>`;
 }
 
 function renderAcademicContextCard(settings, configured, context, localAcademicYear) {
@@ -360,6 +396,7 @@ function scenarioStatusLabel(value) {
 }
 
 function formatTimestamp(value) {
+  if (!value) return '—';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value || '') : date.toLocaleString('es-ES');
 }
