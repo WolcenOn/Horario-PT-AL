@@ -36,6 +36,7 @@ export function renderIntegrationView(root, {
   const hasBearerSession = Boolean(normalized.accessToken);
   const legacyConfigured = Boolean(!hasBearerSession && normalized.actorId && normalized.schoolId);
   const modeLabel = hasBearerSession ? 'Sesión activa' : legacyConfigured ? 'Compatibilidad' : normalized.enabled ? 'Online pendiente' : 'Offline';
+  const localAcademicYear = String(state.centerPlanningSettings?.academicYear || '').trim();
 
   root.innerHTML = `<div class="integration-view">
     <section class="card integration-hero">
@@ -49,7 +50,7 @@ export function renderIntegrationView(root, {
 
     ${renderAccountCard(normalized, auth, { hasBearerSession, legacyConfigured })}
 
-    ${renderAcademicContextCard(normalized, configured, context)}
+    ${renderAcademicContextCard(normalized, configured, context, localAcademicYear)}
 
     <section class="card">
       <div class="card-header"><div><h2>Sincronización operativa</h2><small>Vista previa de los datos académicos que utiliza GestorEscuela para sustituciones y cálculos de centro.</small></div><span class="badge ${adapter.report.ready ? 'badge-success' : 'badge-warning'}">${adapter.report.ready ? 'Preparado' : `${adapter.report.errors.length} error(es)`}</span></div>
@@ -203,56 +204,78 @@ function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured 
   </section>`;
 }
 
-function renderAcademicContextCard(settings, configured, context) {
+function renderAcademicContextCard(settings, configured, context, localAcademicYear) {
+  const localYear = String(localAcademicYear || '').trim();
   if (!configured) {
     return `<section class="card">
-      <div class="card-header"><div><h2>Curso académico y escenario</h2><small>Permitirá separar cada curso y preparar varias alternativas de planificación.</small></div></div>
-      <div class="card-body"><div class="integration-note"><strong>Conexión necesaria</strong><span>Inicia sesión y selecciona un centro. El modo offline no necesita curso remoto ni escenario.</span></div></div>
+      <div class="card-header"><div><h2>Curso del proyecto y sincronización</h2><small>El curso del proyecto pertenece a la planificación local. La vinculación online es opcional y no lo sustituye.</small></div></div>
+      <div class="card-body integration-form">
+        <div class="integration-session-summary">
+          <div><span>Curso del proyecto</span><strong>${localYear ? escapeHtml(localYear) : 'Sin indicar'}</strong><small>Se edita en Planificación académica y se conserva al exportar el proyecto.</small></div>
+          <div><span>Curso online vinculado</span><strong>No conectado</strong><small>Inicia sesión si quieres guardar escenarios compartidos.</small></div>
+        </div>
+        <div class="integration-note"><strong>Una sola fuente local</strong><span>El modo offline no necesita crear otro curso aquí. El curso escolar del proyecto se configura una sola vez en Planificación académica.</span></div>
+      </div>
     </section>`;
   }
 
   const years = Array.isArray(context.years) ? context.years : [];
   const scenarios = Array.isArray(context.scenarios) ? context.scenarios : [];
   const selectedYearId = years.some(item => item.id === settings.academicYearId) ? settings.academicYearId : '';
+  const selectedYear = years.find(item => item.id === selectedYearId) || null;
   const selectedScenarioId = scenarios.some(item => item.id === settings.scenarioId) ? settings.scenarioId : '';
+  const remoteLabel = String(selectedYear?.label || '').trim();
+  const mismatch = Boolean(localYear && remoteLabel && !academicYearMatches(localYear, remoteLabel));
+  const missingLocalYear = Boolean(remoteLabel && !localYear);
+  const bindingReady = Boolean(selectedYearId && selectedScenarioId && !mismatch && !missingLocalYear);
   const yearOptions = years.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === selectedYearId ? 'selected' : ''}>${escapeHtml(item.label)}${item.start_date && item.end_date ? ` · ${escapeHtml(item.start_date)}–${escapeHtml(item.end_date)}` : ''}</option>`).join('');
   const scenarioOptions = scenarios.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === selectedScenarioId ? 'selected' : ''}>${escapeHtml(item.name)} · ${escapeHtml(scenarioStatusLabel(item.status))}</option>`).join('');
   const snapshot = context.snapshot;
+  const bindingBadge = mismatch || missingLocalYear
+    ? '<span class="badge badge-warning">Revisar vinculación</span>'
+    : `<span class="badge ${bindingReady ? 'badge-success' : 'badge-neutral'}">${bindingReady ? 'Contexto completo' : 'Pendiente'}</span>`;
 
   return `<section class="card">
-    <div class="card-header"><div><h2>Curso académico y escenario</h2><small>El escenario puede guardar una copia completa y versionada del proyecto para compartirla entre dispositivos.</small></div><span class="badge ${selectedYearId && selectedScenarioId ? 'badge-success' : 'badge-neutral'}">${selectedYearId && selectedScenarioId ? 'Contexto completo' : 'Pendiente'}</span></div>
+    <div class="card-header"><div><h2>Curso del proyecto y escenario online</h2><small>El proyecto conserva su curso local; aquí eliges únicamente a qué curso y escenario remotos se vincula.</small></div>${bindingBadge}</div>
     <div class="card-body integration-form">
       ${context.error ? `<div class="integration-status is-error"><strong>⚠ No se pudo cargar el contexto académico</strong><span>${escapeHtml(context.error)}</span></div>` : ''}
+      <div class="integration-session-summary">
+        <div><span>Curso del proyecto</span><strong>${localYear ? escapeHtml(localYear) : 'Sin indicar'}</strong><small>Fuente local · Planificación académica · incluido en el JSON exportado.</small></div>
+        <div><span>Curso online vinculado</span><strong>${remoteLabel ? escapeHtml(remoteLabel) : 'Sin vincular'}</strong><small>Referencia remota para escenarios y sincronización; no cambia el curso del proyecto.</small></div>
+      </div>
+      ${mismatch ? `<div class="integration-issues is-warning"><strong>Los cursos no coinciden</strong><span>El proyecto indica “${escapeHtml(localYear)}” y la vinculación online “${escapeHtml(remoteLabel)}”. Revisa cuál debe usarse antes de compartir el escenario.</span></div>` : ''}
+      ${missingLocalYear ? `<div class="integration-issues is-warning"><strong>Falta el curso del proyecto</strong><span>Has vinculado “${escapeHtml(remoteLabel)}” online, pero el proyecto local no tiene curso escolar. Indícalo en Planificación académica para mantener una referencia consistente también offline.</span></div>` : ''}
       <div class="form-grid">
         <div class="form-field">
-          <label for="academicYearSelect">Curso académico activo</label>
+          <label for="academicYearSelect">Curso online vinculado</label>
           <select id="academicYearSelect" data-academic-year-select>
-            <option value="">Selecciona un curso…</option>${yearOptions}
+            <option value="">Sin vinculación online</option>${yearOptions}
           </select>
-          <span class="field-hint">Cambiar de curso limpia el escenario seleccionado para evitar mezclar contextos.</span>
+          <span class="field-hint">Cambiar esta vinculación no modifica el Curso del proyecto. También limpia el escenario seleccionado para evitar mezclar contextos.</span>
         </div>
         <div class="form-field">
-          <label for="planningScenarioSelect">Escenario activo</label>
+          <label for="planningScenarioSelect">Escenario online activo</label>
           <select id="planningScenarioSelect" data-scenario-select ${selectedYearId ? '' : 'disabled'}>
             <option value="">Selecciona un escenario…</option>${scenarioOptions}
           </select>
-          <span class="field-hint">Los escenarios permiten comparar alternativas antes de publicar un horario.</span>
+          <span class="field-hint">Los escenarios permiten compartir o comparar alternativas del mismo proyecto.</span>
         </div>
       </div>
 
       <div class="form-grid">
         <form id="academicYearForm" class="integration-note">
-          <strong>Crear curso académico</strong>
+          <strong>Crear curso online</strong>
+          <span>Solo es necesario si GestorEscuela todavía no contiene el curso al que quieres vincular este proyecto.</span>
           <div class="form-grid">
-            <div class="form-field"><label for="academicYearLabel">Etiqueta</label><input id="academicYearLabel" name="label" required maxlength="32" placeholder="2026/27"></div>
+            <div class="form-field"><label for="academicYearLabel">Etiqueta</label><input id="academicYearLabel" name="label" required maxlength="32" value="${escapeHtml(localYear)}" placeholder="2026/27"></div>
             <div class="form-field"><label for="academicYearStart">Inicio</label><input id="academicYearStart" name="startDate" type="date"></div>
             <div class="form-field"><label for="academicYearEnd">Fin</label><input id="academicYearEnd" name="endDate" type="date"></div>
           </div>
-          <button class="button" type="submit">+ Crear curso</button>
+          <button class="button" type="submit">+ Crear y vincular curso online</button>
         </form>
 
         <form id="planningScenarioForm" class="integration-note">
-          <strong>Crear escenario</strong>
+          <strong>Crear escenario online</strong>
           <div class="form-field"><label for="planningScenarioName">Nombre</label><input id="planningScenarioName" name="name" required maxlength="160" placeholder="Planificación inicial" ${selectedYearId ? '' : 'disabled'}></div>
           <button class="button" type="submit" ${selectedYearId ? '' : 'disabled'}>+ Crear escenario</button>
           <span class="field-hint">Los escenarios nuevos empiezan como borrador.</span>
@@ -348,6 +371,10 @@ function scenarioStatusLabel(value) {
 function formatTimestamp(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value || '') : date.toLocaleString('es-ES');
+}
+
+function academicYearMatches(left, right) {
+  return String(left || '').trim().toLocaleLowerCase('es') === String(right || '').trim().toLocaleLowerCase('es');
 }
 
 function shortId(value) {
