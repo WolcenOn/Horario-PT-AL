@@ -53,35 +53,42 @@ async function enhanceClassSchedules() {
     renderCalendarView(state);
     return;
   }
-  injectListSwitcher();
+  const state = await loadState();
+  injectListNavigation(state);
 }
 
-function injectListSwitcher() {
+function injectListNavigation(state) {
   if (root.querySelector('[data-class-schedule-view-switcher]')) return;
+  const groups = classGroupsForState(state);
+  const selectedGroup = selectedGroupFor(groups);
   const switcher = document.createElement('section');
   switcher.className = 'card class-schedule-view-switcher';
   switcher.dataset.classScheduleViewSwitcher = 'true';
   switcher.innerHTML = `<div>
       <strong>Vista de horarios de aula</strong>
-      <small>Alterna entre el listado editable por asignatura y una cuadrícula semanal por clase.</small>
+      <small>Edita por asignatura o abre una semana completa desde la barra de clases.</small>
     </div>
     <div class="segmented-control" role="group" aria-label="Vista de horarios de aula">
       <button class="is-active" type="button" data-class-schedule-mode="list">Listado</button>
       <button type="button" data-class-schedule-mode="calendar">Vista semanal</button>
     </div>`;
+  const navigator = document.createElement('section');
+  navigator.className = 'card class-schedule-group-navigation';
+  navigator.dataset.classScheduleGroupNavigation = 'true';
+  navigator.innerHTML = `<div class="class-schedule-group-navigation-head"><div><strong>Semanas por clase</strong><small>Selecciona una clase una sola vez; no hace falta repetir “Ver semana” en cada asignatura.</small></div></div>${renderGroupBar(state, groups, selectedGroup)}`;
+  root.prepend(navigator);
   root.prepend(switcher);
   switcher.querySelector('[data-class-schedule-mode="calendar"]')?.addEventListener('click', async () => {
     mode = 'calendar';
     localStorage.setItem(MODE_KEY, mode);
-    const state = await loadState();
-    renderCalendarView(state);
+    const next = await loadState();
+    renderCalendarView(next);
   });
 }
 
 function renderCalendarView(state) {
   const groups = classGroupsForState(state);
-  let selectedGroup = localStorage.getItem(GROUP_KEY) || groups[0] || '';
-  if (!groups.includes(selectedGroup)) selectedGroup = groups[0] || '';
+  const selectedGroup = selectedGroupFor(groups);
   if (selectedGroup) localStorage.setItem(GROUP_KEY, selectedGroup);
 
   const entries = (state.classSchedules || [])
@@ -118,10 +125,16 @@ function renderCalendarView(state) {
       </div>
     </section>
     <section class="card class-schedule-calendar-toolbar">
-      <label><span>Clase / grupo</span><select data-class-schedule-calendar-group>${groups.map(group => `<option value="${escapeHtml(group)}" ${group === selectedGroup ? 'selected' : ''}>${escapeHtml(group)}</option>`).join('')}</select></label>
-      <div class="class-schedule-calendar-stats">
-        <span><strong>${entries.length}</strong> franjas</span>
-        <span><strong>${new Set(entries.map(item => item.materia).filter(Boolean)).size}</strong> asignaturas</span>
+      <div class="class-schedule-week-selector">
+        <span class="eyebrow">Cambiar de clase</span>
+        ${renderGroupBar(state, groups, selectedGroup)}
+      </div>
+      <div class="class-schedule-calendar-actions">
+        ${selectedGroup ? '<button class="button" type="button" data-edit-selected-class>✏️ Editar esta clase</button>' : ''}
+        <div class="class-schedule-calendar-stats">
+          <span><strong>${entries.length}</strong> franjas</span>
+          <span><strong>${new Set(entries.map(item => item.materia).filter(Boolean)).size}</strong> asignaturas</span>
+        </div>
       </div>
     </section>
     ${selectedGroup ? `<section class="card calendar-card class-schedule-calendar-card">
@@ -135,15 +148,29 @@ function renderCalendarView(state) {
   </div>`;
 
   root.querySelector('[data-class-schedule-mode="list"]')?.addEventListener('click', showListView);
-  root.querySelector('[data-class-schedule-calendar-group]')?.addEventListener('change', async event => {
-    const value = String(event.target.value || '');
-    if (value) localStorage.setItem(GROUP_KEY, value);
-    const next = await loadState();
-    renderCalendarView(next);
-  });
+  root.querySelector('[data-edit-selected-class]')?.addEventListener('click', () => showListForGroup(selectedGroup));
   root.querySelectorAll('[data-class-schedule-entry]').forEach(block => block.addEventListener('click', () => {
     openEntryInList(block.dataset.classScheduleEntry);
   }));
+}
+
+function renderGroupBar(state, groups, selectedGroup) {
+  if (!groups.length) return '<div class="empty-state compact">No hay clases configuradas todavía.</div>';
+  const byCourse = new Map();
+  for (const group of groups) {
+    const course = courseForClassGroup(state.schoolSettings, group)
+      || (state.students || []).find(item => item.grupoClase === group)?.curso
+      || 'Otros';
+    if (!byCourse.has(course)) byCourse.set(course, []);
+    byCourse.get(course).push(group);
+  }
+  return `<div class="class-schedule-group-bar" data-class-schedule-group-bar>${[...byCourse.entries()].map(([course, courseGroups]) => `<div class="class-schedule-course-group"><strong>${escapeHtml(course)}</strong><div>${courseGroups.map(group => `<button class="class-schedule-group-chip ${group === selectedGroup ? 'is-active' : ''}" type="button" data-view-class-week="${escapeHtml(group)}" title="Ver semana de ${escapeHtml(group)}">${escapeHtml(group)}</button>`).join('')}</div></div>`).join('')}</div>`;
+}
+
+function selectedGroupFor(groups) {
+  let selectedGroup = localStorage.getItem(GROUP_KEY) || groups[0] || '';
+  if (!groups.includes(selectedGroup)) selectedGroup = groups[0] || '';
+  return selectedGroup;
 }
 
 function renderGapSummary(overview) {
@@ -157,6 +184,17 @@ function showListView() {
   mode = 'list';
   localStorage.setItem(MODE_KEY, mode);
   document.querySelector('[data-view="classSchedules"]')?.click();
+}
+
+function showListForGroup(group) {
+  if (group) localStorage.setItem(GROUP_KEY, group);
+  showListView();
+  setTimeout(() => {
+    const filter = root.querySelector('#classScheduleFilter');
+    if (!filter || !group) return;
+    filter.value = group;
+    filter.dispatchEvent(new Event('change', { bubbles:true }));
+  }, 0);
 }
 
 function openEntryInList(entryId) {
