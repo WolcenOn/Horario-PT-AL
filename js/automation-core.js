@@ -13,8 +13,13 @@ export const SUBJECT_PRIORITIES = [
   { value:'high', label:'Alta · mejor evitar', score:-45 },
   { value:'blocked', label:'Bloqueada · no sacar al alumno', score:null }
 ];
+export const COURSE_WINDOW_MODES = [
+  { value:'center', label:'Jornada del centro' },
+  { value:'custom', label:'Horario personalizado' }
+];
 
 const PRIORITY_VALUES = new Set(SUBJECT_PRIORITIES.map(item => item.value));
+const WINDOW_MODE_VALUES = new Set(COURSE_WINDOW_MODES.map(item => item.value));
 const DAY_ORDER = new Map(DAYS.map((day, index) => [day.id, index]));
 const COURSE_VALUES = new Set(COURSE_OPTIONS.map(option => option.value));
 const STEP_MINUTES = 15;
@@ -60,33 +65,26 @@ export function subjectsForCourse(state, course) {
 export function courseRuleDraft(state, settings, course) {
   const normalized = normalizeAutomationSettings(settings);
   const stored = normalized.courseRules[course];
-  if (stored) return stored;
-
-  const generation = state.centerPlanningSettings?.generation || {};
-  const fallbackStart = validTime(generation.start) ? generation.start : '09:00';
-  const fallbackEnd = validTime(generation.end) ? generation.end : '14:00';
-  const classGroups = new Set((state.students || [])
-    .filter(student => student.activo !== false && student.curso === course && student.grupoClase)
-    .map(student => normalizeText(student.grupoClase)));
-  const allowedWindows = {};
-  for (const day of DAYS) {
-    const entries = (state.classSchedules || []).filter(entry => classGroups.has(normalizeText(entry.grupoClase)) && entry.dia === day.id);
-    if (!entries.length) {
-      allowedWindows[day.id] = { inicio:fallbackStart, fin:fallbackEnd };
-      continue;
-    }
-    const starts = entries.map(entry => timeToMinutes(entry.inicio)).filter(Number.isFinite);
-    const ends = entries.map(entry => timeToMinutes(entry.fin)).filter(Number.isFinite);
-    allowedWindows[day.id] = starts.length && ends.length
-      ? { inicio:minutesToTime(Math.min(...starts)), fin:minutesToTime(Math.max(...ends)) }
-      : { inicio:fallbackStart, fin:fallbackEnd };
+  if (stored) {
+    return {
+      ...stored,
+      allowedWindows:stored.windowMode === 'center'
+        ? centerAllowedWindows(state)
+        : stored.allowedWindows
+    };
   }
+
   return {
     confirmed:false,
-    allowedWindows,
+    windowMode:'center',
+    allowedWindows:centerAllowedWindows(state),
     subjectPriorities:Object.fromEntries(subjectsForCourse(state, course).map(subject => [subject, 'medium'])),
     subjectPolicies:{}
   };
+}
+
+export function effectiveCourseAllowedWindows(state, settings, course) {
+  return courseRuleDraft(state, settings, course).allowedWindows;
 }
 
 export function buildReadinessReport(state, settings) {
@@ -200,20 +198,21 @@ export function buildReadinessReport(state, settings) {
   const incompleteRules = [];
   for (const course of courses) {
     const rule = normalized.courseRules[course];
+    const draft = rule ? courseRuleDraft(state, normalized, course) : null;
     const subjects = subjectsForCourse(state, course);
-    if (!rule?.confirmed || !hasAllowedWindow(rule)) {
+    if (!draft?.confirmed || !hasAllowedWindow(draft)) {
       incompleteRules.push(course);
       continue;
     }
-    if (subjects.some(subject => !PRIORITY_VALUES.has(rule.subjectPriorities?.[subject]))) incompleteRules.push(course);
+    if (subjects.some(subject => !PRIORITY_VALUES.has(draft.subjectPriorities?.[subject]))) incompleteRules.push(course);
   }
   const rulesItem = makeItem(
-    'courseRules', 'Prioridades y franjas por curso', courses.length > 0 && incompleteRules.length === 0,
+    'courseRules', 'Prioridades y excepciones horarias por curso', courses.length > 0 && incompleteRules.length === 0,
     courses.length === 0
       ? 'No hay cursos activos que configurar.'
       : incompleteRules.length
         ? `Falta confirmar la configuración de ${incompleteRules.length} curso(s): ${incompleteRules.join(', ')}.`
-        : `${courses.length} curso(s) con prioridades y franjas permitidas configuradas.`,
+        : `${courses.length} curso(s) con extracción, preferencias y horario permitido confirmados.`,
     'automation'
   );
 
@@ -310,10 +309,11 @@ function buildCandidates(template, state, settings, groupMap, professionalMap, s
   const studentIds = studentIdsForSession(template, groupMap);
   const students = studentIds.map(id => studentMap.get(id)).filter(Boolean);
   const courses = [...new Set(students.map(student => student.curso).filter(Boolean))];
+  const candidateWindows = new Map(courses.map(course => [course, effectiveCourseAllowedWindows(state, settings, course)]));
   const candidates = [];
 
   for (const day of DAYS) {
-    const courseWindows = courses.map(course => settings.courseRules[course]?.allowedWindows?.[day.id]).filter(Boolean);
+    const courseWindows = courses.map(course => candidateWindows.get(course)?.[day.id]).filter(Boolean);
     if (courseWindows.length !== courses.length || courseWindows.some(window => !validWindow(window))) continue;
     const allowedStart = Math.max(...courseWindows.map(window => timeToMinutes(window.inicio)));
     const allowedEnd = Math.min(...courseWindows.map(window => timeToMinutes(window.fin)));
@@ -398,6 +398,10 @@ function normalizeCourseRule(value) {
       fin:typeof window?.fin === 'string' ? window.fin : ''
     };
   }
+  const hasLegacyWindows = DAYS.some(day => validWindow(allowedWindows[day.id]));
+  const windowMode = WINDOW_MODE_VALUES.has(raw.windowMode)
+    ? raw.windowMode
+    : hasLegacyWindows ? 'custom' : 'center';
   const subjectPriorities = {};
   for (const [subject, priority] of Object.entries(raw.subjectPriorities || {})) {
     if (subject && PRIORITY_VALUES.has(priority)) subjectPriorities[subject] = priority;
@@ -407,7 +411,18 @@ function normalizeCourseRule(value) {
     const extraction = typeof rawPolicy === 'string' ? rawPolicy : rawPolicy?.extraction;
     if (subject && EXTRACTION_MODES.includes(extraction)) subjectPolicies[subject] = { extraction };
   }
-  return { confirmed:raw.confirmed === true, allowedWindows, subjectPriorities, subjectPolicies };
+  return { confirmed:raw.confirmed === true, windowMode, allowedWindows, subjectPriorities, subjectPolicies };
+}
+
+function centerAllowedWindows(state) {
+  const generation = state.centerPlanningSettings?.generation || {};
+  const rawStart = validTime(generation.start) ? generation.start : '09:00';
+  const rawEnd = validTime(generation.end) ? generation.end : '14:00';
+  const start = timeToMinutes(rawStart);
+  const end = timeToMinutes(rawEnd);
+  const inicio = Number.isFinite(start) && Number.isFinite(end) && end > start ? rawStart : '09:00';
+  const fin = Number.isFinite(start) && Number.isFinite(end) && end > start ? rawEnd : '14:00';
+  return Object.fromEntries(DAYS.map(day => [day.id, { inicio, fin }]));
 }
 
 function hasAllowedWindow(rule) {
