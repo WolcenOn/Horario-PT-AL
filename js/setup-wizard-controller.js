@@ -1,6 +1,8 @@
-import { loadState } from './repository.js';
+import { loadState, saveCenterPlanningSettings, saveSchoolSettings } from './repository.js';
 import { analyzeGlobalDistributionLimits, describeDistributionIssue } from './global-recovery.js';
 import { renderSetupWizard } from './setup-wizard.js';
+import { buildQuickStartPreset } from './setup-presets.js';
+import { showToast } from './ui.js';
 import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
@@ -51,6 +53,21 @@ async function openSetupWizard() {
     onEditRecesses:() => {
       const button = document.querySelector('#recessSettingsBtn');
       if (button) button.click();
+    },
+    onApplyQuickStart:async input => {
+      try {
+        const preset = buildQuickStartPreset(state, input);
+        await Promise.all([
+          saveSchoolSettings(preset.schoolSettings),
+          saveCenterPlanningSettings(preset.centerPlanningSettings)
+        ]);
+        showToast(preset.structureChanged
+          ? `Base creada para ${preset.territory}: ${preset.classCount} clases. Revisa ahora jornada, currículo y recreos.`
+          : `Comunidad guardada: ${preset.territory}. La estructura de clases existente se ha conservado.`);
+        await openSetupWizard();
+      } catch (error) {
+        showToast(error.message || 'No se pudo crear la configuración inicial.', 'error');
+      }
     }
   });
 }
