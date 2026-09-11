@@ -1,0 +1,29 @@
+.class-week-panel { margin:0 16px 16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-muted); padding:14px; }
+.class-week-panel-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:12px; }
+.class-week-panel-head h3 { margin:2px 0 3px; font-size:1.08rem; }
+.class-week-panel-head small { color:var(--muted); }
+.class-week-scroll { overflow:auto; border:1px solid var(--border); border-radius:10px; background:white; }
+.class-week-day-heads { min-width:940px; display:grid; grid-template-columns:70px repeat(5,minmax(170px,1fr)); border-bottom:1px solid var(--border); background:#fbfcfd; position:sticky; top:0; z-index:4; }
+.class-week-day-heads > * { padding:9px 8px; border-right:1px solid var(--border); font-size:.78rem; text-align:center; }
+.class-week-day-heads > span { color:var(--muted); font-weight:750; }
+.class-week-board { min-width:940px; display:grid; grid-template-columns:70px repeat(5,minmax(170px,1fr)); height:var(--class-week-height); position:relative; }
+.class-week-axis { position:relative; height:var(--class-week-height); border-right:1px solid var(--border); background:#fbfcfd; }
+.class-week-axis span { position:absolute; left:5px; right:5px; transform:translateY(-50%); font-size:.7rem; color:var(--muted); text-align:right; padding-right:4px; }
+.class-week-day { position:relative; height:var(--class-week-height); border-right:1px solid var(--border); background-image:repeating-linear-gradient(to bottom, transparent 0, transparent calc(5% - 1px), rgba(219,226,232,.55) calc(5% - 1px), rgba(219,226,232,.55) 5%); }
+.class-week-block { position:absolute; left:5px; right:5px; min-height:22px; border:1px solid var(--border-strong); border-radius:7px; padding:5px 6px; overflow:hidden; display:flex; flex-direction:column; gap:1px; box-shadow:0 2px 5px rgba(28,43,56,.06); }
+.class-week-block strong { font-size:.75rem; line-height:1.2; }
+.class-week-block span, .class-week-block small { font-size:.67rem; line-height:1.2; }
+.class-week-block.is-subject { background:white; }
+.class-week-block.is-recess { background:var(--warning-soft); border-color:#ead79b; color:#6d4b0f; z-index:2; }
+.class-week-gap-summary { margin-top:12px; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+.class-week-gap-summary > div { border:1px solid var(--border); border-radius:8px; background:white; padding:8px; display:grid; gap:3px; }
+.class-week-gap-summary strong { font-size:.75rem; }
+.class-week-gap-summary span { font-size:.7rem; color:var(--muted); line-height:1.35; }
+@media (max-width:900px) {
+  .class-week-panel-head { flex-direction:column; }
+  .class-week-gap-summary { grid-template-columns:1fr 1fr; }
+}
+@media (max-width:620px) {
+  .class-week-panel { margin:0 10px 12px; padding:10px; }
+  .class-week-gap-summary { grid-template-columns:1fr; }
+}
