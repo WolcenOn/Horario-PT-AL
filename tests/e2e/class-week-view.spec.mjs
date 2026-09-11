@@ -19,8 +19,8 @@ test('Ver semana abre la vista semanal existente en la clase de la fila y muestr
       subjectPatterns:{},
       weeklyActivities:[]
     });
-    await put('classSchedules', { id:'e2e-lengua', grupoClase:'1ºA', materia:'Lengua', dia:'lunes', inicio:'09:00', fin:'10:00', docente:'Tutora' });
-    await put('classSchedules', { id:'e2e-mates', grupoClase:'1ºA', materia:'Matemáticas', dia:'lunes', inicio:'10:00', fin:'11:00', docente:'Tutora' });
+    await put('classSchedules', { id:'e2e-lengua', grupoClase:'1ºA', materia:'Lengua Castellana y Literatura', dia:'lunes', inicio:'09:00', fin:'10:00', docente:'Tutora', aula:'Aula 1ºA' });
+    await put('classSchedules', { id:'e2e-mates', grupoClase:'1ºA', materia:'Matemáticas', dia:'lunes', inicio:'10:00', fin:'11:00', docente:'Tutora', aula:'Aula 1ºA' });
   });
   await page.reload();
   await expect(page.locator('#viewRoot > *').first()).toBeVisible();
@@ -35,6 +35,22 @@ test('Ver semana abre la vista semanal existente en la clase de la fila y muestr
   await expect(page.locator('.class-schedule-calendar-view')).toBeVisible();
   await expect(page.locator('[data-class-schedule-calendar-group]')).toHaveValue('1ºA');
   await expect(page.locator('.class-schedule-calendar-card')).toContainText('Recreo 11:00–11:30');
+
+  const blocks = page.locator('.class-schedule-calendar-block');
+  await expect(blocks).toHaveCount(2);
+  await expect(blocks.first().locator('.class-schedule-block-head')).toBeVisible();
+  await expect(blocks.first().locator('.class-schedule-block-subject')).toHaveText('LEN');
+  await expect(blocks.nth(1).locator('.class-schedule-block-subject')).toHaveText('MAT');
+  await expect(blocks.first()).toHaveAttribute('title', /Lengua Castellana y Literatura · 09:00–10:00/);
+
+  const hues = await blocks.evaluateAll(items => items.map(item => item.dataset.subjectHue));
+  expect(new Set(hues).size).toBe(2);
+
+  const room = blocks.first().locator('.class-schedule-block-room');
+  await expect(room).toHaveText('Aula 1ºA');
+  const roomPosition = await room.evaluate(element => getComputedStyle(element).position);
+  expect(roomPosition).toBe('absolute');
+
   const gaps = page.locator('[data-class-schedule-gaps]');
   await expect(gaps).toBeVisible();
   await expect(gaps).toContainText('Huecos libres de la jornada');
