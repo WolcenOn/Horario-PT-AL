@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('la optimización separa reglas duras de extracción y preferencias', async ({ page }) => {
+test('la optimización separa extracción, preferencias y excepciones de la jornada del centro', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => localStorage.setItem('horario-user-cleared', 'true'));
@@ -64,8 +64,16 @@ test('la optimización separa reglas duras de extracción y preferencias', async
   await page.locator('[data-view="automation"]').scrollIntoViewIfNeeded();
   await page.locator('[data-view="automation"]').click();
 
-  await expect(page.getByRole('heading', { name:'Extracción, preferencias y horas permitidas' })).toBeVisible();
-  await expect(page.locator('[data-course-rule="4º"]')).toBeVisible();
+  await expect(page.getByRole('heading', { name:'Extracción, preferencias y excepciones horarias' })).toBeVisible();
+  const course = page.locator('[data-course-rule="4º"]');
+  await expect(course).toBeVisible();
+
+  const windowMode = course.locator('[data-window-mode]');
+  await expect(windowMode).toHaveValue('center');
+  await expect(course.locator('[data-center-window-summary]')).toContainText('09:00–14:00');
+  await expect(course.locator('[data-custom-window-editor]')).toHaveClass(/hidden/);
+  await windowMode.selectOption('custom');
+  await expect(course.locator('[data-custom-window-editor]')).not.toHaveClass(/hidden/);
 
   const extraction = page.locator('[data-subject-extraction="Lengua"]');
   await expect(extraction).toBeVisible();
