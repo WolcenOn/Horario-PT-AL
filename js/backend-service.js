@@ -116,6 +116,28 @@ export async function fetchCurrentAuth(settings) {
   return request(value, '/auth/me', { timeoutMs:15000 });
 }
 
+export async function listAuthSessions(settings) {
+  const value = requireBearer(settings);
+  return request(value, '/auth/sessions', { timeoutMs:15000 });
+}
+
+export async function revokeAuthSession(settings, sessionId) {
+  const value = requireBearer(settings);
+  const id = String(sessionId || '').trim();
+  if (!id) throw new Error('Falta la sesión que quieres cerrar.');
+  return request(value, `/auth/sessions/${encodeURIComponent(id)}`, {
+    method:'DELETE',
+    timeoutMs:15000
+  });
+}
+
+export async function logoutAllBackend(settings) {
+  const value = requireBearer(settings);
+  const result = await request(value, '/auth/logout-all', { method:'POST', timeoutMs:15000 });
+  writeSessionToken('');
+  return result;
+}
+
 export async function logoutBackend(settings) {
   const value = requireBearer(settings);
   const result = await request(value, '/auth/logout', { method:'POST', timeoutMs:15000 });
@@ -332,6 +354,8 @@ async function request(settings, path, options = {}) {
       const detail = payload && typeof payload === 'object' ? payload.detail : payload;
       const error = new Error(detail || `GestorEscuela respondió con HTTP ${response.status}.`);
       error.status = response.status;
+      const retryAfter = Number(response.headers?.get?.('Retry-After'));
+      error.retryAfter = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 0;
       throw error;
     }
     return payload;
