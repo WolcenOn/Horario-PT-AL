@@ -7,8 +7,35 @@
 .class-schedule-gap-grid article > span { display:flex; justify-content:space-between; gap:6px; padding:5px 6px; border-radius:6px; background:white; color:var(--muted); font-size:.7rem; line-height:1.3; }
 .class-schedule-gap-grid article > span b { flex:0 0 auto; color:var(--text); font-size:.67rem; }
 .class-schedule-gap-grid article > span.is-complete { color:var(--success); font-weight:750; }
+
+.class-schedule-calendar-view .class-schedule-calendar-block {
+  display:block;
+  padding:.32rem .4rem 1.3rem;
+  border-color:hsl(var(--subject-hue) 36% 70%);
+  background:hsl(var(--subject-hue) 58% 94%);
+  color:hsl(var(--subject-hue) 42% 23%);
+}
+.class-schedule-calendar-view .class-schedule-calendar-block:hover {
+  border-color:hsl(var(--subject-hue) 48% 48%);
+  background:hsl(var(--subject-hue) 62% 92%);
+  box-shadow:0 0 0 2px hsl(var(--subject-hue) 45% 45% / .14);
+}
+.class-schedule-block-head { display:flex; align-items:baseline; justify-content:space-between; gap:.3rem; min-width:0; }
+.class-schedule-calendar-block .class-schedule-block-subject { flex:1 1 auto; min-width:0; font-size:.79rem; font-weight:850; letter-spacing:.025em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.class-schedule-calendar-block .class-schedule-block-head .session-time { flex:0 0 auto; font-size:.64rem; font-weight:800; white-space:nowrap; opacity:.88; }
+.class-schedule-calendar-block .class-schedule-block-teacher { display:block; margin-top:.13rem; padding-right:.2rem; font-size:.65rem; line-height:1.18; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.82; }
+.class-schedule-calendar-block .class-schedule-block-room { position:absolute; right:.38rem; bottom:.25rem; display:inline-flex; align-items:center; max-width:calc(100% - .76rem); padding:.09rem .3rem; border-radius:.32rem; background:rgb(255 255 255 / .58); font-size:.72rem; line-height:1.05; font-weight:850; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.class-schedule-calendar-block.is-compact { padding:.25rem .34rem 1.12rem; }
+.class-schedule-calendar-block.is-compact .class-schedule-block-teacher { display:none; }
+.class-schedule-calendar-block.is-compact .class-schedule-block-subject { font-size:.75rem; }
+.class-schedule-calendar-block.is-compact .class-schedule-block-head .session-time { font-size:.61rem; }
+.class-schedule-calendar-block.is-compact .class-schedule-block-room { bottom:.18rem; font-size:.69rem; }
+.class-schedule-calendar-block.is-medium .class-schedule-block-teacher { font-size:.63rem; }
+
 @media (max-width:900px) {
   .class-schedule-gap-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .class-schedule-calendar-block .class-schedule-block-subject { font-size:.75rem; }
+  .class-schedule-calendar-block .class-schedule-block-head .session-time { font-size:.6rem; }
 }
 @media (max-width:620px) {
   .class-schedule-gap-grid { grid-template-columns:1fr; padding:10px; }
