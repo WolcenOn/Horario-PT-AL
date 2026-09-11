@@ -2,6 +2,7 @@ import { CALENDAR_PX_PER_MINUTE, DAYS, DEFAULT_CALENDAR_END, DEFAULT_CALENDAR_ST
 import { configuredClassGroups, courseForClassGroup, recessForStage, stageForCourse } from './education.js';
 import { buildClassWeekOverview } from './class-week-overview.js';
 import { loadState } from './repository.js';
+import { subjectVisual } from './subject-visuals.js';
 import { escapeHtml, minutesToTime, timeToMinutes } from './utils.js';
 
 const root = document.querySelector('#viewRoot');
@@ -128,7 +129,7 @@ function renderCalendarView(state) {
       ${entries.length ? '' : '<div class="class-schedule-calendar-empty"><strong>Clase todavía sin franjas ordinarias</strong><span>Puedes conservar esta vista mientras completas el horario desde “Listado”.</span></div>'}
       <div class="calendar-head"><div>Hora</div>${DAYS.map(day => `<div>${escapeHtml(day.label)}</div>`).join('')}</div>
       <div class="calendar-scroll"><div class="calendar-body"><div class="time-ruler" style="height:${height}px">${labels.join('')}</div>${columns}</div></div>
-      <div class="calendar-legend class-schedule-calendar-legend"><span><i class="teacher-legend-dot class"></i>Asignatura / docencia ordinaria</span><span><i class="class-schedule-recess-dot"></i>Recreo</span><span>Pulsa un bloque para editar esa asignatura semanal en el listado.</span></div>
+      <div class="calendar-legend class-schedule-calendar-legend"><span><i class="teacher-legend-dot class"></i>Asignatura / docencia ordinaria</span><span><i class="class-schedule-recess-dot"></i>Recreo</span><span>Abreviatura + hora arriba · aula abajo a la derecha · pasa el ratón para ver el nombre completo.</span></div>
     </section>
     ${overview ? renderGapSummary(overview) : ''}` : `<section class="card"><div class="empty-state"><strong>No hay clases disponibles</strong>Configura primero la estructura del centro o añade alumnado con su grupo-clase ordinario.</div></section>`}
   </div>`;
@@ -219,13 +220,18 @@ function renderClassBlock(entry, calendarStart, professionalMap) {
   const end = timeToMinutes(entry.fin);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return '';
   const top = (start - calendarStart) * CALENDAR_PX_PER_MINUTE;
-  const height = Math.max(28, (end - start) * CALENDAR_PX_PER_MINUTE);
+  const duration = end - start;
+  const height = Math.max(28, duration * CALENDAR_PX_PER_MINUTE);
   const teacher = professionalMap.get(entry.professionalId)?.nombre || entry.docente || 'Sin docente enlazado';
-  return `<button class="class-schedule-calendar-block" data-class-schedule-entry="${escapeHtml(entry.id)}" type="button" style="top:${top}px;height:${height}px" title="Editar ${escapeHtml(entry.materia || 'asignatura')}">
-    <strong>${escapeHtml(entry.materia || 'Asignatura')}</strong>
-    <small class="session-time">${escapeHtml(entry.inicio)}–${escapeHtml(entry.fin)}</small>
-    <small>${escapeHtml(teacher)}</small>
-    ${entry.aula ? `<small>${escapeHtml(entry.aula)}</small>` : ''}
+  const subject = entry.materia || 'Asignatura';
+  const visual = subjectVisual(subject);
+  const density = duration <= 35 ? 'is-compact' : duration <= 50 ? 'is-medium' : 'is-roomy';
+  const room = String(entry.aula || '').trim();
+  const tooltip = [subject, `${entry.inicio}–${entry.fin}`, teacher, room].filter(Boolean).join(' · ');
+  return `<button class="class-schedule-calendar-block ${density}" data-class-schedule-entry="${escapeHtml(entry.id)}" data-subject-hue="${visual.hue}" type="button" style="top:${top}px;height:${height}px;--subject-hue:${visual.hue}" title="${escapeHtml(tooltip)}" aria-label="${escapeHtml(tooltip)}">
+    <span class="class-schedule-block-head"><strong class="class-schedule-block-subject">${escapeHtml(visual.abbreviation)}</strong><span class="session-time">${escapeHtml(entry.inicio)}–${escapeHtml(entry.fin)}</span></span>
+    <small class="class-schedule-block-teacher">${escapeHtml(teacher)}</small>
+    ${room ? `<span class="class-schedule-block-room">${escapeHtml(room)}</span>` : ''}
   </button>`;
 }
 
