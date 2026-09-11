@@ -3,14 +3,21 @@ import { test, expect } from '@playwright/test';
 async function openApp(page) {
   await page.goto('/');
   await expect(page.locator('#viewRoot > *').first()).toBeVisible();
+  await expect(page.locator('#pageTitle')).toHaveText('Resumen del centro');
 }
 
-test('la aplicación arranca y permite navegar por las áreas principales', async ({ page }) => {
+async function openSupportCalendar(page) {
+  await page.locator('[data-view="calendar"]').click();
+  await expect(page.locator('#pageTitle')).toHaveText('Horario semanal');
+}
+
+test('la aplicación arranca en el resumen del centro y permite navegar por las áreas principales', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
   await openApp(page);
-  await expect(page.locator('#pageTitle')).toHaveText('Horario semanal');
+  await expect(page.locator('.center-dashboard')).toBeVisible();
+  await expect(page.getByRole('heading', { name:'Las tres capas del horario' })).toBeVisible();
   await expect(page.locator('[data-view="professionals"]')).toBeVisible();
   await expect(page.locator('[data-view="centerActivities"]')).toBeVisible();
   await expect(page.locator('[data-view="capacityStudy"]')).toBeVisible();
@@ -117,7 +124,7 @@ test('Horario semanal compara dos docentes lado a lado y prepara impresión múl
   page.on('pageerror', error => errors.push(error.message));
 
   await openApp(page);
-  await expect(page.locator('#pageTitle')).toHaveText('Horario semanal');
+  await openSupportCalendar(page);
   await expect(page.locator('[data-teacher-calendar-toolbar]')).toBeVisible();
 
   const primary = page.locator('[data-teacher-calendar-select]');
@@ -163,6 +170,7 @@ test('el filtro AL deja las sesiones AL editables sin que PT capture el clic', a
   page.on('pageerror', error => errors.push(error.message));
 
   await openApp(page);
+  await openSupportCalendar(page);
   await page.locator('[data-service-filter="AL"]').click();
 
   await expect(page.locator('.session-block.al').first()).toBeVisible();
