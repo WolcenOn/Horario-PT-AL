@@ -16,6 +16,15 @@
 .setup-wizard-intro-grid article { padding:15px; display:grid; gap:5px; }
 .setup-wizard-intro-grid strong { font-size:.86rem; }
 .setup-wizard-intro-grid span { color:var(--muted); font-size:.78rem; line-height:1.45; }
+.setup-quick-start { padding:18px; display:grid; grid-template-columns:minmax(0,1.3fr) minmax(360px,.7fr); gap:18px 24px; align-items:center; border-color:#cfdde6; }
+.setup-quick-start-copy h2 { margin:2px 0 7px; }
+.setup-quick-start-copy p { margin:0 0 7px; color:var(--muted); line-height:1.5; }
+.setup-quick-start-copy small { display:block; line-height:1.45; }
+.setup-quick-start-fields { display:grid; grid-template-columns:minmax(0,1fr) 150px; gap:10px; align-items:end; }
+.setup-quick-start-fields label { display:grid; gap:6px; font-size:.82rem; font-weight:750; color:#42515d; }
+.setup-quick-start-fields select { min-height:40px; border:1px solid var(--border-strong); border-radius:8px; background:white; padding:8px 10px; color:var(--text); }
+.setup-quick-start-fields .button { grid-column:1 / -1; justify-self:start; }
+.setup-quick-start-existing { grid-column:1 / -1; padding:9px 11px; border-radius:8px; background:var(--success-soft); color:var(--success); font-size:.78rem; font-weight:700; }
 .setup-recalculation-card { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr); gap:16px 22px; padding:18px; border-color:#b8d9c5; background:#fbfefc; }
 .setup-recalculation-copy h2 { margin:2px 0 6px; font-size:1.08rem; }
 .setup-recalculation-copy p { margin:0; color:var(--muted); line-height:1.5; }
@@ -41,12 +50,15 @@
 @media (max-width:900px) {
   .setup-wizard-hero { grid-template-columns:1fr; }
   .setup-wizard-intro-grid { grid-template-columns:1fr; }
+  .setup-quick-start { grid-template-columns:1fr; }
   .setup-recalculation-card { grid-template-columns:1fr; }
 }
 @media (max-width:680px) {
   .setup-wizard-step { grid-template-columns:34px minmax(0,1fr); }
   .setup-wizard-step > .button { grid-column:2; justify-self:start; }
   .setup-wizard-hero { padding:16px; }
+  .setup-quick-start-fields { grid-template-columns:1fr; }
+  .setup-quick-start-fields .button { grid-column:auto; }
   .setup-recalculation-actions { grid-template-columns:1fr; }
   .setup-recalculation-flow { display:grid; grid-template-columns:1fr; }
   .setup-recalculation-flow b { display:none; }
