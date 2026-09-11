@@ -5,6 +5,8 @@ const DAY_IDS = new Set(DAYS.map(day => day.id));
 
 export const EMPTY_TIME_PATTERN = Object.freeze({
   sessionMinutes:0,
+  minSessionMinutes:0,
+  maxSessionMinutes:0,
   maxSessionsPerDay:0,
   allowedDays:[],
   preferredDays:[],
@@ -21,7 +23,9 @@ export function normalizeTimePattern(value) {
   const preferredDays = normalizeDays(source.preferredDays)
     .filter(day => !allowedDays.length || allowedSet.has(day));
   return {
-    sessionMinutes:clampOptionalInteger(source.sessionMinutes, 15, 120),
+    sessionMinutes:clampOptionalInteger(source.sessionMinutes, 15, 180),
+    minSessionMinutes:clampOptionalInteger(source.minSessionMinutes, 15, 180),
+    maxSessionMinutes:clampOptionalInteger(source.maxSessionMinutes, 15, 180),
     maxSessionsPerDay:clampOptionalInteger(source.maxSessionsPerDay, 1, 5),
     allowedDays,
     preferredDays,
@@ -108,8 +112,66 @@ export function effectiveMaxSessionsPerDay(pattern, fallback) {
   return normalized.maxSessionsPerDay || fallback;
 }
 
+export function planSessionDurations(totalMinutes, pattern, fallbackMinutes, stepMinutes = 15) {
+  const normalized = validateTimePattern(pattern);
+  const total = Math.round(Number(totalMinutes));
+  const step = Math.round(Number(stepMinutes));
+  const fallback = Math.round(Number(fallbackMinutes));
+  if (!Number.isFinite(total) || total <= 0) return [];
+  if (!Number.isFinite(step) || step <= 0 || total % step !== 0) {
+    throw new Error(`La carga semanal de ${total} min no encaja en la rejilla de ${step || 15} min.`);
+  }
+
+  const preferred = normalized.sessionMinutes || fallback;
+  if (!Number.isFinite(preferred) || preferred <= 0) {
+    throw new Error('Define una duración habitual válida para repartir la carga semanal.');
+  }
+
+  const hasRange = Boolean(normalized.minSessionMinutes || normalized.maxSessionMinutes);
+  if (!hasRange) return splitLegacy(total, preferred);
+
+  const min = normalized.minSessionMinutes || step;
+  const max = normalized.maxSessionMinutes || Math.max(preferred, 180);
+  for (const [label, value] of [['mínima', min], ['preferida', preferred], ['máxima', max]]) {
+    if (value % step !== 0) throw new Error(`La duración ${label} de ${value} min no encaja en la rejilla de ${step} min.`);
+  }
+
+  const target = Math.max(min, Math.min(max, preferred));
+  const minCount = Math.max(1, Math.ceil(total / max));
+  const maxCount = Math.floor(total / min);
+  if (minCount > maxCount) {
+    throw new Error(`La carga de ${total} min no puede repartirse en sesiones de ${min}–${max} min.`);
+  }
+
+  let best = null;
+  for (let count = minCount; count <= maxCount; count++) {
+    const durations = distributeDurations(total, count, min, max, target, step);
+    if (!durations) continue;
+    const distance = durations.reduce((sum, value) => sum + Math.abs(value - target), 0);
+    const spread = Math.max(...durations) - Math.min(...durations);
+    const candidate = { durations, distance, spread, count };
+    if (!best
+      || candidate.distance < best.distance
+      || (candidate.distance === best.distance && candidate.spread < best.spread)
+      || (candidate.distance === best.distance && candidate.spread === best.spread && candidate.count < best.count)) {
+      best = candidate;
+    }
+  }
+  if (!best) throw new Error(`La carga de ${total} min no puede repartirse en sesiones de ${min}–${max} min.`);
+  return best.durations;
+}
+
 export function validateTimePattern(pattern, label = 'Patrón temporal') {
   const normalized = normalizeTimePattern(pattern);
+  if (normalized.minSessionMinutes && normalized.maxSessionMinutes && normalized.minSessionMinutes > normalized.maxSessionMinutes) {
+    throw new Error(`${label}: la duración mínima no puede superar la máxima.`);
+  }
+  if (normalized.sessionMinutes && normalized.minSessionMinutes && normalized.sessionMinutes < normalized.minSessionMinutes) {
+    throw new Error(`${label}: la duración preferida no puede ser menor que la mínima.`);
+  }
+  if (normalized.sessionMinutes && normalized.maxSessionMinutes && normalized.sessionMinutes > normalized.maxSessionMinutes) {
+    throw new Error(`${label}: la duración preferida no puede superar la máxima.`);
+  }
   const earliest = normalized.earliestStart ? timeToMinutes(normalized.earliestStart) : null;
   const latest = normalized.latestEnd ? timeToMinutes(normalized.latestEnd) : null;
   if (Number.isFinite(earliest) && Number.isFinite(latest) && latest <= earliest) {
@@ -132,7 +194,10 @@ export function validateTimePattern(pattern, label = 'Patrón temporal') {
 export function describeTimePattern(pattern) {
   const normalized = normalizeTimePattern(pattern);
   const parts = [];
-  if (normalized.sessionMinutes) parts.push(`${normalized.sessionMinutes} min/bloque`);
+  if (normalized.sessionMinutes) parts.push(`preferida ${normalized.sessionMinutes} min`);
+  if (normalized.minSessionMinutes || normalized.maxSessionMinutes) {
+    parts.push(`rango ${normalized.minSessionMinutes || 'libre'}–${normalized.maxSessionMinutes || 'libre'} min`);
+  }
   if (normalized.maxSessionsPerDay) parts.push(`máx. ${normalized.maxSessionsPerDay}/día`);
   if (normalized.allowedDays.length && normalized.allowedDays.length < DAYS.length) {
     parts.push(`días: ${normalized.allowedDays.map(dayLabel).join(', ')}`);
@@ -145,6 +210,38 @@ export function describeTimePattern(pattern) {
     parts.push(`franja preferida ${normalized.preferredStart || 'inicio'}–${normalized.preferredEnd || 'fin'}`);
   }
   return parts.join(' · ') || 'Sin restricciones temporales específicas';
+}
+
+function distributeDurations(total, count, min, max, target, step) {
+  const durations = Array(count).fill(min);
+  let remaining = total - (count * min);
+  if (remaining < 0 || remaining % step !== 0) return null;
+  const addRound = limit => {
+    let changed = true;
+    while (remaining > 0 && changed) {
+      changed = false;
+      for (let index = 0; index < durations.length && remaining > 0; index++) {
+        if (durations[index] + step > limit || durations[index] + step > max) continue;
+        durations[index] += step;
+        remaining -= step;
+        changed = true;
+      }
+    }
+  };
+  addRound(target);
+  addRound(max);
+  return remaining === 0 ? durations.sort((a, b) => b - a) : null;
+}
+
+function splitLegacy(total, standard) {
+  const result = [];
+  let remaining = total;
+  while (remaining > standard) {
+    result.push(standard);
+    remaining -= standard;
+  }
+  if (remaining > 0) result.push(remaining);
+  return result;
 }
 
 function normalizeDays(value) {
@@ -170,6 +267,8 @@ function clampOptionalInteger(value, min, max) {
 
 function isEmptyPattern(pattern) {
   return !pattern.sessionMinutes
+    && !pattern.minSessionMinutes
+    && !pattern.maxSessionMinutes
     && !pattern.maxSessionsPerDay
     && !pattern.allowedDays.length
     && !pattern.preferredDays.length
