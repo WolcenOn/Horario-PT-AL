@@ -163,7 +163,7 @@ test('un login bloqueado muestra el tiempo de espera', async ({ page }) => {
   await page.locator('#loginPassword').fill('wrong-password');
   await page.getByRole('button', { name:'Iniciar sesión' }).click();
 
-  await expect(page.getByText('Demasiados intentos fallidos. Espera aproximadamente 2 min antes de volver a intentarlo.', { exact:true })).toBeVisible();
+  await expect(page.locator('#viewRoot').getByText('Demasiados intentos fallidos. Espera aproximadamente 2 min antes de volver a intentarlo.', { exact:true })).toBeVisible();
 });
 
 test('una conexión Actor ID existente sigue visible solo como compatibilidad', async ({ page }) => {
