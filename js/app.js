@@ -6,7 +6,8 @@ import { renderClassSchedules, openClassScheduleForm } from './class-schedules.j
 import { openRecessSettingsForm } from './recess-settings.js';
 import { renderAutomationManager } from './automation-view.js';
 import { renderCenterPlanning } from './center-planning-view.js';
-import { buildReadinessReport, generateAutomaticProposal } from './automation-core.js';
+import { buildReadinessReport } from './automation-core.js';
+import { generateAutomaticProposalAsync } from './automation-scheduler-client.js';
 import { generateGlobalProposalAsync } from './global-scheduler-client.js';
 import { renderCalendar } from './calendar.js';
 import { renderAlerts } from './alerts.js';
@@ -37,6 +38,8 @@ let derived = {};
 let selectedSessionId = null;
 let autoProposal = null;
 let globalProposal = null;
+let automaticCalculationActive = false;
+let automaticCalculationSequence = 0;
 let globalCalculationActive = false;
 let globalCalculationSequence = 0;
 
@@ -184,17 +187,20 @@ function renderCurrentView() {
     });
     if (globalCalculationActive) markGlobalCalculationPending();
   }
-  if (currentView === 'automation') renderAutomationManager(viewRoot, {
-    ...common,
-    automationSettings:state.automationSettings,
-    proposal:autoProposal,
-    onSaveSettings:saveAutomaticSettings,
-    onGenerate:generateAutomaticSchedule,
-    onApplyProposal:applyAutomaticProposal,
-    onDiscardProposal:discardAutomaticProposal,
-    onNavigate:navigateFromAutomation,
-    onEditRecesses:editRecessSettings
-  });
+  if (currentView === 'automation') {
+    renderAutomationManager(viewRoot, {
+      ...common,
+      automationSettings:state.automationSettings,
+      proposal:autoProposal,
+      onSaveSettings:saveAutomaticSettings,
+      onGenerate:generateAutomaticSchedule,
+      onApplyProposal:applyAutomaticProposal,
+      onDiscardProposal:discardAutomaticProposal,
+      onNavigate:navigateFromAutomation,
+      onEditRecesses:editRecessSettings
+    });
+    if (automaticCalculationActive) markAutomaticCalculationPending();
+  }
   if (currentView === 'alerts') renderAlerts(viewRoot, common);
 }
 
@@ -382,12 +388,27 @@ function navigateFromCenterPlanning(target) {
   renderCurrentView();
 }
 
-function generateAutomaticSchedule() {
+async function generateAutomaticSchedule() {
+  if (automaticCalculationActive) return;
+  const calculationId = ++automaticCalculationSequence;
+  const sourceState = state;
   try {
-    autoProposal = generateAutomaticProposal(state, state.automationSettings);
-    renderCurrentView();
+    autoProposal = null;
+    automaticCalculationActive = true;
+    markAutomaticCalculationPending();
+
+    const proposal = await generateAutomaticProposalAsync(sourceState, sourceState.automationSettings);
+    if (calculationId !== automaticCalculationSequence) return;
+    if (state !== sourceState) {
+      autoProposal = null;
+      showToast('La propuesta PT/AL se ha descartado porque los datos cambiaron durante el cálculo. Recalcula los apoyos.', 'error');
+      return;
+    }
+
+    autoProposal = proposal;
     if (autoProposal.ok) {
-      showToast(`Propuesta calculada: ${autoProposal.moved.length} sesión(es) se recolocarían.`);
+      const seconds = autoProposal.computeMs >= 1000 ? ` en ${(autoProposal.computeMs / 1000).toFixed(1)} s` : '';
+      showToast(`Propuesta calculada${seconds}: ${autoProposal.moved.length} sesión(es) se recolocarían.`);
     } else if (autoProposal.unresolved?.length) {
       showToast(`No se ha encontrado una solución completa para ${autoProposal.unresolved.length} elemento(s).`, 'error');
     } else {
@@ -395,12 +416,33 @@ function generateAutomaticSchedule() {
     }
   } catch (error) {
     console.error(error);
+    autoProposal = null;
     showToast(error.message || 'No se pudo generar la propuesta automática.', 'error');
+  } finally {
+    if (calculationId === automaticCalculationSequence) automaticCalculationActive = false;
+    if (currentView === 'automation') renderCurrentView();
+  }
+}
+
+function markAutomaticCalculationPending() {
+  const button = viewRoot.querySelector('#generateAutomaticBtn');
+  if (!button) return;
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  button.textContent = '⏳ Recalculando apoyos…';
+  const card = button.closest('.automation-generate-card');
+  if (card && !card.querySelector('[data-automatic-calculation-status]')) {
+    const status = document.createElement('span');
+    status.dataset.automaticCalculationStatus = '';
+    status.className = 'field-hint';
+    status.setAttribute('role', 'status');
+    status.textContent = 'El motor PT/AL está calculando en segundo plano. Puedes seguir usando la aplicación.';
+    card.append(status);
   }
 }
 
 async function applyAutomaticProposal() {
-  if (!autoProposal?.ok) return;
+  if (!autoProposal?.ok || automaticCalculationActive) return;
   const moved = autoProposal.moved.length;
   const accepted = confirm(`Se aplicará la propuesta automática y se sustituirá la posición de las sesiones actuales. ${moved} sesión(es) cambiarán de día u hora. ¿Continuar?`);
   if (!accepted) return;
