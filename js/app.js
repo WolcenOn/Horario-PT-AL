@@ -7,7 +7,7 @@ import { openRecessSettingsForm } from './recess-settings.js';
 import { renderAutomationManager } from './automation-view.js';
 import { renderCenterPlanning } from './center-planning-view.js';
 import { buildReadinessReport, generateAutomaticProposal } from './automation-core.js';
-import { generateGlobalProposal } from './global-scheduler.js';
+import { generateGlobalProposalAsync } from './global-scheduler-client.js';
 import { renderCalendar } from './calendar.js';
 import { renderAlerts } from './alerts.js';
 import { calculateStudentHours, totalsFromHours } from './hours.js';
@@ -37,6 +37,8 @@ let derived = {};
 let selectedSessionId = null;
 let autoProposal = null;
 let globalProposal = null;
+let globalCalculationActive = false;
+let globalCalculationSequence = 0;
 
 const VIEW_TITLES = {
   calendar:'Horario semanal',
@@ -169,16 +171,19 @@ function renderCurrentView() {
   if (currentView === 'groups') renderGroups(viewRoot, { ...common, onEdit: editGroup, onDelete: removeGroup });
   if (currentView === 'sessions') renderSessions(viewRoot, { ...common, onEdit: editSession, onDelete: removeSession });
   if (currentView === 'classSchedules') renderClassSchedules(viewRoot, { ...common, onEdit: editClassSchedule, onDelete: removeClassSchedule });
-  if (currentView === 'centerPlanning') renderCenterPlanning(viewRoot, {
-    ...common,
-    centerPlanningSettings:state.centerPlanningSettings,
-    globalProposal,
-    onSave:saveCenterPlanning,
-    onNavigate:navigateFromCenterPlanning,
-    onGenerateGlobal:generateGlobalSchedule,
-    onApplyGlobal:applyGlobalSchedule,
-    onDiscardGlobal:discardGlobalSchedule
-  });
+  if (currentView === 'centerPlanning') {
+    renderCenterPlanning(viewRoot, {
+      ...common,
+      centerPlanningSettings:state.centerPlanningSettings,
+      globalProposal,
+      onSave:saveCenterPlanning,
+      onNavigate:navigateFromCenterPlanning,
+      onGenerateGlobal:generateGlobalSchedule,
+      onApplyGlobal:applyGlobalSchedule,
+      onDiscardGlobal:discardGlobalSchedule
+    });
+    if (globalCalculationActive) markGlobalCalculationPending();
+  }
   if (currentView === 'automation') renderAutomationManager(viewRoot, {
     ...common,
     automationSettings:state.automationSettings,
@@ -299,13 +304,28 @@ async function saveCenterPlanning(value) {
 }
 
 async function generateGlobalSchedule(value) {
+  if (globalCalculationActive) return;
+  const calculationId = ++globalCalculationSequence;
   try {
     await saveCenterPlanningSettings(value);
     state = { ...state, centerPlanningSettings:value };
-    globalProposal = generateGlobalProposal(state, value);
-    renderCurrentView();
+    const sourceState = state;
+    globalProposal = null;
+    globalCalculationActive = true;
+    markGlobalCalculationPending();
+
+    const proposal = await generateGlobalProposalAsync(sourceState, value);
+    if (calculationId !== globalCalculationSequence) return;
+    if (state !== sourceState) {
+      globalProposal = null;
+      showToast('La propuesta calculada se ha descartado porque los datos del centro cambiaron durante el cálculo. Genera una nueva propuesta.', 'error');
+      return;
+    }
+
+    globalProposal = proposal;
     if (globalProposal.ok) {
-      showToast(`Propuesta global calculada: ${globalProposal.stats.classes} clases y ${globalProposal.stats.blocks} bloques lectivos.`);
+      const seconds = globalProposal.computeMs >= 1000 ? ` en ${(globalProposal.computeMs / 1000).toFixed(1)} s` : '';
+      showToast(`Propuesta global calculada${seconds}: ${globalProposal.stats.classes} clases y ${globalProposal.stats.blocks} bloques lectivos.`);
     } else if (globalProposal.unresolved?.length) {
       showToast(`No se ha encontrado una solución completa para ${globalProposal.unresolved.length} bloque(s).`, 'error');
     } else {
@@ -315,11 +335,31 @@ async function generateGlobalSchedule(value) {
     console.error(error);
     globalProposal = null;
     showToast(error.message || 'No se pudo generar la propuesta global.', 'error');
+  } finally {
+    if (calculationId === globalCalculationSequence) globalCalculationActive = false;
+    if (currentView === 'centerPlanning') renderCurrentView();
+  }
+}
+
+function markGlobalCalculationPending() {
+  const button = viewRoot.querySelector('[data-generate-global]');
+  if (!button) return;
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  button.textContent = '⏳ Calculando propuesta…';
+  const actions = button.closest('.global-generator-actions');
+  if (actions && !actions.querySelector('[data-global-calculation-status]')) {
+    const status = document.createElement('span');
+    status.dataset.globalCalculationStatus = '';
+    status.className = 'field-hint';
+    status.setAttribute('role', 'status');
+    status.textContent = 'El motor está calculando en segundo plano. Puedes seguir usando la aplicación.';
+    actions.append(status);
   }
 }
 
 async function applyGlobalSchedule() {
-  if (!globalProposal?.ok) return;
+  if (!globalProposal?.ok || globalCalculationActive) return;
   const participating = new Set(globalProposal.readiness.participatingClasses.map(value => String(value || '').trim().toLocaleLowerCase('es')));
   const preserved = (state.classSchedules || []).filter(entry => !participating.has(String(entry.grupoClase || '').trim().toLocaleLowerCase('es')));
   const next = [...preserved, ...globalProposal.classSchedules];
