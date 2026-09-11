@@ -62,6 +62,32 @@ test('genera el horario curricular sin solapes y respetando el recreo',()=>{
   }
 });
 
+test('redistribuye restos pequeños para respetar el rango de duración de una materia',()=>{
+  const settings={
+    id:'centerPlanning',
+    mode:'global',
+    generation:{start:'09:00',end:'12:00',lessonMinutes:60,maxSameSubjectPerDay:1},
+    curriculum:{'1º':{'Lengua Castellana y Literatura':270}},
+    subjectPatterns:{'1º':{'Lengua Castellana y Literatura':{
+      sessionMinutes:60,
+      minSessionMinutes:45,
+      maxSessionMinutes:60,
+      maxSessionsPerDay:1
+    }}}
+  };
+  const state={...baseState(),professionals:[teacher(['Lengua Castellana y Literatura'])],centerPlanningSettings:settings};
+  const report=buildGlobalReadiness(state,settings);
+  assert.equal(report.ready,true);
+  const proposal=generateGlobalProposal(state,settings);
+  assert.equal(proposal.ok,true);
+  const durations=proposal.classSchedules
+    .map(entry=>timeToMinutes(entry.fin)-timeToMinutes(entry.inicio))
+    .sort((a,b)=>b-a);
+  assert.deepEqual(durations,[60,60,60,45,45]);
+  assert.equal(new Set(proposal.classSchedules.map(entry=>entry.dia)).size,5);
+  assert.ok(durations.every(value=>value>=45&&value<=60));
+});
+
 test('coordina el horario global con las prioridades PT/AL',()=>{
   const state=baseState();
   state.students=[{id:'alu',nombre:'Ana',apellidos:'Uno',curso:'1º',grupoClase:'1ºA',activo:true,restricciones:[]}];
