@@ -1,5 +1,6 @@
 import { CALENDAR_PX_PER_MINUTE, DAYS, DEFAULT_CALENDAR_END, DEFAULT_CALENDAR_START } from './constants.js';
 import { configuredClassGroups, courseForClassGroup, recessForStage, stageForCourse } from './education.js';
+import { buildClassWeekOverview } from './class-week-overview.js';
 import { loadState } from './repository.js';
 import { escapeHtml, minutesToTime, timeToMinutes } from './utils.js';
 
@@ -22,6 +23,18 @@ const observer = new MutationObserver(() => {
   });
 });
 observer.observe(root, { childList:true, subtree:true });
+
+document.addEventListener('click', event => {
+  const button = event.target.closest?.('[data-view-class-week]');
+  if (!button) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const group = String(button.dataset.viewClassWeek || '').trim();
+  if (group) localStorage.setItem(GROUP_KEY, group);
+  mode = 'calendar';
+  localStorage.setItem(MODE_KEY, mode);
+  void loadState().then(renderCalendarView);
+}, true);
 
 document.addEventListener('click', event => {
   const nav = event.target.closest?.('[data-view="classSchedules"]');
@@ -77,6 +90,7 @@ function renderCalendarView(state) {
   const bounds = calendarBounds(entries, recess);
   const height = (bounds.end - bounds.start) * CALENDAR_PX_PER_MINUTE;
   const professionalMap = new Map((state.professionals || []).map(item => [item.id, item]));
+  const overview = selectedGroup ? buildClassWeekOverview(state, selectedGroup) : null;
   const labels = [];
   for (let minute = bounds.start; minute <= bounds.end; minute += 30) {
     labels.push(`<span class="time-label" style="top:${(minute - bounds.start) * CALENDAR_PX_PER_MINUTE}px">${minutesToTime(minute)}</span>`);
@@ -95,7 +109,7 @@ function renderCalendarView(state) {
     <section class="card class-schedule-view-switcher">
       <div>
         <strong>Vista de horarios de aula</strong>
-        <small>La cuadrícula muestra una clase completa de lunes a viernes. Pulsa una asignatura para volver al listado y editar su semana.</small>
+        <small>La cuadrícula muestra una clase completa de lunes a viernes, el recreo y los huecos libres de la jornada.</small>
       </div>
       <div class="segmented-control" role="group" aria-label="Vista de horarios de aula">
         <button type="button" data-class-schedule-mode="list">Listado</button>
@@ -115,7 +129,8 @@ function renderCalendarView(state) {
       <div class="calendar-head"><div>Hora</div>${DAYS.map(day => `<div>${escapeHtml(day.label)}</div>`).join('')}</div>
       <div class="calendar-scroll"><div class="calendar-body"><div class="time-ruler" style="height:${height}px">${labels.join('')}</div>${columns}</div></div>
       <div class="calendar-legend class-schedule-calendar-legend"><span><i class="teacher-legend-dot class"></i>Asignatura / docencia ordinaria</span><span><i class="class-schedule-recess-dot"></i>Recreo</span><span>Pulsa un bloque para editar esa asignatura semanal en el listado.</span></div>
-    </section>` : `<section class="card"><div class="empty-state"><strong>No hay clases disponibles</strong>Configura primero la estructura del centro o añade alumnado con su grupo-clase ordinario.</div></section>`}
+    </section>
+    ${overview ? renderGapSummary(overview) : ''}` : `<section class="card"><div class="empty-state"><strong>No hay clases disponibles</strong>Configura primero la estructura del centro o añade alumnado con su grupo-clase ordinario.</div></section>`}
   </div>`;
 
   root.querySelector('[data-class-schedule-mode="list"]')?.addEventListener('click', showListView);
@@ -128,6 +143,13 @@ function renderCalendarView(state) {
   root.querySelectorAll('[data-class-schedule-entry]').forEach(block => block.addEventListener('click', () => {
     openEntryInList(block.dataset.classScheduleEntry);
   }));
+}
+
+function renderGapSummary(overview) {
+  return `<section class="card class-schedule-gap-card" data-class-schedule-gaps>
+    <div class="card-header"><div><h2>Huecos libres de la jornada</h2><small>Se calculan a partir de ${escapeHtml(overview.startLabel)}–${escapeHtml(overview.endLabel)}, descontando materias y recreo.</small></div></div>
+    <div class="class-schedule-gap-grid">${overview.days.map(day => `<article><strong>${escapeHtml(day.label)}</strong>${day.gaps.length ? day.gaps.map(gap => `<span>Libre ${escapeHtml(gap.inicio)}–${escapeHtml(gap.fin)} <b>${gap.minutes} min</b></span>`).join('') : '<span class="is-complete">Sin huecos libres</span>'}</article>`).join('')}</div>
+  </section>`;
 }
 
 function showListView() {
