@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/layout.css">
   <link rel="stylesheet" href="./css/product-shell.css">
+  <link rel="stylesheet" href="./css/dashboard.css">
   <link rel="stylesheet" href="./css/calendar.css">
   <link rel="stylesheet" href="./css/combined-schedule.css">
   <link rel="stylesheet" href="./css/school.css">
@@ -37,13 +38,14 @@
       <nav class="nav-list">
         <div class="nav-section" role="group" aria-label="Inicio">
           <div class="nav-section-label">Inicio</div>
+          <button class="nav-item is-active" data-view="dashboard" type="button">🏠 <span>Resumen del centro</span></button>
           <button class="nav-item" data-view="setupWizard" type="button">🧭 <span>Asistente inicial</span></button>
         </div>
 
         <div class="nav-section" role="group" aria-label="Horario">
           <div class="nav-section-label">Horario</div>
           <button class="nav-item" data-view="combinedCalendar" type="button">🧭 <span>Vista combinada</span></button>
-          <button class="nav-item is-active" data-view="calendar" type="button">📅 <span>Horario de apoyos</span></button>
+          <button class="nav-item" data-view="calendar" type="button">📅 <span>Horario de apoyos</span></button>
           <button class="nav-item" data-view="classSchedules" type="button">🗓️ <span>Horario de aulas</span></button>
           <button class="nav-item" data-view="alerts" type="button">⚠️ <span>Conflictos</span></button>
         </div>
@@ -95,7 +97,7 @@
           <button id="sidebarToggleBtn" class="icon-button sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Ocultar menú lateral">☰</button>
           <div>
             <p class="eyebrow">Centro, horario y apoyos</p>
-            <h1 id="pageTitle">Horario semanal</h1>
+            <h1 id="pageTitle">Resumen del centro</h1>
           </div>
         </div>
         <div class="topbar-actions">
@@ -120,6 +122,7 @@
   <div id="modalRoot"></div>
   <div id="toastRoot" class="toast-root" aria-live="polite" aria-atomic="true"></div>
   <script type="module" src="./js/app.js"></script>
+  <script type="module" src="./js/dashboard-controller.js"></script>
   <script type="module" src="./js/setup-wizard-controller.js"></script>
   <script type="module" src="./js/ai-config-assist-controller.js"></script>
   <script type="module" src="./js/combined-schedule-controller.js"></script>
