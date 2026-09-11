@@ -1,24 +1,24 @@
 const SUBJECT_VISUALS = new Map([
-  ['crecimiento en armonía', { abbreviation:'CRE', hue:32 }],
-  ['descubrimiento y exploración del entorno', { abbreviation:'DEE', hue:154 }],
-  ['comunicación y representación de la realidad', { abbreviation:'CRR', hue:205 }],
+  ['crecimiento en armonia', { abbreviation:'CRE', hue:32 }],
+  ['descubrimiento y exploracion del entorno', { abbreviation:'DEE', hue:154 }],
+  ['comunicacion y representacion de la realidad', { abbreviation:'CRR', hue:205 }],
   ['psicomotricidad', { abbreviation:'PSI', hue:18 }],
   ['lengua castellana y literatura', { abbreviation:'LEN', hue:210 }],
-  ['matemáticas', { abbreviation:'MAT', hue:142 }],
+  ['matematicas', { abbreviation:'MAT', hue:142 }],
   ['conocimiento del medio natural, social y cultural', { abbreviation:'CNM', hue:178 }],
   ['ciencias de la naturaleza', { abbreviation:'CN', hue:112 }],
   ['ciencias sociales', { abbreviation:'CS', hue:38 }],
-  ['inglés', { abbreviation:'ING', hue:266 }],
+  ['ingles', { abbreviation:'ING', hue:266 }],
   ['segunda lengua extranjera', { abbreviation:'2LE', hue:235 }],
   ['lengua cooficial y literatura', { abbreviation:'LCO', hue:194 }],
-  ['educación física', { abbreviation:'EF', hue:24 }],
-  ['educación artística', { abbreviation:'EAR', hue:326 }],
-  ['música', { abbreviation:'MUS', hue:346 }],
-  ['plástica', { abbreviation:'PLA', hue:292 }],
-  ['educación en valores cívicos y éticos', { abbreviation:'VAL', hue:52 }],
-  ['religión', { abbreviation:'REL', hue:42 }],
-  ['atención educativa', { abbreviation:'ATE', hue:198 }],
-  ['tutoría', { abbreviation:'TUT', hue:218 }]
+  ['educacion fisica', { abbreviation:'EF', hue:24 }],
+  ['educacion artistica', { abbreviation:'EAR', hue:326 }],
+  ['musica', { abbreviation:'MUS', hue:346 }],
+  ['plastica', { abbreviation:'PLA', hue:292 }],
+  ['educacion en valores civicos y eticos', { abbreviation:'VAL', hue:52 }],
+  ['religion', { abbreviation:'REL', hue:42 }],
+  ['atencion educativa', { abbreviation:'ATE', hue:198 }],
+  ['tutoria', { abbreviation:'TUT', hue:218 }]
 ]);
 
 const STOP_WORDS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'en']);
