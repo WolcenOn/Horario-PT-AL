@@ -3,6 +3,7 @@ import { configuredClassGroups, schoolStructureConfigured } from './education.js
 import { subjectsForClassGroup } from './subjects.js';
 import { openSchoolStructureForm } from './school-structure.js';
 import { saveSchoolSettings } from './repository.js';
+import { buildClassWeekOverview } from './class-week-overview.js';
 import { escapeHtml, fullName, minutesToTime, overlapInterval, timeToMinutes, uid } from './utils.js';
 import { setModalMessage, showModal } from './ui.js';
 
@@ -25,7 +26,7 @@ export function renderClassSchedules(root, { state, onEdit }) {
       <td><div class="weekly-summary-slots">${slots}</div></td>
       <td>${teachers.length ? escapeHtml(teachers.join(' / ')) : '—'}</td>
       <td>${rooms.length ? escapeHtml(rooms.join(' / ')) : '—'}</td>
-      <td class="table-actions"><button class="button" data-edit-week="${item.entries[0]?.id || ''}" type="button">Editar semana</button></td>
+      <td class="table-actions"><button class="button" data-edit-week="${item.entries[0]?.id || ''}" type="button">Editar semana</button><button class="button" data-view-class-week="${escapeHtml(item.grupoClase)}" type="button">Ver semana</button></td>
     </tr>`;
   }).join('');
 
@@ -60,8 +61,9 @@ export function renderClassSchedules(root, { state, onEdit }) {
       </div>
       <div class="class-schedule-help">
         <strong>Edición semanal</strong>
-        <span>Elige una clase, una asignatura fija y el docente. Después añade todas sus sesiones de lunes a viernes en una sola ventana.</span>
+        <span>Elige una clase, una asignatura fija y el docente. “Ver semana” muestra el horario completo de esa clase, recreo incluido, sin cambiar los datos.</span>
       </div>
+      <section class="class-week-panel hidden" data-class-week-panel aria-live="polite"></section>
       <div class="table-wrap"><table>
         <thead><tr><th>Clase</th><th>Asignatura</th><th>Franjas semanales</th><th>Docente</th><th>Aula</th><th>Acciones</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="6"><div class="empty-state"><strong>No hay horarios de aula cargados</strong>${structureReady ? 'Utiliza “+ Asignatura semanal” para introducir de una vez todas las franjas de una materia.' : 'Configura primero las clases del colegio y después añade sus asignaturas.'}</div></td></tr>`}</tbody>
@@ -82,9 +84,22 @@ export function renderClassSchedules(root, { state, onEdit }) {
 
   root.onclick = event => {
     const edit = event.target.closest('[data-edit-week]');
+    const viewWeek = event.target.closest('[data-view-class-week]');
+    const closeWeek = event.target.closest('[data-close-class-week]');
     const add = event.target.closest('[data-new-week-subject]');
     const configure = event.target.closest('[data-configure-school-classes]');
     if (edit?.dataset.editWeek) onEdit(edit.dataset.editWeek);
+    if (viewWeek?.dataset.viewClassWeek) {
+      renderClassWeekPanel(root, state, viewWeek.dataset.viewClassWeek, professionalMap);
+      if (filter) filter.value = viewWeek.dataset.viewClassWeek;
+      applyFilters();
+    }
+    if (closeWeek) {
+      const panel = root.querySelector('[data-class-week-panel]');
+      panel?.classList.add('hidden');
+      if (filter) filter.value = '';
+      applyFilters();
+    }
     if (add && !add.disabled) onEdit();
     if (configure) openSchoolStructureForm(state.schoolSettings, { onSave: async value => {
       await saveSchoolSettings(value);
@@ -92,6 +107,56 @@ export function renderClassSchedules(root, { state, onEdit }) {
       renderClassSchedules(root, { state, onEdit });
     } });
   };
+}
+
+function renderClassWeekPanel(root, state, classGroup, professionalMap) {
+  const panel = root.querySelector('[data-class-week-panel]');
+  if (!panel) return;
+  const overview = buildClassWeekOverview(state, classGroup);
+  const height = Math.max(320, Math.round(overview.duration * 0.9));
+  const labels = [];
+  for (let minute = Math.ceil(overview.start / 30) * 30; minute <= overview.end; minute += 30) {
+    labels.push(`<span style="top:${positionPercent(minute, overview)}%">${escapeHtml(minutesToTime(minute))}</span>`);
+  }
+
+  panel.innerHTML = `
+    <div class="class-week-panel-head">
+      <div><p class="eyebrow">Vista semanal</p><h3>${escapeHtml(classGroup)}</h3><small>${escapeHtml(overview.startLabel)}–${escapeHtml(overview.endLabel)} · ${overview.course ? escapeHtml(overview.course) : 'Clase'}${overview.stage ? ` · ${escapeHtml(overview.stage === 'infantil' ? 'Infantil' : 'Primaria')}` : ''}</small></div>
+      <button class="button" type="button" data-close-class-week>Volver a lista</button>
+    </div>
+    <div class="class-week-scroll">
+      <div class="class-week-day-heads"><span>Hora</span>${overview.days.map(day => `<strong>${escapeHtml(day.label)}</strong>`).join('')}</div>
+      <div class="class-week-board" style="--class-week-height:${height}px">
+        <div class="class-week-axis">${labels.join('')}</div>
+        ${overview.days.map(day => renderWeekDay(day, overview, professionalMap)).join('')}
+      </div>
+    </div>
+    <div class="class-week-gap-summary">
+      ${overview.days.map(day => `<div><strong>${escapeHtml(day.label)}</strong>${day.gaps.length ? day.gaps.map(gap => `<span>Libre ${escapeHtml(gap.inicio)}–${escapeHtml(gap.fin)} · ${gap.minutes} min</span>`).join('') : '<span>Sin huecos libres en la jornada.</span>'}</div>`).join('')}
+    </div>`;
+  panel.classList.remove('hidden');
+  panel.scrollIntoView({ block:'nearest', behavior:'smooth' });
+}
+
+function renderWeekDay(day, overview, professionalMap) {
+  const items = [];
+  if (day.recess) {
+    items.push(`<div class="class-week-block is-recess" style="top:${positionPercent(day.recess.start, overview)}%;height:${durationPercent(day.recess.start, day.recess.end, overview)}%"><strong>Recreo</strong><span>${escapeHtml(day.recess.inicio)}–${escapeHtml(day.recess.fin)}</span></div>`);
+  }
+  for (const entry of day.entries) {
+    const teacher = professionalMap.get(entry.professionalId)?.nombre || entry.docente || '';
+    const meta = [teacher, entry.aula].filter(Boolean).join(' · ');
+    items.push(`<div class="class-week-block is-subject" style="top:${positionPercent(entry.start, overview)}%;height:${durationPercent(entry.start, entry.end, overview)}%" title="${escapeHtml(`${entry.materia} · ${entry.inicio}–${entry.fin}${meta ? ` · ${meta}` : ''}`)}"><strong>${escapeHtml(entry.materia)}</strong><span>${escapeHtml(entry.inicio)}–${escapeHtml(entry.fin)}</span>${meta ? `<small>${escapeHtml(meta)}</small>` : ''}</div>`);
+  }
+  return `<div class="class-week-day" data-week-overview-day="${escapeHtml(day.id)}">${items.join('')}</div>`;
+}
+
+function positionPercent(minute, overview) {
+  return Math.max(0, Math.min(100, ((minute - overview.start) / overview.duration) * 100));
+}
+
+function durationPercent(start, end, overview) {
+  return Math.max(2.3, Math.min(100, ((end - start) / overview.duration) * 100));
 }
 
 export function openClassScheduleForm(entry, { state, onSave }) {
