@@ -14,7 +14,6 @@ export function renderIntegrationView(root, {
   onRegister,
   onLogout,
   onSelectMembership,
-  onBootstrap,
   onCreateAcademicYear,
   onSelectAcademicYear,
   onCreateScenario,
@@ -68,19 +67,19 @@ export function renderIntegrationView(root, {
         <details class="integration-details"><summary>Ver franjas que utilizará GestorEscuela</summary><div class="integration-slot-list">${adapter.report.slots.map(slot => `<span>${escapeHtml(slot.id)} · ${escapeHtml(slot.label)}</span>`).join('') || '<span>Sin franjas</span>'}</div></details>
         <div class="button-row integration-sync-actions">
           <button class="button button-primary" type="button" data-sync-backend ${canSync ? '' : 'disabled'}>Sincronizar configuración para operativa diaria</button>
-          <span class="field-hint">La sincronización requiere una sesión o, durante la transición, una conexión legacy válida. Los datos locales no se sustituyen al sincronizar.</span>
+          <span class="field-hint">La sincronización requiere una sesión activa. Las conexiones Actor ID ya existentes se mantienen solo durante la transición y no se pueden crear desde esta pantalla.</span>
         </div>
       </div>
     </section>
 
-    ${renderAdvancedConnection(normalized, status)}
+    ${renderAdvancedConnection(normalized, status, { hasBearerSession, legacyConfigured })}
 
     <section class="card integration-roadmap">
       <div class="card-header"><div><h2>Estado de la integración</h2><small>La conexión se activa de forma progresiva y mantiene el modo offline.</small></div></div>
       <div class="card-body integration-roadmap-grid">
         <div class="is-done"><b>1</b><span><strong>Planificación local</strong><small>IndexedDB continúa funcionando sin cuenta ni conexión.</small></span></div>
         <div class="is-done"><b>2</b><span><strong>Operativa y escenarios</strong><small>CP-SAT, cursos, escenarios y copias compartidas.</small></span></div>
-        <div class="is-done"><b>3</b><span><strong>Sesiones Bearer</strong><small>Correo y contraseña sustituyen progresivamente a Actor ID.</small></span></div>
+        <div class="is-done"><b>3</b><span><strong>Sesiones Bearer</strong><small>Correo y contraseña son la vía normal de acceso. Actor ID queda solo para migraciones existentes.</small></span></div>
         <div><b>4</b><span><strong>Identidad institucional</strong><small>Google Workspace y Microsoft 365 podrán reutilizar la misma cuenta, centro y permisos.</small></span></div>
       </div>
     </section>
@@ -146,18 +145,6 @@ export function renderIntegrationView(root, {
     const data = new FormData(scenarioForm);
     await onCreateScenario({ name:data.get('name') });
   });
-
-  const bootstrapForm = root.querySelector('#backendBootstrapForm');
-  bootstrapForm?.addEventListener('submit', async event => {
-    event.preventDefault();
-    const data = new FormData(bootstrapForm);
-    await onBootstrap({
-      baseUrl:form?.elements?.baseUrl?.value || normalized.baseUrl,
-      schoolName:data.get('schoolName'),
-      displayName:data.get('displayName'),
-      email:data.get('email')
-    });
-  });
 }
 
 function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured }) {
@@ -175,7 +162,7 @@ function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured 
           <div><span>Usuario</span><strong>${escapeHtml(userName)}</strong>${email && email !== userName ? `<small>${escapeHtml(email)}</small>` : ''}</div>
           <div><span>Centro activo</span><strong>${settings.schoolId ? escapeHtml(shortId(settings.schoolId)) : 'Selecciona un centro'}</strong><small>${selectedMembership ? escapeHtml(selectedMembership.role || '') : 'La sesión puede pertenecer a más de un centro.'}</small></div>
         </div>
-        ${memberships.length > 1 ? `<div class="form-field"><label for="authSchoolSelect">Centro de trabajo</label><select id="authSchoolSelect" data-auth-school-select><option value="">Selecciona un centro…</option>${memberships.map(item => `<option value="${escapeHtml(item.school_id)}" ${String(item.school_id) === settings.schoolId ? 'selected' : ''}>${escapeHtml(shortId(item.school_id))} · ${escapeHtml(item.role || 'Miembro')}</option>`).join('')}</select><span class="field-hint">La API actual devuelve la membresía por ID. Más adelante mostraremos el nombre del centro directamente.</span></div>` : ''}
+        ${memberships.length > 1 ? `<div class="form-field"><label for="authSchoolSelect">Centro de trabajo</label><select id="authSchoolSelect" data-auth-school-select><option value="">Selecciona un centro…</option>${memberships.map(item => `<option value="${escapeHtml(item.school_id)}" ${String(item.school_id) === settings.schoolId ? 'selected' : ''}>${escapeHtml(shortId(item.school_id))} · ${escapeHtml(item.role || 'Miembro')}</option>`).join('')}</select><span class="field-hint">Solo puedes seleccionar centros incluidos en la sesión autenticada.</span></div>` : ''}
         <div class="button-row"><button class="button" type="button" data-logout-backend>Cerrar sesión</button></div>
       </div>
     </section>`;
@@ -199,7 +186,7 @@ function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured 
         <button class="button" type="submit">Crear centro y entrar</button>
       </form>
       ${auth.status ? renderAuthStatus(auth.status) : ''}
-      ${legacyConfigured ? '<div class="integration-note integration-wide"><strong>Conexión de transición activa</strong><span>Este navegador todavía puede usar School ID + Actor ID. Puedes seguir trabajando así mientras migramos los accesos a cuenta.</span></div>' : ''}
+      ${legacyConfigured ? '<div class="integration-note integration-wide"><strong>Conexión de transición activa</strong><span>Este navegador conserva una conexión Actor ID creada anteriormente. Puede seguir utilizándose durante la migración, pero las altas nuevas ya requieren una cuenta con contraseña.</span></div>' : ''}
     </div>
   </section>`;
 }
@@ -296,33 +283,37 @@ function renderAcademicContextCard(settings, configured, context, localAcademicY
   </section>`;
 }
 
-function renderAdvancedConnection(settings, status) {
+function renderAdvancedConnection(settings, status, { hasBearerSession, legacyConfigured }) {
+  const legacyFields = legacyConfigured ? `
+    <div class="integration-note">
+      <strong>Compatibilidad con una instalación anterior</strong>
+      <span>Estos identificadores se conservan solo porque este navegador ya tenía una conexión Actor ID. No se ofrecen para altas nuevas.</span>
+      <div class="form-grid">
+        <div class="form-field"><label for="backendSchoolId">School ID</label><input id="backendSchoolId" name="schoolId" value="${escapeHtml(settings.schoolId)}" placeholder="UUID del centro"></div>
+        <div class="form-field"><label for="backendActorId">Actor ID · transición</label><input id="backendActorId" name="actorId" value="${escapeHtml(settings.actorId)}" placeholder="UUID legacy"></div>
+      </div>
+    </div>` : '';
+  const authHint = hasBearerSession
+    ? 'El centro activo procede de las membresías de tu sesión y no se puede sustituir manualmente aquí.'
+    : legacyConfigured
+      ? 'La conexión Actor ID se mantiene temporalmente para facilitar la migración a una cuenta.'
+      : 'Para conectar un centro nuevo usa Iniciar sesión o Crear un centro; no necesitas identificadores técnicos.';
+
   return `<section class="card">
-    <details class="integration-advanced" ${settings.actorId && !settings.accessToken ? 'open' : ''}>
-      <summary><span><strong>Compatibilidad y conexión avanzada</strong><small>URL del backend e identificadores legacy. Normalmente no necesitas modificar estos valores.</small></span></summary>
+    <details class="integration-advanced" ${legacyConfigured ? 'open' : ''}>
+      <summary><span><strong>Conexión avanzada</strong><small>URL del backend y compatibilidad temporal para instalaciones ya existentes.</small></span></summary>
       <div class="card-body integration-form">
         <form id="backendSettingsForm" class="integration-form">
           <label class="integration-toggle"><input name="enabled" type="checkbox" ${settings.enabled ? 'checked' : ''}><span><strong>Activar funciones online</strong><small>El horario local sigue funcionando aunque el servidor no responda.</small></span></label>
           <div class="form-grid">
-            <div class="form-field integration-wide"><label for="backendBaseUrl">URL del backend</label><input id="backendBaseUrl" name="baseUrl" type="url" value="${escapeHtml(settings.baseUrl)}" placeholder="https://mi-backend.up.railway.app"></div>
-            <div class="form-field"><label for="backendSchoolId">School ID</label><input id="backendSchoolId" name="schoolId" value="${escapeHtml(settings.schoolId)}" placeholder="UUID del centro"></div>
-            <div class="form-field"><label for="backendActorId">Actor ID · transición</label><input id="backendActorId" name="actorId" value="${escapeHtml(settings.actorId)}" placeholder="UUID legacy"></div>
+            <div class="form-field integration-wide"><label for="backendBaseUrl">URL del backend</label><input id="backendBaseUrl" name="baseUrl" type="url" value="${escapeHtml(settings.baseUrl)}" placeholder="https://mi-backend.up.railway.app"><span class="field-hint">${escapeHtml(authHint)}</span></div>
           </div>
+          ${legacyFields}
           <div class="button-row">
             <button class="button" type="submit">Guardar configuración avanzada</button>
             <button class="button" type="button" data-test-backend>Probar servidor</button>
           </div>
           ${renderConnectionStatus(status)}
-        </form>
-        <form id="backendBootstrapForm" class="integration-note">
-          <strong>Bootstrap legacy sin contraseña</strong>
-          <span>Se mantiene solo para instalaciones de transición. Las altas nuevas deberían usar “Crear un centro” en la sección de acceso.</span>
-          <div class="form-grid">
-            <div class="form-field integration-wide"><label for="bootstrapSchoolName">Nombre del centro</label><input id="bootstrapSchoolName" name="schoolName" maxlength="160"></div>
-            <div class="form-field"><label for="bootstrapDisplayName">Administrador</label><input id="bootstrapDisplayName" name="displayName" maxlength="160"></div>
-            <div class="form-field"><label for="bootstrapEmail">Correo</label><input id="bootstrapEmail" name="email" type="email" maxlength="320"></div>
-          </div>
-          <button class="button" type="submit">Crear vínculo legacy</button>
         </form>
       </div>
     </details>
@@ -335,8 +326,8 @@ function readSettings(form, current) {
     ...current,
     enabled:data.get('enabled') === 'on',
     baseUrl:data.get('baseUrl'),
-    schoolId:data.get('schoolId'),
-    actorId:data.get('actorId')
+    schoolId:data.has('schoolId') ? data.get('schoolId') : current.schoolId,
+    actorId:data.has('actorId') ? data.get('actorId') : current.actorId
   });
 }
 
