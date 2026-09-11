@@ -3,7 +3,7 @@ import { curriculumForCourse, normalizeCenterPlanningSettings, normalizeProfessi
 import { configuredClassGroups, courseForClassGroup, recessForStage, recessOverlaps, schoolStructureConfigured, stageForCourse } from './education.js';
 import { detectConflicts } from './conflicts.js';
 import { professionalCanWork } from './professional-availability.js';
-import { dayAllowed, effectiveMaxSessionsPerDay, effectiveSessionMinutes, subjectPatternForCourse, timePreferenceScore, timeWindowAllows, validateTimePattern } from './time-patterns.js';
+import { dayAllowed, effectiveMaxSessionsPerDay, planSessionDurations, subjectPatternForCourse, timePreferenceScore, timeWindowAllows, validateTimePattern } from './time-patterns.js';
 import { minutesToTime, overlapInterval, timeToMinutes } from './utils.js';
 
 const DAY_INDEX = new Map(DAYS.map((day, index) => [day.id, index]));
@@ -58,8 +58,17 @@ export function buildGlobalReadiness(state, rawSettings = state.centerPlanningSe
     for (const [subject, minutes] of Object.entries(curriculumForCourse(settings, course))) {
       if (minutes % 15 !== 0) gridErrors.push(`${grupoClase} · ${subject}: ${minutes} min`);
       const pattern = subjectPatternForCourse(settings, course, subject);
-      if (pattern.sessionMinutes && pattern.sessionMinutes % 15 !== 0) gridErrors.push(`${grupoClase} · ${subject}: bloque ${pattern.sessionMinutes} min`);
-      try { validateTimePattern(pattern, `${grupoClase} · ${subject}`); } catch (error) { patternErrors.push(error.message); }
+      for (const duration of [pattern.sessionMinutes, pattern.minSessionMinutes, pattern.maxSessionMinutes]) {
+        if (duration && duration % 15 !== 0) gridErrors.push(`${grupoClase} · ${subject}: bloque ${duration} min`);
+      }
+      try {
+        validateTimePattern(pattern, `${grupoClase} · ${subject}`);
+        if (generationReady && minutes % 15 === 0) {
+          planSessionDurations(minutes, pattern, generation.lessonMinutes, generation.stepMinutes);
+        }
+      } catch (error) {
+        patternErrors.push(`${grupoClase} · ${subject}: ${error.message}`);
+      }
     }
   }
   for (const activity of activeActivities) {
@@ -69,9 +78,9 @@ export function buildGlobalReadiness(state, rawSettings = state.centerPlanningSe
   items.push(item('grid', 'Encaje en la rejilla de 15 minutos', gridErrors.length === 0, gridErrors.length
     ? `${gridErrors.length} carga(s) o bloque(s) no son múltiplo de 15 min. Ej.: ${gridErrors.slice(0,3).join(', ')}.`
     : 'Todas las cargas y bloques se pueden dividir en la rejilla de 15 minutos.'));
-  items.push(item('patterns', 'Patrones temporales', patternErrors.length === 0, patternErrors.length
-    ? `${patternErrors.length} patrón(es) contienen ventanas incompatibles. Ej.: ${patternErrors.slice(0,2).join(' · ')}`
-    : 'Los días y ventanas temporales configurados son coherentes.'));
+  items.push(item('patterns', 'Patrones temporales y duración de sesiones', patternErrors.length === 0, patternErrors.length
+    ? `${patternErrors.length} patrón(es) o reparto(s) de duración son incompatibles. Ej.: ${patternErrors.slice(0,2).join(' · ')}`
+    : 'Los días, ventanas y rangos de duración configurados son coherentes.'));
 
   const teacherResolution = resolveTeachers(state, settings, participatingClasses);
   items.push(item('teachers', 'Profesorado por clase y asignatura', teacherResolution.errors.length === 0, teacherResolution.errors.length
@@ -209,7 +218,7 @@ function buildTasks(state, settings, classes, teacherMap, activityTeacherMap, ge
     for (const [materia, totalMinutes] of Object.entries(curriculum)) {
       const teacher = teacherMap.get(pairKey(grupoClase, materia));
       const pattern = subjectPatternForCourse(settings, course, materia);
-      const chunks = splitMinutes(totalMinutes, effectiveSessionMinutes(pattern, generation.lessonMinutes));
+      const chunks = planSessionDurations(totalMinutes, pattern, generation.lessonMinutes, generation.stepMinutes);
       const existing = (state.classSchedules || []).filter(entry => normalize(entry.grupoClase) === normalize(grupoClase) && normalize(entry.materia) === normalize(materia));
       const aula = existing.find(entry => entry.aula)?.aula || '';
       const observaciones = existing.find(entry => entry.observaciones)?.observaciones || '';
