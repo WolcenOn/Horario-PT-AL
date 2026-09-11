@@ -48,6 +48,7 @@ setTimeout(() => void enhanceCalendar(), 0);
 async function enhanceCalendar() {
   if (pageTitle?.textContent !== 'Horario semanal') return;
   const state = await loadState();
+  if (pageTitle?.textContent !== 'Horario semanal') return;
   const activeIds = new Set(state.professionals.filter(item => item.activo !== false).map(item => item.id));
   selectedProfessionalIds = normalizeTeacherSelection(selectedProfessionalIds.filter(id => activeIds.has(id)));
   persistTeacherSelection();
