@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('Ver semana abre la vista semanal existente en la clase de la fila y muestra huecos', async ({ page }) => {
+test('la barra de clases abre una semana visual y permite volver a editar esa clase', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#viewRoot > *').first()).toBeVisible();
 
@@ -27,13 +27,15 @@ test('Ver semana abre la vista semanal existente en la clase de la fila y muestr
 
   await page.locator('[data-view="classSchedules"]').click();
   await expect(page.locator('#pageTitle')).toHaveText('Horarios de aula');
+  await expect(page.locator('[data-class-schedule-group-navigation]')).toBeVisible();
+  await expect(page.locator('tr[data-class-group="1ºA"] [data-view-class-week]').first()).toBeHidden();
 
-  const weekButton = page.locator('tr[data-class-group="1ºA"] [data-view-class-week]').first();
+  const weekButton = page.locator('[data-class-schedule-group-navigation] [data-view-class-week="1ºA"]');
   await expect(weekButton).toBeVisible();
   await weekButton.click();
 
   await expect(page.locator('.class-schedule-calendar-view')).toBeVisible();
-  await expect(page.locator('[data-class-schedule-calendar-group]')).toHaveValue('1ºA');
+  await expect(page.locator('[data-class-schedule-group-bar] [data-view-class-week="1ºA"]')).toHaveClass(/is-active/);
   await expect(page.locator('.class-schedule-calendar-card')).toContainText('Recreo 11:00–11:30');
 
   const blocks = page.locator('.class-schedule-calendar-block');
@@ -55,4 +57,8 @@ test('Ver semana abre la vista semanal existente en la clase de la fila y muestr
   await expect(gaps).toBeVisible();
   await expect(gaps).toContainText('Huecos libres de la jornada');
   await expect(gaps).toContainText('Libre 11:30–14:00');
+
+  await page.getByRole('button', { name:/Editar esta clase/ }).click();
+  await expect(page.getByRole('heading', { name:'Horarios ordinarios por asignatura' })).toBeVisible();
+  await expect(page.locator('#classScheduleFilter')).toHaveValue('1ºA');
 });
