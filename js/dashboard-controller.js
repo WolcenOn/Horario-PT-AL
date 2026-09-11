@@ -5,6 +5,7 @@ import { loadState } from './repository.js';
 import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
+const pageTitle = document.querySelector('#pageTitle');
 const dashboardNav = document.querySelector('[data-view="dashboard"]');
 let rendering = false;
 
@@ -20,17 +21,25 @@ void openAsInitialView();
 
 async function openAsInitialView() {
   if (!dashboardNav) return;
-  if (!viewRoot.children.length) {
-    await new Promise(resolve => {
-      const observer = new MutationObserver(() => {
-        if (!viewRoot.children.length) return;
-        observer.disconnect();
-        resolve();
-      });
-      observer.observe(viewRoot, { childList:true });
-    });
-  }
+  await waitForInitialCalendarRender();
   await openDashboard();
+}
+
+function waitForInitialCalendarRender() {
+  if (initialCalendarRendered()) return Promise.resolve();
+  return new Promise(resolve => {
+    const target = document.querySelector('#mainContent') || document.body;
+    const observer = new MutationObserver(() => {
+      if (!initialCalendarRendered()) return;
+      observer.disconnect();
+      resolve();
+    });
+    observer.observe(target, { childList:true, subtree:true, characterData:true });
+  });
+}
+
+function initialCalendarRendered() {
+  return Boolean(viewRoot?.children.length && pageTitle?.textContent?.trim() === 'Horario semanal');
 }
 
 async function openDashboard() {
