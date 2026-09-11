@@ -7,8 +7,12 @@ import {
   DEFAULT_BACKEND_SETTINGS,
   fetchPlanningScenarioSnapshot,
   listAcademicYears,
+  listAuthSessions,
   listPlanningScenarios,
+  loginBackend,
+  logoutAllBackend,
   normalizeBackendSettings,
+  revokeAuthSession,
   savePlanningScenarioSnapshot
 } from '../js/backend-service.js';
 
@@ -158,6 +162,74 @@ test('guarda y recupera una copia completa del escenario seleccionado', async ()
     });
     assert.equal(calls[1].options.method, undefined);
     assert.deepEqual(loaded.payload, sharePackage);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('lista y revoca sesiones usando siempre Bearer', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const settings = normalizeBackendSettings({
+    enabled:true,
+    baseUrl:'https://example.test',
+    accessToken:'secret-token'
+  });
+  const sessions = [{ id:'session-1', current:true, revoked_at:null }];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url:String(url), options });
+    const isList = calls.length === 1;
+    return {
+      ok:true,
+      status:isList ? 200 : 204,
+      headers:{ get() { return null; } },
+      async text() { return isList ? JSON.stringify(sessions) : ''; }
+    };
+  };
+
+  try {
+    const listed = await listAuthSessions(settings);
+    await revokeAuthSession(settings, 'session-other');
+    await logoutAllBackend(settings);
+
+    assert.deepEqual(listed, sessions);
+    assert.equal(calls.length, 3);
+    assert.match(calls[0].url, /\/auth\/sessions$/);
+    assert.match(calls[1].url, /\/auth\/sessions\/session-other$/);
+    assert.equal(calls[1].options.method, 'DELETE');
+    assert.match(calls[2].url, /\/auth\/logout-all$/);
+    assert.equal(calls[2].options.method, 'POST');
+    for (const call of calls) {
+      assert.equal(call.options.headers.Authorization, 'Bearer secret-token');
+      assert.equal(call.options.headers['X-Actor-Id'], undefined);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('conserva Retry-After cuando el login queda bloqueado', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok:false,
+    status:429,
+    headers:{ get(name) { return String(name).toLowerCase() === 'retry-after' ? '90' : null; } },
+    async text() { return JSON.stringify({ detail:'Too many failed login attempts. Try again later.' }); }
+  });
+
+  try {
+    await assert.rejects(
+      () => loginBackend({
+        baseUrl:'https://example.test',
+        email:'admin@example.test',
+        password:'wrong-password'
+      }),
+      error => {
+        assert.equal(error.status, 429);
+        assert.equal(error.retryAfter, 90);
+        return true;
+      }
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
