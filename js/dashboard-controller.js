@@ -5,21 +5,16 @@ import { loadState } from './repository.js';
 import { applyViewShell } from './view-shell.js';
 
 const viewRoot = document.querySelector('#viewRoot');
-const summaryStrip = document.querySelector('#summaryStrip');
 const dashboardNav = document.querySelector('[data-view="dashboard"]');
 let rendering = false;
 
 document.addEventListener('click', event => {
   const button = event.target.closest?.('[data-view="dashboard"]');
   if (!button) return;
-  queueMicrotask(() => void openDashboard());
-});
-
-const refreshObserver = new MutationObserver(() => {
-  if (!dashboardNav?.classList.contains('is-active') || rendering) return;
-  queueMicrotask(() => void openDashboard());
-});
-if (summaryStrip) refreshObserver.observe(summaryStrip, { childList:true, subtree:true });
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  void openDashboard();
+}, true);
 
 void openAsInitialView();
 
@@ -35,7 +30,7 @@ async function openAsInitialView() {
       observer.observe(viewRoot, { childList:true });
     });
   }
-  dashboardNav.click();
+  await openDashboard();
 }
 
 async function openDashboard() {
