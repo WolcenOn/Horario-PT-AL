@@ -1,6 +1,6 @@
 import { DAYS } from './constants.js';
 import { COURSE_OPTIONS } from './education.js';
-import { SUBJECT_PRIORITIES, buildReadinessReport, courseRuleDraft, normalizeAutomationSettings, subjectsForCourse } from './automation-core.js';
+import { COURSE_WINDOW_MODES, SUBJECT_PRIORITIES, buildReadinessReport, courseRuleDraft, normalizeAutomationSettings, subjectsForCourse } from './automation-core.js';
 import { escapeHtml } from './utils.js';
 
 const EXTRACTION_OPTIONS = [
@@ -26,7 +26,6 @@ export function renderAutomationManager(root, {
   const readiness = buildReadinessReport(state, settings);
   const missingCount = readiness.items.filter(item => !item.ok).length;
   const globalMode = state.centerPlanningSettings?.mode === 'global';
-  const centerWindow = generationWindow(state);
 
   root.innerHTML = `
     <section class="card automation-hero ${readiness.ready ? 'is-ready' : 'is-pending'}">
@@ -62,8 +61,8 @@ export function renderAutomationManager(root, {
       <section class="card">
         <div class="card-header">
           <div>
-            <h2>Extracción, preferencias y horas permitidas</h2>
-            <small>“Extracción” es una regla dura: decide si el alumnado puede salir de esa materia a PT y/o AL. “Preferencia” solo ordena los huecos permitidos.</small>
+            <h2>Extracción, preferencias y excepciones horarias</h2>
+            <small>La jornada general se define una sola vez en Planificación académica. Aquí solo necesitas indicar excepciones de PT/AL y decidir de qué materias puede salir el alumnado.</small>
           </div>
           <span class="badge badge-neutral">${readiness.courses.length} cursos</span>
         </div>
@@ -72,8 +71,7 @@ export function renderAutomationManager(root, {
             ${readiness.courses.map(course => renderCourseRule(state, settings, course)).join('')}
           </div>
           <div class="automation-form-actions">
-            <span class="muted">Las franjas vacías significan “no programar sesiones ese día”. Una preferencia nunca bloquea por sí sola una franja; para prohibir una extracción usa “No extraíble”.</span>
-            <button class="button" type="button" data-use-center-hours-all data-center-start="${escapeHtml(centerWindow.inicio)}" data-center-end="${escapeHtml(centerWindow.fin)}">↳ Usar ${escapeHtml(centerWindow.inicio)}–${escapeHtml(centerWindow.fin)} en todos los cursos</button>
+            <span class="muted">Las reglas antiguas con franjas propias se mantienen como personalizadas. Puedes volver a vincular cualquier curso a la jornada del centro sin copiar horas.</span>
             <button class="button button-primary" type="submit">Guardar reglas de cursos</button>
           </div>` : `
           <div class="empty-state"><strong>No hay cursos que configurar</strong>Añade alumnos a grupos PT/AL y completa su curso para crear las reglas automáticas.</div>`}
@@ -98,6 +96,12 @@ export function renderAutomationManager(root, {
     else onNavigate(button.dataset.readinessTarget);
   }));
 
+  root.querySelectorAll('[data-window-mode]').forEach(select => select.addEventListener('change', () => {
+    const section = select.closest('[data-course-rule]');
+    if (!section) return;
+    syncWindowMode(section, select.value);
+  }));
+
   root.querySelectorAll('[data-copy-course-window]').forEach(button => button.addEventListener('click', () => {
     const section = button.closest('[data-course-rule]');
     if (!section) return;
@@ -109,30 +113,9 @@ export function renderAutomationManager(root, {
     }
   }));
 
-  root.querySelector('[data-use-center-hours-all]')?.addEventListener('click', event => {
-    const inicio = event.currentTarget.dataset.centerStart || '';
-    const fin = event.currentTarget.dataset.centerEnd || '';
-    let applied = 0;
-    root.querySelectorAll('[data-course-rule]').forEach(section => {
-      if (applyWindowToSection(section, inicio, fin, { silent:true })) {
-        const copyStart = section.querySelector('[data-course-copy-start]');
-        const copyEnd = section.querySelector('[data-course-copy-end]');
-        if (copyStart) copyStart.value = inicio;
-        if (copyEnd) copyEnd.value = fin;
-        applied += 1;
-      }
-    });
-    if (applied) {
-      event.currentTarget.textContent = `✓ Jornada copiada a ${applied} curso(s)`;
-      setTimeout(() => {
-        if (event.currentTarget.isConnected) event.currentTarget.textContent = `↳ Usar ${inicio}–${fin} en todos los cursos`;
-      }, 1600);
-    }
-  });
-
   root.querySelector('#automationRulesForm')?.addEventListener('submit', async event => {
     event.preventDefault();
-    const next = readRulesFromForm(root, settings);
+    const next = readRulesFromForm(root, settings, state);
     if (!next) return;
     await onSaveSettings(next);
   });
@@ -155,6 +138,7 @@ function renderCourseRule(state, settings, course) {
   const sourceLabel = fromOrdinarySchedule ? 'horario ordinario y currículo' : 'currículo del centro';
   const centerWindow = generationWindow(state);
   const firstWindow = DAYS.map(day => draft.allowedWindows?.[day.id]).find(window => window?.inicio && window?.fin) || centerWindow;
+  const custom = draft.windowMode === 'custom';
 
   return `<article class="automation-course-card" data-course-rule="${escapeHtml(course)}">
     <div class="automation-course-head">
@@ -163,19 +147,33 @@ function renderCourseRule(state, settings, course) {
     </div>
     <div class="automation-course-grid">
       <div>
-        <h4>Horas en las que se puede programar PT/AL</h4>
-        <div class="button-row" style="justify-content:flex-start;align-items:end;margin:0 0 10px;gap:8px">
-          <label style="display:grid;gap:3px;font-size:.75rem;font-weight:700">Desde<input type="time" data-course-copy-start value="${escapeHtml(firstWindow.inicio || centerWindow.inicio)}" aria-label="Hora inicial para copiar en ${escapeHtml(courseLabel)}"></label>
-          <label style="display:grid;gap:3px;font-size:.75rem;font-weight:700">Hasta<input type="time" data-course-copy-end value="${escapeHtml(firstWindow.fin || centerWindow.fin)}" aria-label="Hora final para copiar en ${escapeHtml(courseLabel)}"></label>
-          <button class="button button-small" type="button" data-copy-course-window>Aplicar a lunes–viernes</button>
+        <h4>Horario permitido para PT/AL</h4>
+        <div class="automation-window-source">
+          <label>
+            <span>Fuente de la jornada</span>
+            <select data-window-mode aria-label="Fuente de horario permitido en ${escapeHtml(courseLabel)}">
+              ${COURSE_WINDOW_MODES.map(option => `<option value="${option.value}" ${draft.windowMode === option.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+            </select>
+          </label>
+          <div class="automation-center-window ${custom ? 'hidden' : ''}" data-center-window-summary>
+            <strong>${escapeHtml(centerWindow.inicio)}–${escapeHtml(centerWindow.fin)}</strong>
+            <span>Lunes–viernes · se actualizará automáticamente si cambia la jornada del centro.</span>
+          </div>
         </div>
-        <small class="field-hint" style="display:block;margin-bottom:8px">Copia primero la franja habitual y modifica debajo únicamente el día que sea diferente.</small>
-        <div class="allowed-window-grid">
-          <strong>Día</strong><strong>Desde</strong><strong>Hasta</strong>
-          ${DAYS.map(day => {
-            const window = draft.allowedWindows?.[day.id] || { inicio:'', fin:'' };
-            return `<span>${day.label}</span><input type="time" data-window-start="${day.id}" value="${escapeHtml(window.inicio || '')}" aria-label="${day.label} desde"><input type="time" data-window-end="${day.id}" value="${escapeHtml(window.fin || '')}" aria-label="${day.label} hasta">`;
-          }).join('')}
+        <div data-custom-window-editor class="automation-custom-window ${custom ? '' : 'hidden'}">
+          <div class="button-row automation-window-copy">
+            <label>Desde<input type="time" data-course-copy-start value="${escapeHtml(firstWindow.inicio || centerWindow.inicio)}" aria-label="Hora inicial para copiar en ${escapeHtml(courseLabel)}"></label>
+            <label>Hasta<input type="time" data-course-copy-end value="${escapeHtml(firstWindow.fin || centerWindow.fin)}" aria-label="Hora final para copiar en ${escapeHtml(courseLabel)}"></label>
+            <button class="button button-small" type="button" data-copy-course-window>Aplicar a lunes–viernes</button>
+          </div>
+          <small class="field-hint automation-window-hint">Personaliza únicamente si este curso tiene una jornada distinta. Dejar un día vacío significa que PT/AL no puede programarse ese día.</small>
+          <div class="allowed-window-grid">
+            <strong>Día</strong><strong>Desde</strong><strong>Hasta</strong>
+            ${DAYS.map(day => {
+              const window = draft.allowedWindows?.[day.id] || { inicio:'', fin:'' };
+              return `<span>${day.label}</span><input type="time" data-window-start="${day.id}" value="${escapeHtml(window.inicio || '')}" aria-label="${day.label} desde"><input type="time" data-window-end="${day.id}" value="${escapeHtml(window.fin || '')}" aria-label="${day.label} hasta">`;
+            }).join('')}
+          </div>
         </div>
       </div>
       <div>
@@ -240,24 +238,30 @@ function renderProposal(state, proposal) {
   </section>`;
 }
 
-function readRulesFromForm(root, previousSettings) {
+function readRulesFromForm(root, previousSettings, state) {
   const next = normalizeAutomationSettings(previousSettings);
   const courseRules = { ...next.courseRules };
+  const centerWindow = generationWindow(state);
   for (const section of root.querySelectorAll('[data-course-rule]')) {
     const course = section.dataset.courseRule;
+    const windowMode = section.querySelector('[data-window-mode]')?.value === 'custom' ? 'custom' : 'center';
     const allowedWindows = {};
-    for (const day of DAYS) {
-      const inicio = section.querySelector(`[data-window-start="${day.id}"]`)?.value || '';
-      const fin = section.querySelector(`[data-window-end="${day.id}"]`)?.value || '';
-      if (Boolean(inicio) !== Boolean(fin)) {
-        window.alert(`${day.label} (${course}): indica tanto la hora de inicio como la de fin, o deja ambas vacías.`);
-        return null;
+    if (windowMode === 'center') {
+      for (const day of DAYS) allowedWindows[day.id] = { inicio:centerWindow.inicio, fin:centerWindow.fin };
+    } else {
+      for (const day of DAYS) {
+        const inicio = section.querySelector(`[data-window-start="${day.id}"]`)?.value || '';
+        const fin = section.querySelector(`[data-window-end="${day.id}"]`)?.value || '';
+        if (Boolean(inicio) !== Boolean(fin)) {
+          window.alert(`${day.label} (${course}): indica tanto la hora de inicio como la de fin, o deja ambas vacías.`);
+          return null;
+        }
+        if (inicio && fin <= inicio) {
+          window.alert(`${day.label} (${course}): la hora final debe ser posterior a la inicial.`);
+          return null;
+        }
+        allowedWindows[day.id] = { inicio, fin };
       }
-      if (inicio && fin <= inicio) {
-        window.alert(`${day.label} (${course}): la hora final debe ser posterior a la inicial.`);
-        return null;
-      }
-      allowedWindows[day.id] = { inicio, fin };
     }
     const subjectPriorities = {};
     section.querySelectorAll('[data-subject-priority]').forEach(select => {
@@ -267,9 +271,15 @@ function readRulesFromForm(root, previousSettings) {
     section.querySelectorAll('[data-subject-extraction]').forEach(select => {
       subjectPolicies[select.dataset.subjectExtraction] = { extraction:select.value };
     });
-    courseRules[course] = { confirmed:true, allowedWindows, subjectPriorities, subjectPolicies };
+    courseRules[course] = { confirmed:true, windowMode, allowedWindows, subjectPriorities, subjectPolicies };
   }
   return { id:'automation', courseRules };
+}
+
+function syncWindowMode(section, mode) {
+  const custom = mode === 'custom';
+  section.querySelector('[data-custom-window-editor]')?.classList.toggle('hidden', !custom);
+  section.querySelector('[data-center-window-summary]')?.classList.toggle('hidden', custom);
 }
 
 function applyWindowToSection(section, inicio, fin, { silent = false } = {}) {
