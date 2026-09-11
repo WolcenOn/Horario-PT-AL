@@ -20,3 +20,33 @@ test('el asistente inicial explica el flujo y navega al primer paso', async ({ p
   await expect(page.locator('#pageTitle')).toHaveText('Clases y alumnado');
   expect(errors).toEqual([]);
 });
+
+test('la configuración rápida crea una base editable por comunidad y líneas sin inventar datos normativos', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { resetDatabase } = await import('/js/db.js');
+    await resetDatabase();
+    localStorage.setItem('horario-user-cleared', 'true');
+  });
+  await page.reload();
+  await page.locator('[data-view="setupWizard"]').click();
+
+  const form = page.locator('[data-quick-start-form]');
+  await expect(form).toBeVisible();
+  await form.locator('select[name="territory"]').selectOption('Andalucía');
+  await form.locator('select[name="defaultLines"]').selectOption('2');
+  await form.getByRole('button', { name:'Crear base editable' }).click();
+
+  await expect(page.locator('[data-wizard-step="structure"]')).toContainText('18 clase(s) definidas');
+  const saved = await page.evaluate(async () => {
+    const { get } = await import('/js/db.js');
+    return {
+      school:await get('settings', 'school'),
+      planning:await get('settings', 'centerPlanning')
+    };
+  });
+  expect(saved.school.structure.defaultLines).toBe(2);
+  expect(saved.school.recesses.primaria).toEqual({ inicio:'', fin:'' });
+  expect(saved.planning.territory).toBe('Andalucía');
+  expect(saved.planning.curriculum).toEqual({});
+});
