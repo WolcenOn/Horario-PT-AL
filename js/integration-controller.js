@@ -7,12 +7,15 @@ import {
   fetchCurrentAuth,
   fetchPlanningScenarioSnapshot,
   listAcademicYears,
+  listAuthSessions,
   listPlanningScenarios,
   loadBackendSettings,
   loginBackend,
+  logoutAllBackend,
   logoutBackend,
   pushAcademicConfiguration,
   registerSchoolBackend,
+  revokeAuthSession,
   saveBackendSettings,
   savePlanningScenarioSnapshot
 } from './backend-service.js';
@@ -63,8 +66,9 @@ async function openIntegration() {
             ? 'Sesión iniciada. Ya puedes trabajar con el centro conectado.'
             : 'Sesión iniciada. Selecciona el centro con el que quieres trabajar.');
         } catch (error) {
-          authStatus = { kind:'error', message:error.message || 'No se pudo iniciar sesión.' };
-          showToast(authStatus.message, 'error');
+          const message = loginErrorMessage(error);
+          authStatus = { kind:'error', message };
+          showToast(message, 'error');
         }
         await openIntegration();
       },
@@ -92,18 +96,36 @@ async function openIntegration() {
         } catch (error) {
           console.warn('No se pudo revocar la sesión remota; se cerrará localmente.', error);
         }
-        saveBackendSettings({
-          ...current,
-          enabled:false,
-          accessToken:'',
-          actorId:'',
-          schoolId:'',
-          academicYearId:'',
-          scenarioId:''
-        });
+        clearLocalAuth(current);
         authStatus = null;
         connectionStatus = null;
         showToast('Sesión cerrada en este navegador.');
+        await openIntegration();
+      },
+      onLogoutAll:async () => {
+        const accepted = confirm('Se cerrarán todas las sesiones de esta cuenta, incluida la de este navegador. ¿Continuar?');
+        if (!accepted) return;
+        const current = loadBackendSettings();
+        try {
+          await logoutAllBackend(current);
+          clearLocalAuth(current);
+          authStatus = null;
+          connectionStatus = null;
+          showToast('Todas las sesiones de la cuenta han sido cerradas.');
+        } catch (error) {
+          showToast(error.message || 'No se pudieron cerrar todas las sesiones.', 'error');
+        }
+        await openIntegration();
+      },
+      onRevokeSession:async sessionId => {
+        const accepted = confirm('Se cerrará esa sesión en el otro navegador o dispositivo. ¿Continuar?');
+        if (!accepted) return;
+        try {
+          await revokeAuthSession(loadBackendSettings(), sessionId);
+          showToast('Sesión remota cerrada.');
+        } catch (error) {
+          showToast(error.message || 'No se pudo cerrar la sesión remota.', 'error');
+        }
         await openIntegration();
       },
       onSelectMembership:async schoolId => {
@@ -248,20 +270,28 @@ async function openIntegration() {
 
 async function resolveAuthContext(settings) {
   if (!settings.accessToken) {
-    return { settings, context:{ session:null, error:'' } };
+    return { settings, context:{ session:null, sessions:[], sessionsError:'', error:'' } };
   }
   try {
     const session = await fetchCurrentAuth(settings);
     const nextSettings = backendSettingsFromAuth(settings, { ...session, access_token:settings.accessToken });
     const saved = nextSettings.schoolId !== settings.schoolId ? saveBackendSettings(nextSettings) : nextSettings;
-    return { settings:saved, context:{ session, error:'' } };
+    let sessions = [];
+    let sessionsError = '';
+    try {
+      sessions = await listAuthSessions(saved);
+    } catch (error) {
+      if (error?.status === 401) throw error;
+      sessionsError = error.message || 'No se pudieron consultar las sesiones de la cuenta.';
+    }
+    return { settings:saved, context:{ session, sessions, sessionsError, error:'' } };
   } catch (error) {
     if (error?.status === 401) {
-      const cleared = saveBackendSettings({ ...settings, enabled:false, accessToken:'', actorId:'', schoolId:'', academicYearId:'', scenarioId:'' });
-      authStatus = { kind:'error', message:'La sesión ha caducado. Vuelve a iniciar sesión.' };
-      return { settings:cleared, context:{ session:null, error:'' } };
+      const cleared = clearLocalAuth(settings);
+      authStatus = { kind:'error', message:'La sesión ha caducado o ha sido cerrada. Vuelve a iniciar sesión.' };
+      return { settings:cleared, context:{ session:null, sessions:[], sessionsError:'', error:'' } };
     }
-    return { settings, context:{ session:null, error:error.message || 'No se pudo verificar la sesión.' } };
+    return { settings, context:{ session:null, sessions:[], sessionsError:'', error:error.message || 'No se pudo verificar la sesión.' } };
   }
 }
 
@@ -311,6 +341,27 @@ async function resolveAcademicContext(settings) {
       }
     };
   }
+}
+
+function clearLocalAuth(settings) {
+  return saveBackendSettings({
+    ...settings,
+    enabled:false,
+    accessToken:'',
+    actorId:'',
+    schoolId:'',
+    academicYearId:'',
+    scenarioId:''
+  });
+}
+
+function loginErrorMessage(error) {
+  if (error?.status !== 429) return error?.message || 'No se pudo iniciar sesión.';
+  const seconds = Number(error?.retryAfter) || 0;
+  if (!seconds) return 'Demasiados intentos fallidos. Espera unos minutos antes de volver a intentarlo.';
+  if (seconds < 60) return `Demasiados intentos fallidos. Espera ${Math.ceil(seconds)} s antes de volver a intentarlo.`;
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return `Demasiados intentos fallidos. Espera aproximadamente ${minutes} min antes de volver a intentarlo.`;
 }
 
 function escapeText(value) {
