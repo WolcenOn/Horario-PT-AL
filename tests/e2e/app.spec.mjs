@@ -31,16 +31,18 @@ test('la aplicación arranca en el resumen del centro y permite navegar por las 
   expect(errors).toEqual([]);
 });
 
-test('la cuenta y sincronización mantiene el modo offline y muestra el contexto académico', async ({ page }) => {
+test('la cuenta y sincronización mantiene el curso del proyecto como contexto local aunque esté offline', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
   await openApp(page);
   await page.locator('[data-view="integration"]').click();
   await expect(page.locator('#pageTitle')).toHaveText('Cuenta y sincronización');
-  await expect(page.getByRole('heading', { name:'Curso académico y escenario' })).toBeVisible();
-  await expect(page.getByText('Conexión necesaria')).toBeVisible();
-  await expect(page.getByText('El modo offline no necesita curso remoto ni escenario.')).toBeVisible();
+  await expect(page.getByRole('heading', { name:'Curso del proyecto y sincronización' })).toBeVisible();
+  await expect(page.getByText('Curso del proyecto', { exact:true })).toBeVisible();
+  await expect(page.getByText('Curso online vinculado', { exact:true })).toBeVisible();
+  await expect(page.getByText('Una sola fuente local')).toBeVisible();
+  await expect(page.getByText(/El modo offline no necesita crear otro curso aquí/)).toBeVisible();
 
   expect(errors).toEqual([]);
 });
@@ -107,6 +109,7 @@ test('guarda y restaura una copia compartida de un escenario', async ({ page }) 
   await openApp(page);
   await page.locator('[data-view="integration"]').click();
   await expect(page.getByText('Este escenario todavía no tiene una copia del proyecto guardada.')).toBeVisible();
+  await expect(page.getByText('Falta el curso del proyecto')).toBeVisible();
 
   await page.locator('[data-save-scenario-snapshot]').click();
   await expect(page.getByText(/Versión 1 guardada en PostgreSQL/)).toBeVisible();
