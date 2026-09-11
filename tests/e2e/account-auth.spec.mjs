@@ -5,7 +5,7 @@ async function openApp(page) {
   await expect(page.locator('#viewRoot > *').first()).toBeVisible();
 }
 
-test('Cuenta usa una sesión Bearer y no la persiste con la configuración', async ({ page }) => {
+test('Cuenta usa una sesión Bearer y no ofrece altas legacy', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('horario-gestor-escuela-backend', JSON.stringify({
       enabled:false,
@@ -42,7 +42,9 @@ test('Cuenta usa una sesión Bearer y no la persiste con la configuración', asy
   await openApp(page);
   await page.locator('[data-view="integration"]').click();
   await expect(page.getByRole('heading', { name:'Acceso al centro' })).toBeVisible();
-  await expect(page.locator('#backendActorId')).not.toBeVisible();
+  await expect(page.locator('#backendBootstrapForm')).toHaveCount(0);
+  await expect(page.locator('#backendActorId')).toHaveCount(0);
+  await expect(page.locator('#backendSchoolId')).toHaveCount(0);
 
   await page.locator('#loginEmail').fill('user@example.test');
   await page.locator('#loginPassword').fill('test-password-123');
@@ -51,6 +53,8 @@ test('Cuenta usa una sesión Bearer y no la persiste con la configuración', asy
   await expect(page.getByRole('heading', { name:'Sesión' })).toBeVisible();
   await expect(page.getByText('Usuario prueba', { exact:true })).toBeVisible();
   await expect(page.getByText('ADMIN', { exact:true })).toBeVisible();
+  await expect(page.locator('#backendActorId')).toHaveCount(0);
+  await expect(page.locator('#backendSchoolId')).toHaveCount(0);
 
   const stored = await page.evaluate(() => ({
     sessionValue:sessionStorage.getItem('horario-gestor-escuela-access-token'),
@@ -68,4 +72,39 @@ test('Cuenta usa una sesión Bearer y no la persiste con la configuración', asy
   await page.getByRole('button', { name:'Cerrar sesión' }).click();
   await expect(page.getByRole('heading', { name:'Acceso al centro' })).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.getItem('horario-gestor-escuela-access-token'))).toBeNull();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('horario-gestor-escuela-backend') || '{}').schoolId)).toBe('');
+});
+
+test('una conexión Actor ID existente sigue visible solo como compatibilidad', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('horario-gestor-escuela-backend', JSON.stringify({
+      enabled:true,
+      baseUrl:'https://gestor.test',
+      schoolId:'legacy-school',
+      actorId:'legacy-user',
+      academicYearId:'',
+      scenarioId:'',
+      autoSync:false
+    }));
+  });
+
+  await page.route('https://gestor.test/**', async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === '/schools/legacy-school/academic-years') {
+      expect(request.headers()['x-actor-id']).toBe('legacy-user');
+      return route.fulfill({ status:200, contentType:'application/json', body:'[]' });
+    }
+    return route.fulfill({ status:200, contentType:'application/json', body:'{"status":"ok"}' });
+  });
+
+  await openApp(page);
+  await page.locator('[data-view="integration"]').click();
+
+  await expect(page.getByText('Modo compatible', { exact:true })).toBeVisible();
+  await expect(page.locator('#backendActorId')).toBeVisible();
+  await expect(page.locator('#backendActorId')).toHaveValue('legacy-user');
+  await expect(page.locator('#backendSchoolId')).toHaveValue('legacy-school');
+  await expect(page.locator('#backendBootstrapForm')).toHaveCount(0);
+  await expect(page.getByRole('button', { name:'Crear vínculo legacy' })).toHaveCount(0);
 });
