@@ -70,7 +70,7 @@ test('Cuenta usa Bearer, gestiona otra sesión y no ofrece altas legacy', async 
   await expect(page.getByText('ADMIN', { exact:true })).toBeVisible();
   await expect(page.getByText('Sesiones de la cuenta', { exact:true })).toBeVisible();
   await expect(page.getByText('Esta sesión', { exact:true }).first()).toBeVisible();
-  await expect(page.getByText('Activa', { exact:true })).toBeVisible();
+  await expect(page.locator('.integration-auth-session .badge').filter({ hasText:/^Activa$/ })).toBeVisible();
 
   const stored = await page.evaluate(() => ({
     sessionValue:sessionStorage.getItem('horario-gestor-escuela-access-token'),
@@ -87,7 +87,7 @@ test('Cuenta usa Bearer, gestiona otra sesión y no ofrece altas legacy', async 
 
   page.once('dialog', dialog => dialog.accept());
   await page.locator('[data-revoke-auth-session="session-other"]').click();
-  await expect(page.getByText('Revocada', { exact:true }).first()).toBeVisible();
+  await expect(page.locator('.integration-auth-session .badge').filter({ hasText:/^Revocada$/ })).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.getItem('horario-gestor-escuela-access-token'))).toBe('test-session-value');
 
   const revokeCall = requests.find(item => item.path === '/auth/sessions/session-other');
@@ -145,7 +145,11 @@ test('un login bloqueado muestra el tiempo de espera', async ({ page }) => {
     if (path === '/auth/login') {
       return route.fulfill({
         status:429,
-        headers:{ 'Retry-After':'90' },
+        headers:{
+          'Retry-After':'90',
+          'Access-Control-Expose-Headers':'Retry-After',
+          'Access-Control-Allow-Origin':'*'
+        },
         contentType:'application/json',
         body:JSON.stringify({ detail:'Too many failed login attempts. Try again later.' })
       });
