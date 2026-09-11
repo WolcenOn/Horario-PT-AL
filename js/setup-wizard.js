@@ -2,6 +2,7 @@ import { buildReadinessReport } from './automation-core.js';
 import { normalizeCenterPlanningSettings } from './center-planning.js';
 import { buildGlobalReadiness } from './global-scheduler.js';
 import { configuredClassGroups, courseForClassGroup, recessForStage, schoolStructureConfigured, stageForCourse } from './education.js';
+import { TERRITORY_OPTIONS } from './setup-presets.js';
 import { escapeHtml } from './utils.js';
 
 export function buildSetupWizardProgress(state) {
@@ -107,15 +108,18 @@ export function buildSetupWizardProgress(state) {
     ordinarySchedulePresent,
     nextEssential,
     supportConfigured:supportBaseReady,
-    ptalAutomaticReady
+    ptalAutomaticReady,
+    structureReady
   };
 }
 
-export function renderSetupWizard(root, { state, onNavigate, onEditRecesses }) {
+export function renderSetupWizard(root, { state, onNavigate, onEditRecesses, onApplyQuickStart }) {
   const progress = buildSetupWizardProgress(state);
   const essential = progress.steps.filter(step => step.phase === 'essential');
   const support = progress.steps.filter(step => step.phase === 'support');
   const percent = Math.round((progress.essentialCompleted / progress.essentialTotal) * 100);
+  const selectedTerritory = TERRITORY_OPTIONS.includes(state.centerPlanningSettings?.territory) ? state.centerPlanningSettings.territory : '';
+  const currentLines = state.schoolSettings?.structure?.defaultLines || 1;
 
   root.innerHTML = `<div class="setup-wizard-view">
     <section class="card setup-wizard-hero">
@@ -145,6 +149,21 @@ export function renderSetupWizard(root, { state, onNavigate, onEditRecesses }) {
       <article class="card"><strong>3 · Corregir y recalcular</strong><span>Si falta algo, modifica solo ese dato y vuelve a calcular.</span></article>
     </section>
 
+    <form class="card setup-quick-start" data-quick-start-form>
+      <div class="setup-quick-start-copy">
+        <p class="eyebrow">Configuración inicial rápida</p>
+        <h2>Comunidad y líneas del colegio</h2>
+        <p>Genera una base editable: guarda el territorio, activa la planificación de centro completo y, si todavía no has configurado clases, crea Infantil y Primaria con el número general de líneas indicado.</p>
+        <small>La jornada, el currículo, los recreos y la referencia normativa quedan marcados para revisión. No se presentan como datos legales de la comunidad hasta disponer de un pack territorial versionado y verificado.</small>
+      </div>
+      <div class="setup-quick-start-fields">
+        <label><span>Comunidad / territorio</span><select name="territory" required><option value="">Seleccionar…</option>${TERRITORY_OPTIONS.map(option => `<option value="${escapeHtml(option)}" ${option === selectedTerritory ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select></label>
+        <label><span>Líneas generales</span><select name="defaultLines" ${progress.structureReady ? 'disabled' : ''}>${[1,2,3,4,5,6].map(value => `<option value="${value}" ${value === currentLines ? 'selected' : ''}>${value} ${value === 1 ? 'línea' : 'líneas'}</option>`).join('')}</select></label>
+        <button class="button button-primary" type="submit">${progress.structureReady ? 'Guardar comunidad' : 'Crear base editable'}</button>
+      </div>
+      ${progress.structureReady ? '<div class="setup-quick-start-existing">✓ La estructura de clases ya existe: esta acción no modificará desdobles ni líneas configuradas.</div>' : ''}
+    </form>
+
     ${progress.ordinarySchedulePresent ? renderRecalculationCard(state) : ''}
 
     ${renderPhase('Configuración esencial', 'Completa esta parte para construir un horario del centro desde cero.', essential)}
@@ -160,6 +179,14 @@ export function renderSetupWizard(root, { state, onNavigate, onEditRecesses }) {
     if (target === 'recesses') onEditRecesses();
     else onNavigate(target);
   }));
+
+  root.querySelector('[data-quick-start-form]')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const territory = form.elements.territory.value;
+    const defaultLines = progress.structureReady ? currentLines : Number(form.elements.defaultLines.value);
+    await onApplyQuickStart?.({ territory, defaultLines });
+  });
 }
 
 function renderRecalculationCard(state) {
