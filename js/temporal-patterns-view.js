@@ -5,6 +5,8 @@ import { describeTimePattern, normalizeTimePattern, subjectPatternForCourse, val
 import { escapeHtml, formatDuration } from './utils.js';
 import { setModalMessage, showModal } from './ui.js';
 
+const SESSION_OPTIONS = [15,30,45,60,75,90,105,120];
+
 export function renderTemporalPatterns(root, { state, onEditSubject, onOpenActivities }) {
   const settings = normalizeCenterPlanningSettings(state.centerPlanningSettings);
   const configured = [];
@@ -25,7 +27,7 @@ export function renderTemporalPatterns(root, { state, onEditSubject, onOpenActiv
 
   root.innerHTML = `<div class="temporal-patterns-view">
     <section class="card temporal-patterns-hero">
-      <div><p class="eyebrow">Fase 2 · cuándo puede ocurrir cada cosa</p><h2>Patrones temporales</h2><p>Define duración de bloques, días permitidos, preferencias y ventanas horarias antes de construir la cuadrícula semanal. Las restricciones duras limitan los huecos; las preferencias solo orientan al generador.</p></div>
+      <div><p class="eyebrow">Fase 2 · cuándo puede ocurrir cada cosa</p><h2>Patrones temporales</h2><p>Define duración de sesiones, días permitidos, preferencias y ventanas horarias antes de construir la cuadrícula semanal. Las restricciones duras limitan los huecos; las preferencias solo orientan al generador.</p></div>
       <button class="button" data-open-center-activities type="button">🧩 Actividades del centro</button>
     </section>
 
@@ -42,7 +44,7 @@ export function renderTemporalPatterns(root, { state, onEditSubject, onOpenActiv
         <div><strong>Días permitidos</strong><span>Restricción dura. Por ejemplo, Música solo martes y jueves.</span></div>
         <div><strong>Ventana permitida</strong><span>Restricción dura. Por ejemplo, Educación Física entre 09:00 y 13:00.</span></div>
         <div><strong>Días / franja preferidos</strong><span>Preferencia blanda. El generador los intentará usar si no perjudica otras necesidades.</span></div>
-        <div><strong>Bloque y máximo diario</strong><span>Permite expresar 60 min de Lengua, 45 min de Inglés o una sola sesión diaria.</span></div>
+        <div><strong>Duración y frecuencia</strong><span>La duración mínima/máxima es dura; la preferida guía el reparto. “1 sesión/día” evita repetir una materia el mismo día.</span></div>
       </div>
     </section>
 
@@ -75,8 +77,10 @@ export function openSubjectPatternForm({ course, subject, pattern, generation },
     title:`Patrón temporal · ${subject} · ${course}`,
     submitLabel:'Guardar patrón',
     bodyHtml:`<div class="form-grid temporal-pattern-form">
-      <div class="form-field"><label for="subjectSessionMinutes">Duración de bloque</label><select id="subjectSessionMinutes" name="sessionMinutes"><option value="0" ${!current.sessionMinutes?'selected':''}>Usar global (${generation.lessonMinutes} min)</option>${[30,45,60,75,90,120].map(value => `<option value="${value}" ${current.sessionMinutes===value?'selected':''}>${value} min</option>`).join('')}</select></div>
-      <div class="form-field"><label for="subjectMaxPerDay">Máximo de sesiones al día</label><select id="subjectMaxPerDay" name="maxSessionsPerDay"><option value="0" ${!current.maxSessionsPerDay?'selected':''}>Usar global (${generation.maxSameSubjectPerDay})</option>${[1,2,3,4].map(value => `<option value="${value}" ${current.maxSessionsPerDay===value?'selected':''}>${value}</option>`).join('')}</select></div>
+      <div class="form-field"><label for="subjectSessionMinutes">Duración preferida</label><select id="subjectSessionMinutes" name="sessionMinutes"><option value="0" ${!current.sessionMinutes?'selected':''}>Usar global (${generation.lessonMinutes} min)</option>${durationOptions(current.sessionMinutes)}</select><span class="field-hint">Objetivo de reparto; no obliga a que todas las sesiones sean idénticas.</span></div>
+      <div class="form-field"><label for="subjectMaxPerDay">Máximo de sesiones al día</label><select id="subjectMaxPerDay" name="maxSessionsPerDay"><option value="0" ${!current.maxSessionsPerDay?'selected':''}>Usar global (${generation.maxSameSubjectPerDay})</option>${[1,2,3,4].map(value => `<option value="${value}" ${current.maxSessionsPerDay===value?'selected':''}>${value}</option>`).join('')}</select><span class="field-hint">Usa 1 para evitar que la misma materia se repita dos veces en un día.</span></div>
+      <div class="form-field"><label for="subjectMinSessionMinutes">Duración mínima</label><select id="subjectMinSessionMinutes" name="minSessionMinutes"><option value="0" ${!current.minSessionMinutes?'selected':''}>Sin mínimo específico</option>${durationOptions(current.minSessionMinutes)}</select><span class="field-hint">Restricción dura. Por ejemplo, 45 min impide restos de 15 o 30 min.</span></div>
+      <div class="form-field"><label for="subjectMaxSessionMinutes">Duración máxima</label><select id="subjectMaxSessionMinutes" name="maxSessionMinutes"><option value="0" ${!current.maxSessionMinutes?'selected':''}>Sin máximo específico</option>${durationOptions(current.maxSessionMinutes)}</select><span class="field-hint">Restricción dura. El generador redistribuye el total semanal dentro del rango.</span></div>
       <fieldset class="full"><legend>Días permitidos</legend><div class="temporal-day-grid">${DAYS.map(day => `<label><input type="checkbox" name="allowedDay" value="${day.id}" ${allowed.has(day.id)?'checked':''}><span>${escapeHtml(day.label)}</span></label>`).join('')}</div><p class="field-hint">Debe quedar al menos un día permitido.</p></fieldset>
       <fieldset class="full"><legend>Días preferidos</legend><div class="temporal-day-grid">${DAYS.map(day => `<label><input type="checkbox" name="preferredDay" value="${day.id}" ${preferred.has(day.id)?'checked':''}><span>${escapeHtml(day.label)}</span></label>`).join('')}</div></fieldset>
       <div class="form-field"><label for="earliestStart">No empezar antes de</label><input id="earliestStart" name="earliestStart" type="time" value="${escapeHtml(current.earliestStart)}"><span class="field-hint">Restricción dura.</span></div>
@@ -93,6 +97,8 @@ export function openSubjectPatternForm({ course, subject, pattern, generation },
       try {
         const next = validateTimePattern({
           sessionMinutes:Number(data.get('sessionMinutes') || 0),
+          minSessionMinutes:Number(data.get('minSessionMinutes') || 0),
+          maxSessionMinutes:Number(data.get('maxSessionMinutes') || 0),
           maxSessionsPerDay:Number(data.get('maxSessionsPerDay') || 0),
           allowedDays,
           preferredDays:data.getAll('preferredDay'),
@@ -109,6 +115,10 @@ export function openSubjectPatternForm({ course, subject, pattern, generation },
       }
     }
   });
+}
+
+function durationOptions(selected) {
+  return SESSION_OPTIONS.map(value => `<option value="${value}" ${selected===value?'selected':''}>${value} min</option>`).join('');
 }
 
 function renderCourse(course, configured) {
