@@ -36,6 +36,38 @@ test('una sesión Bearer configura el backend sin necesitar Actor ID', () => {
   assert.equal(backendConfigured(settings), true);
 });
 
+test('una sesión Bearer no conserva un centro ajeno a sus membresías', () => {
+  const auth = {
+    access_token:'token-multi',
+    memberships:[
+      { school_id:'school-1', user_id:'user-1', role:'ADMIN' },
+      { school_id:'school-2', user_id:'user-1', role:'PLANNER' }
+    ],
+    school:null,
+    user:{ id:'user-1', email:'admin@centro.es', display_name:'Admin' }
+  };
+
+  const stale = backendSettingsFromAuth(
+    { enabled:true, baseUrl:'https://example.test', schoolId:'school-old' },
+    auth
+  );
+  assert.equal(stale.schoolId, '');
+  assert.equal(backendConfigured(stale), false);
+
+  const validStored = backendSettingsFromAuth(
+    { enabled:true, baseUrl:'https://example.test', schoolId:'school-2' },
+    auth
+  );
+  assert.equal(validStored.schoolId, 'school-2');
+
+  const explicitlySelected = backendSettingsFromAuth(
+    { enabled:true, baseUrl:'https://example.test', schoolId:'school-2' },
+    auth,
+    { schoolId:'school-1' }
+  );
+  assert.equal(explicitlySelected.schoolId, 'school-1');
+});
+
 test('Bearer tiene prioridad sobre X-Actor-Id en peticiones académicas', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
