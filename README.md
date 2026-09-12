@@ -1,55 +1,64 @@
-# Horario PT / AL
+# Planificador del centro
 
-Aplicación web para organizar la planificación semanal de **Pedagogía Terapéutica (PT)** y **Audición y Lenguaje (AL)** en un centro educativo.
+Aplicación web para construir, revisar y operar el horario de un centro educativo combinando **horario académico ordinario + apoyos PT + apoyos AL**.
 
-**Aplicación online:** https://wolcenon.github.io/Horario-PT-AL/
+**Aplicación publicada:** https://wolcenon.github.io/Horario-PT-AL/
 
-> Funciona completamente en el navegador y guarda los datos localmente mediante IndexedDB.
+La filosofía del producto es:
 
-## Funcionalidades incluidas
+> Configurar lo mínimo → calcular → revisar → corregir → recalcular.
 
-- CRUD real de alumnos, profesionales, grupos y sesiones.
-- Separación entre **grupo** (quién participa) y **sesión** (cuándo se reúne).
-- Calendario semanal con sesiones de duración variable.
-- **Drag & drop con ratón o pantalla táctil** para mover sesiones entre días y horas, conservando su duración y ajustando en intervalos de 15 minutos.
-- Revalidación automática de conflictos después de mover una sesión y confirmación si el cambio introduce conflictos graves.
-- Menú lateral **plegable**, con estado recordado y comportamiento superpuesto en tablet.
-- Filtro `TODOS | PT | AL`, manteniendo el servicio no seleccionado atenuado para conservar contexto.
-- Cálculo automático de horas PT y AL en minutos.
-- Indicadores de objetivo, asignado, pendiente y exceso.
-- Detección automática de conflictos por solapamiento real de intervalos.
-- Conflictos de alumnado y profesionales.
-- Restricciones horarias básicas del alumno.
-- Comprobación de disponibilidad del profesional.
-- Validación de relaciones PT/AL y referencias.
-- Persistencia con **IndexedDB** y preferencias simples con `localStorage`.
-- **Exportación e importación del horario completo en JSON** para compartirlo entre dispositivos o usuarios.
-- Importación validada antes de sustituir los datos existentes.
-- Datos de ejemplo con 20 alumnos, 4 profesionales, 8 grupos y 25 sesiones.
-- Diseño orientado a escritorio y tablet, con navegación mediante teclado.
+El proyecto conserva un modo local basado en IndexedDB y añade de forma progresiva cuenta, escenarios compartidos y operativa remota mediante GestorEscuela.
 
-## Ejecutar directamente
+## Modelo de planificación
 
-La forma más sencilla es abrir la versión publicada:
+El producto trabaja con un horario académico base y dos capas de apoyo, PT y AL. No son tres calendarios independientes: una sesión PT/AL puede superponerse parcialmente a una clase ordinaria cuando las reglas de extracción, personas y recursos lo permiten.
 
-**https://wolcenon.github.io/Horario-PT-AL/**
+La duración de un apoyo no determina la duración de la materia de origen. Por ejemplo, un apoyo PT de 30 minutos puede extraer a un alumno durante parte de una sesión ordinaria de 60 minutos sin dividir esa asignatura en dos bloques de 30.
 
-No requiere instalación, servidor propio ni cuenta de usuario.
+## Áreas principales
 
-Los datos introducidos se almacenan únicamente en el navegador/dispositivo utilizado. Abrir la aplicación en otro navegador u otro dispositivo crea un almacenamiento independiente.
+La navegación de integración se organiza en:
 
-## Compartir un horario
+- **Inicio**: resumen del centro y asistente inicial;
+- **Horario**: vista combinada, horario de apoyos, horario de aulas y conflictos;
+- **Centro**: clases/alumnado, profesorado, planificación académica, actividades, patrones temporales y reparto;
+- **Apoyos PT/AL**: necesidades, grupos, sesiones y optimización;
+- **Operativa**: conexión con la planificación diaria y GestorEscuela;
+- **Cuenta y datos**: sesión, escenarios, sincronización, importación/exportación y configuración avanzada.
 
-1. Abre el menú lateral.
-2. Pulsa **Exportar / compartir**.
-3. Se descargará un archivo `horario-pt-al-AAAA-MM-DD.json` con alumnos, profesionales, grupos y sesiones.
-4. Envía ese archivo a la otra persona por el medio que prefieras.
-5. En el otro dispositivo, abre la misma aplicación y pulsa **Importar horario**.
-6. Selecciona el JSON y confirma la sustitución del horario local.
+## Capacidades actuales
 
-La importación comprueba IDs duplicados, referencias entre alumnos/grupos/profesionales, tipos PT/AL, días y horarios antes de escribir en IndexedDB. El reemplazo se realiza en una única transacción.
+Entre otras, la rama de integración contiene:
 
-> Si el horario contiene datos reales de menores, trata el archivo JSON como información sensible y compártelo únicamente por canales apropiados para tu centro.
+- planificación académica del centro y estructura de clases;
+- horario semanal de aulas con vista centralizada por curso/clase;
+- materias con duración preferida, mínima y máxima de sesión;
+- reglas temporales y máximo de sesiones diarias por materia;
+- calendario PT/AL con sesiones de duración variable, incluidas sesiones de 30 minutos;
+- disponibilidad de profesionales y alumnado;
+- política explícita de extracción PT/AL con restricciones duras y preferencias blandas;
+- vista combinada del horario académico y los apoyos;
+- detección de conflictos y avisos;
+- generación automática del horario académico mediante Worker para no bloquear la interfaz;
+- optimización PT/AL también ejecutada en Worker;
+- propuestas revisables antes de aplicar cambios;
+- exportación/importación del proyecto completo;
+- IndexedDB como almacenamiento local;
+- cuenta Bearer opcional contra GestorEscuela;
+- cursos y escenarios online con snapshots compartidos;
+- listado y revocación de sesiones de cuenta;
+- throttling visible de login;
+- cambio y recuperación de contraseña;
+- sincronización de configuración académica para operativa diaria.
+
+## Modo local y modo online
+
+El proyecto sigue pudiendo utilizarse sin cuenta: IndexedDB conserva el estado del navegador y las funciones locales continúan disponibles sin backend.
+
+Al iniciar sesión, GestorEscuela aporta identidad multiusuario, membresías por centro, cursos académicos online, escenarios, snapshots y funciones operativas. El token Bearer se guarda únicamente en `sessionStorage`, no se incluye en exportaciones ni se persiste junto con el proyecto.
+
+Las conexiones antiguas `Actor ID` solo se muestran si el navegador ya tenía una configuración legacy. Las altas nuevas utilizan cuenta y contraseña.
 
 ## Desarrollo local
 
@@ -65,7 +74,7 @@ Después abre:
 http://localhost:8080
 ```
 
-La aplicación no tiene dependencias npm de producción. El pequeño servidor incluido se utiliza únicamente para desarrollo local.
+La aplicación no utiliza un framework pesado ni dependencias de producción en tiempo de ejecución.
 
 ## Pruebas
 
@@ -73,82 +82,57 @@ La aplicación no tiene dependencias npm de producción. El pequeño servidor in
 npm test
 ```
 
-Las pruebas cubren conversión de minutos, solapamientos, cálculo de horas, detección de conflictos y validación del formato compartible. El workflow de GitHub Pages comprueba además la sintaxis de los módulos principales antes de publicar.
+El workflow de integración ejecuta verificación de JavaScript, pruebas unitarias y Playwright E2E. GitHub Pages se despliega únicamente después de los cambios de la rama configurada para publicación.
 
-## Arquitectura
+Las regresiones cubren planificación, patrones temporales, conflictos, sharing, workers, vistas semanales, autenticación Bearer, sesiones, transición legacy y ciclo de contraseña.
 
-La aplicación usa JavaScript ES6 modular sin framework pesado:
+## Arquitectura resumida
 
-- `js/db.js`: infraestructura IndexedDB y reemplazo transaccional de horarios importados.
-- `js/repository.js`: operaciones persistentes y reglas de borrado/cascada.
-- `js/hours.js`: cálculo puro de horas.
-- `js/conflicts.js`: motor puro de conflictos por intervalos.
-- `js/alumnos.js`, `js/profesionales.js`, `js/grupos.js`, `js/sesiones.js`: vistas y formularios por dominio.
-- `js/calendar.js`: calendario semanal y drag & drop basado en Pointer Events.
-- `js/sharing.js`: exportación, validación e importación de horarios JSON.
-- `js/alerts.js`: resumen de conflictos.
-- `js/app.js`: composición, estado en memoria, navegación y refresco de vistas.
-- `js/seed.js`: datos ficticios reproducibles.
+La aplicación usa módulos ES6 y una separación progresiva entre dominio, persistencia y controladores. Algunos componentes relevantes son:
 
-La separación permite sustituir en el futuro `repository.js` / `db.js` por una API REST, Supabase o Firebase sin reescribir el núcleo de horas y conflictos.
+```text
+js/repository.js                  persistencia local y carga de estado
+js/global-scheduler.js            generador académico
+js/global-scheduler-worker.js     ejecución del generador fuera del hilo principal
+js/automation-scheduler.js        planificación PT/AL
+js/support-policy.js              política de extracción PT/AL
+js/time-patterns.js               patrones y duración de sesiones
+js/class-week-overview.js         composición de la semana de aula
+js/combined-schedule*.js          vista combinada
+js/backend-service.js             sesión y API GestorEscuela
+js/account-auth-service.js        cambio/recuperación de contraseña
+js/integration-*.js               cuenta, escenarios y sincronización
+js/sharing.js                     paquete exportable/importable
+```
 
-## Modelo de datos resumido
+La dirección arquitectónica del producto es que GestorEscuela pase a ser la fuente compartida de verdad para datos multiusuario y reglas comunes. La migración completa de IndexedDB al backend pertenece a las fases posteriores y no se fuerza todavía.
 
-### Alumno
+## Datos y privacidad
 
-`id`, `nombre`, `apellidos`, `curso`, `grupoClase`, `tutor`, `horasPTObjetivoMin`, `horasALObjetivoMin`, `observaciones`, `restricciones[]`, `activo`.
+El repositorio solo contiene código y datos ficticios. IndexedDB almacena los datos locales del navegador. Los paquetes JSON exportados y los snapshots remotos pueden contener información del centro y deben tratarse como datos sensibles cuando incluyan información real.
 
-### Profesional
+Los tokens Bearer no se exportan. La recuperación de contraseña usa tokens temporales de un solo uso y el backend no revela si un correo existe al solicitar recuperación.
 
-`id`, `nombre`, `tipo`, `disponibilidad{día:[intervalos]}`, `maxWeeklyMinutes`, `observaciones`, `activo`.
+Consulta `PRIVACY.md` y la documentación operativa del backend antes de utilizar datos reales.
 
-### Grupo
+## Documentación de producto
 
-`id`, `nombre`, `tipo`, `professionalId`, `studentIds[]`, `color`, `niveles`, `maxStudents`, `observaciones`, `activo`.
+`docs/PRODUCT_MODEL_AND_UX.md` contiene el modelo unificado del producto: horario de centro, capas PT/AL, restricciones duras/blandas, explicabilidad, flujo de revisión y evolución por fases.
 
-### Sesión
+## Backend
 
-`id`, `groupId`, `professionalId`, `dia`, `inicio`, `fin`, `aula`, `observaciones`, `excludedStudentIds[]`.
+La integración usa GestorEscuela/FastAPI. El backend de producción configurado actualmente es:
 
-## Reglas de negocio principales
+```text
+https://gestorescuela-production.up.railway.app
+```
 
-1. La duración se calcula como diferencia entre hora de inicio y fin.
-2. Objetivos y asignaciones se procesan internamente en minutos.
-3. Las horas asignadas a un alumno se derivan de las sesiones de los grupos en los que participa.
-4. Un grupo PT solo puede tener un profesional PT; lo mismo para AL.
-5. Una sesión hereda el profesional responsable del grupo.
-6. Los solapamientos usan la regla `max(inicios) < min(finales)`.
-7. Los conflictos se recalculan tras cada operación o movimiento.
-8. El drag & drop conserva la duración de la sesión.
-9. Borrar un alumno lo retira de sus grupos.
-10. Borrar un grupo elimina sus sesiones asociadas.
-11. No se permite borrar un profesional mientras siga asignado a grupos.
-12. Una importación valida el archivo completo antes de sustituir el horario local.
-
-## Privacidad
-
-El repositorio contiene únicamente el código y los datos ficticios incluidos en el proyecto. Los datos que una persona introduzca al usar la aplicación se guardan en el navegador mediante IndexedDB y no se suben al repositorio.
-
-Los archivos exportados sí contienen los datos del horario para permitir compartirlos, por lo que deben tratarse de acuerdo con las políticas de privacidad y protección de datos del centro.
-
-Consulta [PRIVACY.md](PRIVACY.md) antes de utilizar datos reales de alumnado.
-
-## Próximas mejoras
-
-- Creación de sesiones arrastrando directamente sobre una franja vacía.
-- Panel individual avanzado de alumno y profesional.
-- Restricciones avanzadas.
-- Dashboard ampliado.
-- Informes, impresión y PDF.
-- Buscar huecos y optimización automática.
-- Versiones y deshacer/rehacer.
-- PWA.
-- Backend opcional para sincronización multiusuario en tiempo real.
+El usuario no necesita introducir UUID técnicos en el flujo normal: la sesión devuelve sus centros y permisos. El selector muestra el nombre del centro y solo permite elegir membresías incluidas en la cuenta autenticada.
 
 ## Despliegue
 
-Cada `push` a `main` ejecuta el workflow de GitHub Actions incluido en `.github/workflows/pages.yml`, valida la aplicación y publica automáticamente el sitio estático en GitHub Pages.
+La rama de integración dispone de CI con unitarios + Playwright y despliegue GitHub Pages. Antes de una futura fusión a `main`, la Fase 0 exige activar rulesets/required checks para impedir fusiones con CI pendiente o fallido.
 
 ## Licencia
 
-Distribuido bajo licencia **MIT**. Consulta [LICENSE](LICENSE).
+Consulta `LICENSE` para las condiciones del repositorio.
