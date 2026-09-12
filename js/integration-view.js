@@ -1,3 +1,8 @@
+import {
+  changeBackendPassword,
+  confirmBackendPasswordReset,
+  requestBackendPasswordReset
+} from './account-auth-service.js';
 import { backendConfigured, normalizeBackendSettings } from './backend-service.js';
 import { buildGestorEscuelaConfiguration } from './gestor-adapter.js';
 import { escapeHtml } from './utils.js';
@@ -38,6 +43,7 @@ export function renderIntegrationView(root, {
   const legacyConfigured = Boolean(!hasBearerSession && normalized.actorId && normalized.schoolId);
   const modeLabel = hasBearerSession ? 'Sesión activa' : legacyConfigured ? 'Compatibilidad' : normalized.enabled ? 'Online pendiente' : 'Offline';
   const localAcademicYear = String(state.centerPlanningSettings?.academicYear || '').trim();
+  const resetToken = readResetToken();
 
   root.innerHTML = `<div class="integration-view">
     <section class="card integration-hero">
@@ -49,7 +55,7 @@ export function renderIntegrationView(root, {
       <span class="integration-mode ${hasBearerSession || legacyConfigured ? 'is-hybrid' : 'is-offline'}">${escapeHtml(modeLabel)}</span>
     </section>
 
-    ${renderAccountCard(normalized, auth, { hasBearerSession, legacyConfigured })}
+    ${renderAccountCard(normalized, auth, { hasBearerSession, legacyConfigured, resetToken })}
 
     ${renderAcademicContextCard(normalized, configured, context, localAcademicYear)}
 
@@ -129,6 +135,58 @@ export function renderIntegrationView(root, {
     });
   });
 
+  const changePasswordForm = root.querySelector('#backendChangePasswordForm');
+  changePasswordForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const data = new FormData(changePasswordForm);
+    const statusNode = root.querySelector('[data-change-password-status]');
+    setInlineStatus(statusNode, 'Guardando la contraseña nueva…');
+    try {
+      await changeBackendPassword(normalized, {
+        currentPassword:data.get('currentPassword'),
+        newPassword:data.get('newPassword')
+      });
+      changePasswordForm.reset();
+      setInlineStatus(statusNode, 'Contraseña actualizada. Las otras sesiones se han cerrado.', 'ok');
+    } catch (error) {
+      setInlineStatus(statusNode, error.message || 'No se pudo cambiar la contraseña.', 'error');
+    }
+  });
+
+  const resetRequestForm = root.querySelector('#backendPasswordResetRequestForm');
+  resetRequestForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const data = new FormData(resetRequestForm);
+    const statusNode = root.querySelector('[data-password-reset-request-status]');
+    setInlineStatus(statusNode, 'Preparando la recuperación…');
+    try {
+      await requestBackendPasswordReset({ baseUrl:normalized.baseUrl, email:data.get('email') });
+      setInlineStatus(statusNode, 'Si existe una cuenta con ese correo, recibirás un enlace para elegir una contraseña nueva.', 'ok');
+    } catch (error) {
+      setInlineStatus(statusNode, error.message || 'No se pudo solicitar la recuperación.', 'error');
+    }
+  });
+
+  const resetConfirmForm = root.querySelector('#backendPasswordResetConfirmForm');
+  resetConfirmForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const data = new FormData(resetConfirmForm);
+    const statusNode = root.querySelector('[data-password-reset-confirm-status]');
+    setInlineStatus(statusNode, 'Actualizando la contraseña…');
+    try {
+      await confirmBackendPasswordReset({
+        baseUrl:normalized.baseUrl,
+        token:resetToken,
+        newPassword:data.get('newPassword')
+      });
+      resetConfirmForm.reset();
+      removeResetTokenFromUrl();
+      setInlineStatus(statusNode, 'Contraseña restablecida. Ya puedes iniciar sesión con la contraseña nueva.', 'ok');
+    } catch (error) {
+      setInlineStatus(statusNode, error.message || 'El enlace de recuperación no es válido o ha caducado.', 'error');
+    }
+  });
+
   const academicYearSelect = root.querySelector('[data-academic-year-select]');
   academicYearSelect?.addEventListener('change', async () => onSelectAcademicYear(academicYearSelect.value));
   const scenarioSelect = root.querySelector('[data-scenario-select]');
@@ -153,22 +211,36 @@ export function renderIntegrationView(root, {
   });
 }
 
-function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured }) {
+function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured, resetToken }) {
   if (hasBearerSession) {
     const session = auth.session;
     const memberships = Array.isArray(session?.memberships) ? session.memberships : [];
     const selectedMembership = memberships.find(item => String(item.school_id) === settings.schoolId);
     const userName = session?.user?.display_name || session?.user?.email || 'Usuario conectado';
     const email = session?.user?.email || '';
+    const selectedSchoolName = selectedMembership?.school_name || (settings.schoolId ? shortId(settings.schoolId) : 'Selecciona un centro');
     return `<section class="card integration-account-card">
       <div class="card-header"><div><h2>Sesión</h2><small>La credencial Bearer vive solo en esta pestaña/sesión del navegador; no se incluye al exportar el horario.</small></div><span class="badge badge-success">Conectado</span></div>
       <div class="card-body integration-form">
         ${auth.error ? `<div class="integration-status is-error"><strong>⚠ Sesión no verificada</strong><span>${escapeHtml(auth.error)}</span></div>` : ''}
         <div class="integration-session-summary">
           <div><span>Usuario</span><strong>${escapeHtml(userName)}</strong>${email && email !== userName ? `<small>${escapeHtml(email)}</small>` : ''}</div>
-          <div><span>Centro activo</span><strong>${settings.schoolId ? escapeHtml(shortId(settings.schoolId)) : 'Selecciona un centro'}</strong><small>${selectedMembership ? escapeHtml(selectedMembership.role || '') : 'La sesión puede pertenecer a más de un centro.'}</small></div>
+          <div><span>Centro activo</span><strong>${escapeHtml(selectedSchoolName)}</strong><small>${selectedMembership ? escapeHtml(selectedMembership.role || '') : 'La sesión puede pertenecer a más de un centro.'}</small></div>
         </div>
-        ${memberships.length > 1 ? `<div class="form-field"><label for="authSchoolSelect">Centro de trabajo</label><select id="authSchoolSelect" data-auth-school-select><option value="">Selecciona un centro…</option>${memberships.map(item => `<option value="${escapeHtml(item.school_id)}" ${String(item.school_id) === settings.schoolId ? 'selected' : ''}>${escapeHtml(shortId(item.school_id))} · ${escapeHtml(item.role || 'Miembro')}</option>`).join('')}</select><span class="field-hint">Solo puedes seleccionar centros incluidos en la sesión autenticada.</span></div>` : ''}
+        ${memberships.length > 1 ? `<div class="form-field"><label for="authSchoolSelect">Centro de trabajo</label><select id="authSchoolSelect" data-auth-school-select><option value="">Selecciona un centro…</option>${memberships.map(item => `<option value="${escapeHtml(item.school_id)}" ${String(item.school_id) === settings.schoolId ? 'selected' : ''}>${escapeHtml(item.school_name || shortId(item.school_id))} · ${escapeHtml(item.role || 'Miembro')}</option>`).join('')}</select><span class="field-hint">Solo puedes seleccionar centros incluidos en la sesión autenticada.</span></div>` : ''}
+        <details class="integration-details">
+          <summary>Seguridad de la cuenta</summary>
+          <form id="backendChangePasswordForm" class="integration-note">
+            <strong>Cambiar contraseña</strong>
+            <span>Al cambiarla se cerrarán las demás sesiones de la cuenta; esta sesión seguirá activa.</span>
+            <div class="form-grid">
+              <div class="form-field"><label for="currentAccountPassword">Contraseña actual</label><input id="currentAccountPassword" name="currentPassword" type="password" autocomplete="current-password" required maxlength="128"></div>
+              <div class="form-field"><label for="newAccountPassword">Contraseña nueva</label><input id="newAccountPassword" name="newPassword" type="password" autocomplete="new-password" required minlength="10" maxlength="128"><span class="field-hint">Mínimo 10 caracteres.</span></div>
+            </div>
+            <button class="button" type="submit">Cambiar contraseña</button>
+            <div class="integration-status" data-change-password-status>Sin cambios pendientes.</div>
+          </form>
+        </details>
         ${renderSessionManagement(auth)}
         <div class="button-row"><button class="button" type="button" data-logout-backend>Cerrar esta sesión</button><button class="button button-danger" type="button" data-logout-all-backend>Cerrar todas las sesiones</button></div>
       </div>
@@ -192,6 +264,18 @@ function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured 
         <div class="form-field"><label for="registerPassword">Contraseña</label><input id="registerPassword" name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="128"><span class="field-hint">Mínimo 10 caracteres.</span></div>
         <button class="button" type="submit">Crear centro y entrar</button>
       </form>
+      <form id="backendPasswordResetRequestForm" class="integration-auth-panel">
+        <div><strong>Recuperar contraseña</strong><small>Te enviaremos un enlace de un solo uso si el correo corresponde a una cuenta.</small></div>
+        <div class="form-field"><label for="resetRequestEmail">Correo</label><input id="resetRequestEmail" name="email" type="email" autocomplete="email" required maxlength="320" placeholder="correo@centro.es"></div>
+        <button class="button" type="submit">Enviar enlace de recuperación</button>
+        <div class="integration-status" data-password-reset-request-status>La respuesta no revelará si el correo existe.</div>
+      </form>
+      ${resetToken ? `<form id="backendPasswordResetConfirmForm" class="integration-auth-panel integration-wide">
+        <div><strong>Elegir contraseña nueva</strong><small>El enlace de recuperación es de un solo uso y caduca.</small></div>
+        <div class="form-field"><label for="resetNewPassword">Contraseña nueva</label><input id="resetNewPassword" name="newPassword" type="password" autocomplete="new-password" required minlength="10" maxlength="128"><span class="field-hint">Mínimo 10 caracteres.</span></div>
+        <button class="button button-primary" type="submit">Guardar contraseña nueva</button>
+        <div class="integration-status" data-password-reset-confirm-status>Enlace de recuperación detectado.</div>
+      </form>` : ''}
       ${auth.status ? renderAuthStatus(auth.status) : ''}
       ${legacyConfigured ? '<div class="integration-note integration-wide"><strong>Conexión de transición activa</strong><span>Este navegador conserva una conexión Actor ID creada anteriormente. Puede seguir utilizándose durante la migración, pero las altas nuevas ya requieren una cuenta con contraseña.</span></div>' : ''}
     </div>
@@ -408,4 +492,30 @@ function academicYearMatches(left, right) {
 function shortId(value) {
   const text = String(value || '');
   return text.length > 12 ? `${text.slice(0, 8)}…${text.slice(-4)}` : text;
+}
+
+function readResetToken() {
+  try {
+    if (typeof location === 'undefined') return '';
+    return String(new URLSearchParams(location.search).get('reset_token') || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+function removeResetTokenFromUrl() {
+  try {
+    if (typeof location === 'undefined' || typeof history === 'undefined') return;
+    const url = new URL(location.href);
+    url.searchParams.delete('reset_token');
+    history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // La contraseña ya se cambió; limpiar la URL es solo una mejora de privacidad visual.
+  }
+}
+
+function setInlineStatus(node, message, kind = '') {
+  if (!node) return;
+  node.textContent = String(message || '');
+  node.className = `integration-status${kind === 'ok' ? ' is-ok' : kind === 'error' ? ' is-error' : ''}`;
 }
