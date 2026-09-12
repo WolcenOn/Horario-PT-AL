@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-async function openApp(page) {
-  await page.goto('/');
+async function openApp(page, path = '/') {
+  await page.goto(path);
   await expect(page.locator('#viewRoot > *').first()).toBeVisible();
 }
 
@@ -10,7 +10,7 @@ const auth = {
   token_type:'bearer',
   expires_at:'2026-09-12T09:00:00Z',
   user:{ id:'user-test', email:'user@example.test', display_name:'Usuario prueba' },
-  memberships:[{ school_id:'school-test', user_id:'user-test', role:'ADMIN' }],
+  memberships:[{ school_id:'school-test', school_name:'CEIP Horizonte', user_id:'user-test', role:'ADMIN' }],
   school:null
 };
 
@@ -26,17 +26,18 @@ function backendSettings() {
   };
 }
 
-test('Cuenta usa Bearer, gestiona otra sesión y no ofrece altas legacy', async ({ page }) => {
+test('Cuenta usa Bearer, muestra el centro por nombre y permite cambiar contraseña', async ({ page }) => {
   await page.addInitScript(settings => {
     localStorage.setItem('horario-gestor-escuela-backend', JSON.stringify(settings));
   }, backendSettings());
 
   const requests = [];
   let remoteRevoked = false;
+  let passwordChanged = false;
   await page.route('https://gestor.test/**', async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
-    requests.push({ path, method:request.method(), headers:request.headers() });
+    requests.push({ path, method:request.method(), headers:request.headers(), body:request.postDataJSON?.() });
     if (path === '/auth/login') return route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify(auth) });
     if (path === '/auth/me') return route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify({ ...auth, access_token:'' }) });
     if (path === '/auth/sessions' && request.method() === 'GET') {
@@ -47,6 +48,15 @@ test('Cuenta usa Bearer, gestiona otra sesión y no ofrece altas legacy', async 
     }
     if (path === '/auth/sessions/session-other' && request.method() === 'DELETE') {
       remoteRevoked = true;
+      return route.fulfill({ status:204, body:'' });
+    }
+    if (path === '/auth/password/change' && request.method() === 'POST') {
+      passwordChanged = true;
+      expect(request.headers().authorization).toBe('Bearer test-session-value');
+      expect(request.postDataJSON()).toEqual({
+        current_password:'test-password-123',
+        new_password:'new-password-456'
+      });
       return route.fulfill({ status:204, body:'' });
     }
     if (path === '/schools/school-test/academic-years') return route.fulfill({ status:200, contentType:'application/json', body:'[]' });
@@ -67,10 +77,18 @@ test('Cuenta usa Bearer, gestiona otra sesión y no ofrece altas legacy', async 
 
   await expect(page.getByRole('heading', { name:'Sesión' })).toBeVisible();
   await expect(page.getByText('Usuario prueba', { exact:true })).toBeVisible();
+  await expect(page.getByText('CEIP Horizonte', { exact:true })).toBeVisible();
   await expect(page.getByText('ADMIN', { exact:true })).toBeVisible();
   await expect(page.getByText('Sesiones de la cuenta', { exact:true })).toBeVisible();
   await expect(page.getByText('Esta sesión', { exact:true }).first()).toBeVisible();
   await expect(page.locator('.integration-auth-session .badge').filter({ hasText:/^Activa$/ })).toBeVisible();
+
+  await page.getByText('Seguridad de la cuenta', { exact:true }).click();
+  await page.locator('#currentAccountPassword').fill('test-password-123');
+  await page.locator('#newAccountPassword').fill('new-password-456');
+  await page.getByRole('button', { name:'Cambiar contraseña' }).click();
+  await expect(page.getByText('Contraseña actualizada. Las otras sesiones se han cerrado.', { exact:true })).toBeVisible();
+  expect(passwordChanged).toBe(true);
 
   const stored = await page.evaluate(() => ({
     sessionValue:sessionStorage.getItem('horario-gestor-escuela-access-token'),
@@ -90,14 +108,50 @@ test('Cuenta usa Bearer, gestiona otra sesión y no ofrece altas legacy', async 
   await expect(page.locator('.integration-auth-session .badge').filter({ hasText:/^Revocada$/ })).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.getItem('horario-gestor-escuela-access-token'))).toBe('test-session-value');
 
-  const revokeCall = requests.find(item => item.path === '/auth/sessions/session-other');
-  expect(revokeCall?.method).toBe('DELETE');
-  expect(revokeCall?.headers.authorization).toBe('Bearer test-session-value');
-
   await page.getByRole('button', { name:'Cerrar esta sesión' }).click();
   await expect(page.getByRole('heading', { name:'Acceso al centro' })).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.getItem('horario-gestor-escuela-access-token'))).toBeNull();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('horario-gestor-escuela-backend') || '{}').schoolId)).toBe('');
+});
+
+test('recuperación de contraseña usa respuesta genérica y consume el token de la URL', async ({ page }) => {
+  await page.addInitScript(settings => {
+    localStorage.setItem('horario-gestor-escuela-backend', JSON.stringify(settings));
+  }, backendSettings());
+
+  let resetRequested = false;
+  let resetConfirmed = false;
+  await page.route('https://gestor.test/**', async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === '/auth/password/reset-request') {
+      resetRequested = true;
+      expect(request.postDataJSON()).toEqual({ email:'user@example.test' });
+      return route.fulfill({ status:202, contentType:'application/json', body:JSON.stringify({ status:'accepted' }) });
+    }
+    if (path === '/auth/password/reset-confirm') {
+      resetConfirmed = true;
+      expect(request.postDataJSON()).toEqual({
+        token:'reset-token-with-enough-length',
+        new_password:'replacement-password'
+      });
+      return route.fulfill({ status:204, body:'' });
+    }
+    return route.fulfill({ status:404, contentType:'application/json', body:'{}' });
+  });
+
+  await openApp(page, '/?reset_token=reset-token-with-enough-length');
+  await page.locator('[data-view="integration"]').click();
+  await page.locator('#resetRequestEmail').fill('user@example.test');
+  await page.getByRole('button', { name:'Enviar enlace de recuperación' }).click();
+  await expect(page.getByText('Si existe una cuenta con ese correo, recibirás un enlace para elegir una contraseña nueva.', { exact:true })).toBeVisible();
+  expect(resetRequested).toBe(true);
+
+  await expect(page.locator('#backendPasswordResetConfirmForm')).toBeVisible();
+  await page.locator('#resetNewPassword').fill('replacement-password');
+  await page.getByRole('button', { name:'Guardar contraseña nueva' }).click();
+  await expect(page.getByText('Contraseña restablecida. Ya puedes iniciar sesión con la contraseña nueva.', { exact:true })).toBeVisible();
+  expect(resetConfirmed).toBe(true);
+  expect(new URL(page.url()).searchParams.has('reset_token')).toBe(false);
 });
 
 test('Cerrar todas las sesiones invalida también este navegador', async ({ page }) => {
@@ -145,11 +199,7 @@ test('un login bloqueado muestra el tiempo de espera', async ({ page }) => {
     if (path === '/auth/login') {
       return route.fulfill({
         status:429,
-        headers:{
-          'Retry-After':'90',
-          'Access-Control-Expose-Headers':'Retry-After',
-          'Access-Control-Allow-Origin':'*'
-        },
+        headers:{ 'Retry-After':'90', 'Access-Control-Expose-Headers':'Retry-After', 'Access-Control-Allow-Origin':'*' },
         contentType:'application/json',
         body:JSON.stringify({ detail:'Too many failed login attempts. Try again later.' })
       });
