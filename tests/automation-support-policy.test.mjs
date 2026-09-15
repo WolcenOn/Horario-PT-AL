@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateAutomaticProposal, normalizeAutomationSettings } from '../js/automation-core.js';
+import { sessionDuration } from '../js/hours.js';
+import { PREFERRED_SUPPORT_SESSION_MINUTES } from '../js/support-policy.js';
 
 const days = ['lunes','martes','miercoles','jueves','viernes'];
 
@@ -39,7 +41,7 @@ function stateFor(type) {
     students:[student],
     professionals:[professional],
     groups:[group],
-    sessions:[{ id:`ses-${type}`, groupId:group.id, professionalId:professional.id, dia:'lunes', inicio:'09:00', fin:'09:30' }],
+    sessions:[{ id:`ses-${type}`, groupId:group.id, professionalId:professional.id, dia:'lunes', inicio:'09:00', fin:'09:45' }],
     classSchedules,
     schoolSettings:{
       id:'school',
@@ -50,10 +52,31 @@ function stateFor(type) {
   };
 }
 
+test('la preferencia PT/AL queda fijada en 45 minutos sin convertirla en obligación', () => {
+  assert.equal(PREFERRED_SUPPORT_SESSION_MINUTES, 45);
+});
+
 test('la normalización conserva la regla dura de extracción junto a la prioridad antigua', () => {
   const normalized = normalizeAutomationSettings(stateFor('PT').automationSettings);
   assert.equal(normalized.courseRules['4º'].subjectPriorities.Lengua, 'medium');
   assert.deepEqual(normalized.courseRules['4º'].subjectPolicies.Lengua, { extraction:'pt' });
+});
+
+test('un apoyo PT preferido de 45 min puede ocupar solo parte de una clase ordinaria de 60 min', () => {
+  const state = stateFor('PT');
+  const proposal = generateAutomaticProposal(state, state.automationSettings);
+  assert.equal(proposal.ok, true);
+  assert.equal(sessionDuration(proposal.sessions[0]), 45);
+  assert.equal(proposal.sessions[0].inicio >= '09:00', true);
+  assert.equal(proposal.sessions[0].fin <= '10:00', true);
+});
+
+test('una duración distinta sigue siendo válida cuando el apoyo la necesita', () => {
+  const state = stateFor('PT');
+  state.sessions[0] = { ...state.sessions[0], fin:'09:30' };
+  const proposal = generateAutomaticProposal(state, state.automationSettings);
+  assert.equal(proposal.ok, true);
+  assert.equal(sessionDuration(proposal.sessions[0]), 30);
 });
 
 test('una materia configurada como solo PT admite PT pero no AL', () => {
