@@ -1,6 +1,7 @@
 export const SUPPORT_TYPES = Object.freeze(['PT', 'AL']);
 export const EXTRACTION_MODES = Object.freeze(['blocked', 'pt', 'al', 'ptal']);
 export const EXTRACTION_PREFERENCES = Object.freeze(['preferred', 'neutral', 'avoid']);
+export const PREFERRED_SUPPORT_SESSION_MINUTES = 45;
 
 const LEGACY_POLICIES = Object.freeze({
   low:{ extraction:'ptal', preference:'preferred', score:30 },
