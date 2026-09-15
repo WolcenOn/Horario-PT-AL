@@ -1,7 +1,8 @@
 import { DAYS } from './constants.js';
 import { detectConflicts } from './conflicts.js';
-import { escapeHtml, formatDuration, fullName, timeToMinutes, uid } from './utils.js';
+import { escapeHtml, formatDuration, fullName, minutesToTime, timeToMinutes, uid } from './utils.js';
 import { sessionDuration } from './hours.js';
+import { PREFERRED_SUPPORT_SESSION_MINUTES } from './support-policy.js';
 import { showModal, setModalMessage } from './ui.js';
 
 export function renderSessions(root, { state, serviceFilter, conflicts, onEdit, onDelete }) {
@@ -23,7 +24,9 @@ export function renderSessions(root, { state, serviceFilter, conflicts, onEdit, 
 }
 
 export function openSessionForm(session, { state, onSave }) {
-  const current=session||{dia:'lunes',inicio:'09:00',fin:'09:45'};
+  const defaultStart='09:00';
+  const defaultEnd=minutesToTime(timeToMinutes(defaultStart) + PREFERRED_SUPPORT_SESSION_MINUTES);
+  const current=session||{dia:'lunes',inicio:defaultStart,fin:defaultEnd};
   const activeGroups=state.groups.filter(g=>g.activo!==false);
   const groupOptions=activeGroups.map(g=>`<option value="${g.id}" ${g.id===current.groupId?'selected':''}>${g.tipo} · ${escapeHtml(g.nombre)}</option>`).join('');
   const dayOptions=DAYS.map(d=>`<option value="${d.id}" ${d.id===current.dia?'selected':''}>${d.label}</option>`).join('');
@@ -31,8 +34,8 @@ export function openSessionForm(session, { state, onSave }) {
     <div class="form-field full"><label for="groupId">Grupo *</label><select id="groupId" name="groupId" required><option value="">Selecciona un grupo</option>${groupOptions}</select><small id="groupInfo" class="field-hint"></small></div>
     <div class="form-field"><label for="dia">Día *</label><select id="dia" name="dia">${dayOptions}</select></div>
     <div class="form-field"><label for="aula">Aula / espacio</label><input id="aula" name="aula" value="${escapeHtml(current.aula||'')}"></div>
-    <div class="form-field"><label for="inicio">Inicio *</label><input id="inicio" name="inicio" type="time" required value="${current.inicio||'09:00'}"></div>
-    <div class="form-field"><label for="fin">Fin *</label><input id="fin" name="fin" type="time" required value="${current.fin||'09:45'}"></div>
+    <div class="form-field"><label for="inicio">Inicio *</label><input id="inicio" name="inicio" type="time" required value="${current.inicio||defaultStart}"></div>
+    <div class="form-field"><label for="fin">Fin *</label><input id="fin" name="fin" type="time" required value="${current.fin||defaultEnd}"><small class="field-hint">Preferencia PT/AL: ${PREFERRED_SUPPORT_SESSION_MINUTES} min. Puedes usar otra duración cuando el apoyo lo necesite.</small></div>
     <div class="form-field full"><label for="observaciones">Observaciones</label><textarea id="observaciones" name="observaciones">${escapeHtml(current.observaciones||'')}</textarea></div>
   </div>`,
   onOpen:form=>{
