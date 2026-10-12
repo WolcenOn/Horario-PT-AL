@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeCenterPlanningSettings } from '../js/center-planning.js';
 import { buildWeeklyPreviewRequest } from '../js/weekly-preview-adapter.js';
-import { parseRoomResources, formatRoomResources, parseTravelRules, supportRoomId } from '../js/weekly-location-rules.js';
+import {
+  parseRoomResources, formatRoomResources, parseTravelRules, supportRoomId,
+  normalizeRoomFeatures, ROOM_FEATURES
+} from '../js/weekly-location-rules.js';
 
 const intervals=Object.fromEntries(
   ['lunes','martes','miercoles','jueves','viernes']
@@ -325,4 +328,83 @@ test('si la selección automática no está activada se conserva el flujo anteri
   assert.equal(payload.supports[0].room_candidates,undefined);
   const defaults=normalizeCenterPlanningSettings({mode:'global'}).generation;
   assert.equal(defaults.autoAssignSupportRooms,false);
+});
+
+
+test('equipamiento de sala se conserva al editar y validar el inventario',()=>{
+  const original=[
+    'Sala individual | 1 | acceso_sin_escalones,mesa_regulable',
+    'Sala AL | 4 | lunes | 09:00 | 12:00 | aislamiento_acustico,material_logopedico',
+    'Sala AL | 4 | jueves | 09:00 | 11:00 | aislamiento_acustico,material_logopedico'
+  ].join('\n');
+  const rooms=parseRoomResources(original);
+  assert.deepEqual(rooms[0].features,['acceso_sin_escalones','mesa_regulable']);
+  assert.deepEqual(rooms[1].features,['aislamiento_acustico','material_logopedico']);
+  assert.equal(rooms[1].windows.length,2);
+  assert.deepEqual(parseRoomResources(formatRoomResources(rooms)),rooms);
+  assert.equal(ROOM_FEATURES.length,5);
+});
+
+test('no permite características personales ni códigos de equipamiento desconocidos',()=>{
+  assert.throws(()=>parseRoomResources('Sala | 3 | dato_personal'),/características/);
+  assert.throws(()=>parseRoomResources(
+    'Sala | 3 | lunes | 09:00 | 10:00 | mesa_regulable,mesa_regulable'
+  ),/características/);
+  assert.throws(()=>parseRoomResources(
+    'Sala | 3 | lunes | 09:00 | 10:00 | mesa_regulable\n'
+    +'Sala | 3 | martes | 09:00 | 10:00 | aislamiento_acustico'
+  ),/inconsistente/);
+  assert.deepEqual(normalizeRoomFeatures(['mesa_regulable','dato_personal']),[
+    'mesa_regulable'
+  ]);
+});
+
+test('manda características de sala y requisitos PT anónimos al solver',()=>{
+  const state=fixture();
+  state.centerPlanningSettings.generation.autoAssignSupportRooms=true;
+  state.centerPlanningSettings.generation.supportRoomRequirements={
+    PT:['mesa_regulable','acceso_sin_escalones'],AL:[]
+  };
+  state.centerPlanningSettings.generation.roomResources=[
+    {roomId:'ROOM-1',capacity:1,features:[],windows:[]},
+    {roomId:'ROOM-2',capacity:2,features:[
+      'mesa_regulable','acceso_sin_escalones'
+    ],windows:[]}
+  ];
+  const {payload}=buildWeeklyPreviewRequest(state);
+  assert.deepEqual(payload.supports[0].room_candidates,['ROOM-1','ROOM-2']);
+  assert.deepEqual(payload.supports[0].required_features,[
+    'mesa_regulable','acceso_sin_escalones'
+  ]);
+  assert.deepEqual(payload.rooms[1].features,[
+    'mesa_regulable','acceso_sin_escalones'
+  ]);
+  assert.equal(JSON.stringify(payload).includes('p-1'),false);
+});
+
+test('los requisitos por servicio también se aplican a los apoyos grupales',()=>{
+  const state=fixture();
+  state.centerPlanningSettings.generation.supportRoomRequirements={
+    PT:['aislamiento_acustico'],AL:['material_logopedico']
+  };
+  state.students.push({
+    id:'private-2',curso:'1º',grupoClase:'1ºA',
+    horasPTObjetivoMin:45,activo:true
+  });
+  state.groups[0].studentIds.push('private-2');
+  state.sessions[0].excludedStudentIds=['private-2'];
+  const {payload}=buildWeeklyPreviewRequest(state);
+  assert.deepEqual(payload.group_supports[0].required_features,[
+    'aislamiento_acustico'
+  ]);
+  assert.equal(JSON.stringify(payload).includes('private-2'),false);
+});
+
+test('no se inventan requisitos ni capacidades en las configuraciones antiguas',()=>{
+  const generation=normalizeCenterPlanningSettings({mode:'global'}).generation;
+  assert.deepEqual(generation.supportRoomRequirements,{PT:[],AL:[]});
+  const state=fixture();
+  const {payload}=buildWeeklyPreviewRequest(state);
+  assert.equal(payload.supports[0].required_features,undefined);
+  assert.equal(payload.rooms.length,0);
 });
