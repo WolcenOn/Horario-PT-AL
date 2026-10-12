@@ -268,5 +268,5 @@ export function buildAnonymousSupportPreview(state, lessons, {autoFormGroups=tru
   }
   if(omitted)warnings.push(`${omitted} necesidad(es) PT/AL pendientes no se han incluido: falta un grupo inequívoco, clase configurada o duración compatible.`);
   if(supports.length||groupSupports.length)warnings.push('Los apoyos propuestos todavía requieren revisión antes de aplicarse. No se modelan desplazamientos ni espacios compartidos.');
-  return {supports,groupSupports,busy,teachers:[...references.values()],warnings};
+  return {supports,groupSupports,busy,teachers:[...references.values()],warnings,autoGroups:automaticGroups.length};
 }
