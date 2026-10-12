@@ -146,7 +146,12 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
       start_time:generation.start, end_time:generation.end,
       lessons, supports:support.supports, group_supports:support.groupSupports,
       busy, max_time_seconds:5,
-      travel_minutes:generation.travelMinutes
+      travel_minutes:generation.travelMinutes,
+      travel_rules:generation.travelRules.map(rule=>({
+        from_location_id:rule.fromLocationId,
+        to_location_id:rule.toLocationId,
+        minutes:rule.minutes
+      }))
     },
     warnings,
     autoGroups:support.autoGroups || 0
