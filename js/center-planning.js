@@ -42,7 +42,9 @@ export const DEFAULT_GLOBAL_GENERATION = Object.freeze({
   end:'14:00',
   lessonMinutes:45,
   stepMinutes:15,
-  maxSameSubjectPerDay:2
+  maxSameSubjectPerDay:2,
+  travelMinutes:0,
+  supportRoomId:''
 });
 
 export function normalizeCenterPlanningSettings(value) {
@@ -120,7 +122,14 @@ export function normalizeGlobalGeneration(value) {
     end:validTime(source.end) ? source.end : DEFAULT_GLOBAL_GENERATION.end,
     lessonMinutes,
     stepMinutes:15,
-    maxSameSubjectPerDay:clampInteger(source.maxSameSubjectPerDay, 1, 4, DEFAULT_GLOBAL_GENERATION.maxSameSubjectPerDay)
+    maxSameSubjectPerDay:clampInteger(
+      source.maxSameSubjectPerDay, 1, 4, DEFAULT_GLOBAL_GENERATION.maxSameSubjectPerDay
+    ),
+    // Opt-in, not a guessed travel time between unknown school locations.
+    travelMinutes:[0,15,30,45,60].includes(Number(source.travelMinutes))
+      ? Number(source.travelMinutes)
+      : DEFAULT_GLOBAL_GENERATION.travelMinutes,
+    supportRoomId:String(source.supportRoomId || '').trim().slice(0,64)
   };
 }
 
