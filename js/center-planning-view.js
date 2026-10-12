@@ -2,7 +2,7 @@ import { COURSE_OPTIONS, configuredClassGroups, schoolStructureConfigured } from
 import { curriculumCoverage, curriculumForCourse, curriculumSubjectsForCourse, normalizeCenterPlanningSettings, normalizeProfessionalProfile, PLANNING_MODES, RESPONSIBILITY_TYPES } from './center-planning.js';
 import { buildGlobalReadiness } from './global-scheduler.js';
 import { saveCenterPlanningSettings } from './repository.js';
-import { parseTravelRules } from './weekly-location-rules.js';
+import { formatRoomResources, parseRoomResources, parseTravelRules } from './weekly-location-rules.js';
 import { escapeHtml, formatDuration } from './utils.js';
 
 export function renderCenterPlanning(root, { state, centerPlanningSettings, globalProposal, onSave, onNavigate, onGenerateGlobal, onApplyGlobal, onDiscardGlobal }) {
@@ -46,6 +46,7 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
         <div class="form-field"><label for="maxSameSubjectPerDay">Máximo de la misma materia al día</label><select id="maxSameSubjectPerDay" name="maxSameSubjectPerDay">${[1,2,3,4].map(value => `<option value="${value}" ${settings.generation.maxSameSubjectPerDay === value ? 'selected' : ''}>${value}</option>`).join('')}</select><span class="field-hint">También puede personalizarse por materia desde Patrones temporales.</span></div>
         <div class="form-field"><label for="travelMinutes">Tiempo entre ubicaciones (vista previa GestorEscuela)</label><select id="travelMinutes" name="travelMinutes">${[0,15,30,45,60].map(value => `<option value="${value}" ${settings.generation.travelMinutes === value ? 'selected' : ''}>${value === 0 ? 'Sin desplazamiento obligatorio' : `${value} minutos`}</option>`).join('')}</select><span class="field-hint">Se aplica cuando un especialista pasa entre ubicaciones distintas conocidas. No se deducen distancias.</span></div>
         <div class="form-field"><label for="supportRoomId">Sala PT/AL compartida (opcional)</label><input id="supportRoomId" name="supportRoomId" maxlength="64" value="${escapeHtml(settings.generation.supportRoomId)}" placeholder="Ej.: Sala de apoyos 1"><span class="field-hint">Si se indica, PT y AL deben respetar la ocupación exclusiva de esta misma sala en la vista previa del motor.</span></div>
+        <div class="form-field full"><label for="roomResources">Aforo y disponibilidad de salas PT/AL (opcional)</label><textarea id="roomResources" name="roomResources" rows="5" spellcheck="false" placeholder="Sala PT | 1&#10;Sala compartida | 4 | lunes | 09:00 | 12:00&#10;Sala compartida | 4 | martes | 10:00 | 13:00">${escapeHtml(formatRoomResources(settings.generation.roomResources))}</textarea><span class="field-hint">Una línea «sala | aforo» habilita la sala toda la jornada. Para limitar días y horas, repite «sala | aforo | día | inicio | fin» en cada franja. Cuando defines franjas, los demás días quedan cerrados. La ocupación se calcula por alumnos asistentes. Las salas no configuradas mantienen su uso exclusivo.</span></div>
         <div class="form-field full"><label for="travelRules">Trayectos personalizados (opcionales)</label><textarea id="travelRules" name="travelRules" rows="4" spellcheck="false" placeholder="class:1ºA | room:Sala PT | 15&#10;room:Sala PT | class:1ºA | 30">${escapeHtml((settings.generation.travelRules||[]).map(rule=>`${rule.fromLocationId} | ${rule.toLocationId} | ${rule.minutes}`).join('\n'))}</textarea><span class="field-hint">Una ruta por línea: ubicación origen | ubicación destino | minutos (0, 15, 30, 45 o 60). La ruta inversa puede tener otro tiempo. Sin ruta concreta se usa el tiempo general.</span></div>
       </div>
     </section>` : ''}
@@ -118,8 +119,10 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
     try {
       await onSave(readSettings(event.currentTarget, settings));
     } catch(error) {
-      const field=event.currentTarget.elements.travelRules;
-      if(field && error?.message?.startsWith('Trayecto')) {
+      const field=error?.message?.startsWith('Sala')
+        ? event.currentTarget.elements.roomResources
+        : event.currentTarget.elements.travelRules;
+      if(field && /^(Trayecto|Sala|Se admiten|Solo se admiten)/.test(error?.message||'')) {
         field.setCustomValidity(error.message);
         field.reportValidity();
         field.addEventListener('input',()=>field.setCustomValidity(''),{once:true});
@@ -225,7 +228,10 @@ function readSettings(form, settings) {
       supportRoomId:String(data.get('supportRoomId') ?? settings.generation.supportRoomId),
       travelRules:data.get('travelRules') === null
         ? settings.generation.travelRules
-        : parseTravelRules(data.get('travelRules'))
+        : parseTravelRules(data.get('travelRules')),
+      roomResources:data.get('roomResources') === null
+        ? settings.generation.roomResources
+        : parseRoomResources(data.get('roomResources'))
     },
     curriculum:readCurriculumInputs(form)
   });
