@@ -100,7 +100,8 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
     autoFormGroups,
     supportRoomId:generation.supportRoomId,
     autoAssignSupportRooms:generation.autoAssignSupportRooms,
-    availableRooms:generation.roomResources
+    availableRooms:generation.roomResources,
+    roomRequirements:generation.supportRoomRequirements
   });
   busy.push(...support.busy);
   for (const teacher of support.teachers) {
@@ -164,6 +165,7 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
       rooms:generation.roomResources.map(room=>({
         room_id:room.roomId,
         capacity:room.capacity,
+        ...(room.features?.length?{features:room.features}:{}),
         windows:room.windows.map(window=>({
           weekday:window.weekday,
           start_time:window.startTime,
