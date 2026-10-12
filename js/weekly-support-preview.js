@@ -38,6 +38,27 @@ function chunks(minutes) {
   return durations;
 }
 
+function extractionRules(state, lessons, student, service) {
+  const allowed={blocked:[],avoided:[],preferred:[]};
+  const lessonSubjects=lessons.filter(lesson=>lesson.group_id===student.grupoClase);
+  const courseRules=state.automationSettings?.courseRules?.[student.curso]||{};
+  for (const lesson of lessonSubjects) {
+    const subject=lesson.subject_id;
+    const priority=courseRules.subjectPriorities?.[subject]||'medium';
+    const override=courseRules.subjectPolicies?.[subject]?.extraction
+      ??courseRules.subjectPolicies?.[subject]??null;
+    const policy=resolveSupportPolicy(priority,override);
+    if (!canExtractForSupport(policy,service))allowed.blocked.push(subject);
+    else if (policy.preference==='avoid')allowed.avoided.push(subject);
+    else if (policy.preference==='preferred')allowed.preferred.push(subject);
+  }
+  return {
+    blocked_subjects:allowed.blocked,
+    avoided_subjects:allowed.avoided,
+    preferred_subjects:allowed.preferred
+  };
+}
+
 export function buildAnonymousSupportPreview(state, lessons) {
   const allStudents=(state.students||[]).filter(student=>student.activo!==false && student.id);
   const students=new Map(allStudents.map(student=>[student.id,student]));
@@ -53,7 +74,7 @@ export function buildAnonymousSupportPreview(state, lessons) {
   // No student token needs to be minted when no active support groups exist.
   const activeGroups=[...groupById.values()].filter(group=>SERVICES.includes(group.tipo));
   const eligibleSessions=(state.sessions||[]).filter(session=>groupById.has(session.groupId));
-  if (!activeGroups.length&&!eligibleSessions.length) return { supports:[],busy:[],teachers:[],warnings:[] };
+  if (!activeGroups.length&&!eligibleSessions.length) return { supports:[],groupSupports:[],busy:[],teachers:[],warnings:[] };
   const pseudonym=tokenFactory();
 
   for (const group of activeGroups) {
@@ -96,7 +117,58 @@ export function buildAnonymousSupportPreview(state, lessons) {
   }
 
   const supports=[];
+  const groupSupports=[];
+  const groupedKeys=new Set();
   let omitted=0;
+
+  // Keep each pupil's remaining goal distinct: a shared slot consumes
+  // 45 minutes of the professional but only counts for its actual attendees.
+  // Fail closed for pupils assigned to multiple support groups or unknown classes.
+  for (const group of activeGroups) {
+    const enrolled=(group.studentIds||[]).filter(id=>students.has(id));
+    if (enrolled.length<2)continue;
+    const professor=professionals.get(group.professionalId);
+    if (!professor||professor.tipo!==group.tipo)continue;
+    const persons=[];
+    let safe=true;
+    for (const id of enrolled) {
+      const student=students.get(id);
+      const key=`${id}\u0000${group.tipo}`;
+      const assigned=eligibleGroups.get(key)||[];
+      if (assigned.length!==1||assigned[0]!==group||!linkedGroups.has(student.grupoClase)) {
+        safe=false;break;
+      }
+      const target=Number(group.tipo==='PT'?student.horasPTObjetivoMin:student.horasALObjetivoMin)||0;
+      const remaining=Math.max(0,target-(scheduled.get(key)||0));
+      if (!remaining)continue;
+      if (remaining%15)throw new Error('Las necesidades PT/AL deben encajar en pasos de 15 minutos.');
+      persons.push({id,student,key,remaining});
+    }
+    if (!safe||!persons.length)continue;
+    const duration=[45,30,15].find(value=>
+      persons.every(person=>person.remaining%value===0)
+      && Math.max(...persons.map(person=>person.remaining))/value<=20
+    );
+    if (!duration)continue;
+    const participants=persons.map(person=>({
+      pupil_token:pseudonym(person.id),group_id:person.student.grupoClase,
+      weekly_minutes:person.remaining,
+      ...extractionRules(state,lessons,person.student,group.tipo)
+    }));
+    groupSupports.push({
+      request_id:`group-support-${groupSupports.length+1}`,
+      service:group.tipo,
+      teacher_id:professor.id,
+      session_minutes:duration,
+      participants,
+      allowed_days:[0,1,2,3,4],
+      max_sessions_per_day:2
+    });
+    persons.forEach(person=>groupedKeys.add(person.key));
+    references.set(professor.id,professor);
+    if (duration<45)warnings.push('Un apoyo grupal requiere bloques inferiores a 45 minutos para repartir exactamente los objetivos individuales.');
+  }
+
   for (const student of allStudents) {
     for (const service of SERVICES) {
       const target=Number(service==='PT'?student.horasPTObjetivoMin:student.horasALObjetivoMin)||0;
@@ -105,6 +177,7 @@ export function buildAnonymousSupportPreview(state, lessons) {
       const already=scheduled.get(key)||0;
       if (target<=already) continue;
       const remaining=target-already;
+      if(groupedKeys.has(key))continue;
       const groups=eligibleGroups.get(key)||[];
       if (groups.length!==1||groups[0].studentIds.length!==1||!linkedGroups.has(student.grupoClase)) {
         omitted++;
@@ -118,19 +191,12 @@ export function buildAnonymousSupportPreview(state, lessons) {
       const minutes=chunks(remaining);
       if (minutes.length>20) {omitted++;continue;}
       const token=pseudonym(student.id);
-      const lessonSubjects=lessons.filter(lesson=>lesson.group_id===student.grupoClase);
-      const courseRules=state.automationSettings?.courseRules?.[student.curso]||{};
-      const blocked=lessonSubjects.filter(lesson=>{
-        const subject=lesson.subject_id;
-        const priority=courseRules.subjectPriorities?.[subject]||'medium';
-        const override=courseRules.subjectPolicies?.[subject]?.extraction??courseRules.subjectPolicies?.[subject]??null;
-        return !canExtractForSupport(resolveSupportPolicy(priority,override),service);
-      }).map(lesson=>lesson.subject_id);
+      const policy=extractionRules(state,lessons,student,service);
       const request_id=`support-${supports.length+1}`;
       supports.push({
         request_id,service,teacher_id:professional.id,
         pupil_token:token,group_id:student.grupoClase,
-        weekly_minutes:remaining,durations:minutes,blocked_subjects:blocked,
+        weekly_minutes:remaining,durations:minutes,...policy,
         allowed_days:[0,1,2,3,4],max_sessions_per_day:2
       });
       references.set(professional.id,professional);
@@ -138,7 +204,9 @@ export function buildAnonymousSupportPreview(state, lessons) {
 
     // A pupil's explicit "no salir" windows prohibit *all* their supports.
     if ([...scheduled.keys()].some(key=>key.startsWith(`${student.id}\u0000`))
-      || supports.some(support=>support.pupil_token===pseudonym(student.id))) {
+      || supports.some(support=>support.pupil_token===pseudonym(student.id))
+      || groupedKeys.has(`${student.id}\u0000PT`)
+      || groupedKeys.has(`${student.id}\u0000AL`)) {
       for (const restriction of student.restricciones||[]) {
         if (restriction.tipo!=='no-salir'||!DAY.has(restriction.dia)) continue;
         const duration=validInterval(restriction);
@@ -149,7 +217,7 @@ export function buildAnonymousSupportPreview(state, lessons) {
       }
     }
   }
-  if(omitted)warnings.push(`${omitted} necesidad(es) PT/AL pendientes no se han incluido: hace falta un único grupo individual por servicio, una clase configurada y duración admitida.`);
-  if(supports.length)warnings.push('El cálculo crea apoyos individuales pendientes de validación. Los grupos mixtos, preferencias blandas de extracción y recursos compartidos todavía no están optimizados.');
-  return {supports,busy,teachers:[...references.values()],warnings};
+  if(omitted)warnings.push(`${omitted} necesidad(es) PT/AL pendientes no se han incluido: falta un grupo inequívoco, clase configurada o duración compatible.`);
+  if(supports.length||groupSupports.length)warnings.push('Los apoyos propuestos todavía requieren revisión antes de aplicarse. No se modelan desplazamientos ni espacios compartidos.');
+  return {supports,groupSupports,busy,teachers:[...references.values()],warnings};
 }
