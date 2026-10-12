@@ -274,6 +274,17 @@ export async function createDayPlan(settings, payload) {
   });
 }
 
+// Non-destructive planner preview: no project or pupil data is persisted.
+export async function previewWeeklyTimetable(settings, payload) {
+  const value = requireConfigured(settings);
+  return request(value, `/schools/${encodeURIComponent(value.schoolId)}/weekly-timetable/preview`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify(payload),
+    timeoutMs:25000
+  });
+}
+
 export async function solveAcademicDay(settings, planId, payload) {
   const value = requireConfigured(settings);
   return request(value, `/schools/${encodeURIComponent(value.schoolId)}/day-plans/${encodeURIComponent(planId)}/solve-academic`, {
