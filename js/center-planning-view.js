@@ -99,7 +99,11 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
   root.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click', () => onNavigate(button.dataset.go)));
   root.querySelector('[data-generate-global]')?.addEventListener('click', async event => {
     if (event.currentTarget.disabled) return;
-    await onGenerateGlobal(readSettings(root.querySelector('#centerPlanningForm'), settings));
+    try {
+      await onGenerateGlobal(readSettings(root.querySelector('#centerPlanningForm'), settings));
+    } catch(error) {
+      window.alert(error?.message||'No se pudo validar la configuración del centro.');
+    }
   });
   const applyButton = root.querySelector('[data-apply-global]');
   applyButton?.addEventListener('click', async () => {
@@ -219,7 +223,9 @@ function readSettings(form, settings) {
       maxSameSubjectPerDay:Number(data.get('maxSameSubjectPerDay') || settings.generation.maxSameSubjectPerDay),
       travelMinutes:Number(data.get('travelMinutes') ?? settings.generation.travelMinutes),
       supportRoomId:String(data.get('supportRoomId') ?? settings.generation.supportRoomId),
-      travelRules:parseTravelRules(data.get('travelRules')??'')
+      travelRules:data.get('travelRules') === null
+        ? settings.generation.travelRules
+        : parseTravelRules(data.get('travelRules'))
     },
     curriculum:readCurriculumInputs(form)
   });
