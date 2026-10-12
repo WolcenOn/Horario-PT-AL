@@ -102,6 +102,30 @@ Los grupos o profesionales con una sala explícita mantienen esa asignación;
 las sesiones existentes tampoco se trasladan.
 La opción comienza desactivada para conservar los horarios previos.
 
+**Adecuación de las salas por equipamiento y accesibilidad:** en
+«Planificación del centro» también puedes especificar características
+**no personales** de las salas, y marcar lo que exige cada servicio PT
+o AL. Los códigos admitidos son `acceso_sin_escalones`,
+`mesa_regulable`, `aislamiento_acustico`, `material_logopedico`
+y `pizarra_digital`. Por ejemplo:
+
+```text
+Sala AL | 4 | aislamiento_acustico,material_logopedico
+Sala PT | 2 | lunes | 09:00 | 12:00 | acceso_sin_escalones,mesa_regulable
+```
+
+Cada servicio tiene casillas para exigir una o varias características.
+Una sala elegida automáticamente debe cumplirlas todas. Las salas
+asignadas explícitamente también se comprueban; una sala fija sin
+ficha de características no se supone equipada y da un error de
+configuración. Si ninguna opción es adecuada, la vista previa indica
+que el horario no puede satisfacerse con esas restricciones.
+
+Estas casillas describen requisitos generales de la actividad: **no
+se deducen necesidades de un alumno ni se transmiten informes clínicos**.
+La configuración anterior sigue siendo válida con requisitos vacíos.
+
+
 
 ## Modo local y modo online
 
