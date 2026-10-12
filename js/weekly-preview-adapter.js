@@ -30,7 +30,7 @@ function appendUnavailability(result, prof, day, start, end) {
   });
 }
 
-export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlanningSettings) {
+export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlanningSettings, {autoFormGroups=true}={}) {
   const settings = normalizeCenterPlanningSettings(rawSettings);
   if (settings.mode !== 'global') throw new Error('Activa el modo Centro completo para calcular una propuesta semanal.');
   const generation = validateGlobalGeneration(settings);
@@ -93,7 +93,7 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
     }
   }
 
-  const support = buildAnonymousSupportPreview(state, lessons);
+  const support = buildAnonymousSupportPreview(state, lessons, {autoFormGroups});
   busy.push(...support.busy);
   for (const teacher of support.teachers) {
     if (teachersUsed.has(teacher.id)) continue;
@@ -137,6 +137,7 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
       lessons, supports:support.supports, group_supports:support.groupSupports,
       busy, max_time_seconds:5
     },
-    warnings
+    warnings,
+    autoGroups:support.autoGroups || 0
   };
 }
