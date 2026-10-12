@@ -151,7 +151,7 @@ test('mantiene el mismo token anónimo entre PT y AL sin mezclar horas objetivo'
   assert.deepEqual(result.payload.supports.map(s=>s.weekly_minutes),[45,45]);
 });
 
-test('no inventa sesiones grupales cuando los objetivos individuales son distintos',()=>{
+test('planifica asistencia individual a sesiones grupales con objetivos distintos',()=>{
   const state=makeState();
   state.professionals.push({
     id:'pt',nombre:'PT',tipo:'PT',activo:true,disponibilidad:availability
@@ -169,8 +169,14 @@ test('no inventa sesiones grupales cuando los objetivos individuales son distint
   state.sessions=[];
   const {payload,warnings}=buildWeeklyPreviewRequest(state);
   assert.equal(payload.supports.length,0);
-  assert.ok(warnings.some(note=>note.includes('necesidad(es) PT/AL pendientes')));
+  assert.equal(payload.group_supports.length,1);
+  const group=payload.group_supports[0];
+  assert.equal(group.session_minutes,45);
+  assert.equal(group.teacher_id,'pt');
+  assert.deepEqual(group.participants.map(row=>row.weekly_minutes),[90,45]);
+  assert.notEqual(group.participants[0].pupil_token,group.participants[1].pupil_token);
   assert.equal(JSON.stringify(payload).includes('student-other'),false);
+  assert.ok(!warnings.some(note=>note.includes('pendientes no se han incluido')));
 });
 
 test('respeta restricciones individuales de no salir durante apoyos',()=>{
@@ -189,4 +195,85 @@ test('respeta restricciones individuales de no salir durante apoyos',()=>{
   assert.ok(payload.busy.some(entry=>
     entry.pupil_token===payload.supports[0].pupil_token&&entry.weekday===1
     &&entry.start_time==='09:00'&&entry.end_time==='10:00'));
+});
+
+
+test('diferencia extracción prohibida, evitar y preferente para PT/AL grupal',()=>{
+  const state=makeState();
+  state.professionals.push({id:'pt',nombre:'PT',tipo:'PT',activo:true,disponibilidad:availability});
+  state.students[0].curso='1º';
+  state.students[0].grupoClase='1ºA';
+  state.students[0].horasPTObjetivoMin=90;
+  state.students.push({
+    id:'student-other',curso:'1º',grupoClase:'1ºA',
+    horasPTObjetivoMin:45,activo:true
+  });
+  state.groups=[{
+    id:'pt-group',tipo:'PT',professionalId:'pt',
+    studentIds:['alumno-sensible','student-other']
+  }];
+  state.sessions=[];
+  state.automationSettings={courseRules:{'1º':{
+    subjectPriorities:{Matemáticas:'high'},
+    subjectPolicies:{Matemáticas:{extraction:'ptal',preference:'avoid'}}
+  }}};
+  let group=buildWeeklyPreviewRequest(state).payload.group_supports[0];
+  assert.deepEqual(group.participants[0].blocked_subjects,[]);
+  assert.deepEqual(group.participants[0].avoided_subjects,['Matemáticas']);
+  assert.deepEqual(group.participants[0].preferred_subjects,[]);
+  state.automationSettings.courseRules['1º'].subjectPolicies.Matemáticas.preference='preferred';
+  group=buildWeeklyPreviewRequest(state).payload.group_supports[0];
+  assert.deepEqual(group.participants[0].preferred_subjects,['Matemáticas']);
+  state.automationSettings.courseRules['1º'].subjectPolicies.Matemáticas.extraction='blocked';
+  group=buildWeeklyPreviewRequest(state).payload.group_supports[0];
+  assert.deepEqual(group.participants[0].blocked_subjects,['Matemáticas']);
+  assert.deepEqual(group.participants[0].preferred_subjects,[]);
+});
+
+test('un grupo incompatible queda pendiente sin inventar minutos',()=>{
+  const state=makeState();
+  state.professionals.push({id:'pt',nombre:'PT',tipo:'PT',activo:true,disponibilidad:availability});
+  state.students[0].curso='1º';
+  state.students[0].grupoClase='1ºA';
+  state.students[0].horasPTObjetivoMin=975;
+  state.students.push({
+    id:'student-other',curso:'1º',grupoClase:'1ºA',
+    horasPTObjetivoMin:45,activo:true
+  });
+  state.groups=[{
+    id:'pt-group',tipo:'PT',professionalId:'pt',
+    studentIds:['alumno-sensible','student-other']
+  }];
+  state.sessions=[];
+  const {payload,warnings}=buildWeeklyPreviewRequest(state);
+  assert.equal(payload.group_supports.length,0);
+  assert.equal(payload.supports.length,0);
+  assert.ok(warnings.some(note=>note.includes('pendientes no se han incluido')));
+});
+
+test('si un alumno ya completó su objetivo no se le incorpora a apoyo grupal extra',()=>{
+  const state=makeState();
+  state.professionals.push({id:'pt',nombre:'PT',tipo:'PT',activo:true,disponibilidad:availability});
+  state.students[0].curso='1º';
+  state.students[0].grupoClase='1ºA';
+  state.students[0].horasPTObjetivoMin=45;
+  state.students.push({
+    id:'student-other',curso:'1º',grupoClase:'1ºA',
+    horasPTObjetivoMin:90,activo:true
+  });
+  state.groups=[{
+    id:'pt-group',tipo:'PT',professionalId:'pt',
+    studentIds:['alumno-sensible','student-other']
+  }];
+  state.sessions=[{
+    id:'already',groupId:'pt-group',professionalId:'pt',dia:'lunes',
+    inicio:'09:00',fin:'09:45',excludedStudentIds:['student-other']
+  }];
+  const payload=buildWeeklyPreviewRequest(state).payload;
+  assert.equal(payload.group_supports.length,1);
+  const participants=payload.group_supports[0].participants;
+  assert.equal(participants.length,1);
+  assert.equal(participants[0].weekly_minutes,90);
+  assert.equal(payload.group_supports[0].session_minutes,45);
+  assert.equal(payload.busy.some(item=>item.teacher_id==='pt'&&item.start_time==='09:00'),true);
 });
