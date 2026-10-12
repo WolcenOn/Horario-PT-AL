@@ -62,7 +62,9 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
         preferred_days:pattern.preferredDays.map(day => days.get(day)).filter(index => index != null),
         earliest_start:pattern.earliestStart || null,
         latest_end:pattern.latestEnd || null,
-        max_sessions_per_day:effectiveMaxSessionsPerDay(pattern, generation.maxSameSubjectPerDay)
+        max_sessions_per_day:effectiveMaxSessionsPerDay(pattern, generation.maxSameSubjectPerDay),
+        // Classroom ID is a location proxy only for user-configured travel time.
+        ...(generation.travelMinutes ? {location_id:`class:${grupoClase}`} : {})
       });
       teachersUsed.set(eligible[0].id, eligible[0]);
       groupsUsed.add(grupoClase);
@@ -93,7 +95,9 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
     }
   }
 
-  const support = buildAnonymousSupportPreview(state, lessons, {autoFormGroups});
+  const support = buildAnonymousSupportPreview(state, lessons, {
+    autoFormGroups, supportRoomId:generation.supportRoomId
+  });
   busy.push(...support.busy);
   for (const teacher of support.teachers) {
     if (teachersUsed.has(teacher.id)) continue;
@@ -101,7 +105,13 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
   }
 
   const warnings = [
-    'Vista previa parcial: todavía no integra actividades móviles sin horario fijo, recursos/aulas, desplazamientos ni agrupaciones automáticas PT/AL.',
+    'Vista previa parcial: no optimiza actividades móviles sin hora fija, rutas reales ni asignaciones automáticas de salas.',
+    ...(generation.travelMinutes && !generation.supportRoomId
+      ? ['Desplazamientos PT/AL: no se conoce la sala de apoyos; solo se aplica traslado entre las aulas de clase configuradas.']
+      : []),
+    ...(generation.supportRoomId
+      ? ['La sala PT/AL indicada se trata como un único recurso físico exclusivo para todos los apoyos enviados.']
+      : []),
     'Los horarios existentes no se sustituyen ni se envían a la base de datos como propuesta confirmada.',
     ...support.warnings
   ];
@@ -135,7 +145,8 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
     payload:{
       start_time:generation.start, end_time:generation.end,
       lessons, supports:support.supports, group_supports:support.groupSupports,
-      busy, max_time_seconds:5
+      busy, max_time_seconds:5,
+      travel_minutes:generation.travelMinutes
     },
     warnings,
     autoGroups:support.autoGroups || 0
