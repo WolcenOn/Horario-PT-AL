@@ -1,7 +1,9 @@
 import { COURSE_OPTIONS, configuredClassGroups, courseForClassGroup, stageForCourse } from './education.js';
 import { subjectsForStage } from './subjects.js';
 import { normalizeScheduledSlots, normalizeSubjectPatterns, normalizeTimePattern } from './time-patterns.js';
-import { normalizeRoomResources, normalizeTravelRules } from './weekly-location-rules.js';
+import {
+  normalizeRoomFeatures, normalizeRoomResources, normalizeTravelRules
+} from './weekly-location-rules.js';
 import { timeToMinutes } from './utils.js';
 
 export const CENTER_PLANNING_ID = 'centerPlanning';
@@ -133,7 +135,11 @@ export function normalizeGlobalGeneration(value) {
     supportRoomId:String(source.supportRoomId || '').trim().slice(0,64),
     travelRules:normalizeTravelRules(source.travelRules),
     roomResources:normalizeRoomResources(source.roomResources),
-    autoAssignSupportRooms:source.autoAssignSupportRooms === true
+    autoAssignSupportRooms:source.autoAssignSupportRooms === true,
+    supportRoomRequirements:{
+      PT:normalizeRoomFeatures(source.supportRoomRequirements?.PT),
+      AL:normalizeRoomFeatures(source.supportRoomRequirements?.AL)
+    }
   };
 }
 
