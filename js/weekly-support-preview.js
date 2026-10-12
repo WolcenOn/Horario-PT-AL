@@ -66,8 +66,24 @@ function extractionRules(state, lessons, student, service) {
 }
 
 export function buildAnonymousSupportPreview(
-  state, lessons, {autoFormGroups=true, supportRoomId=''}={}
+  state, lessons, {
+    autoFormGroups=true, supportRoomId='',
+    autoAssignSupportRooms=false, availableRooms=[]
+  }={}
 ) {
+  const candidates = autoAssignSupportRooms
+    ? availableRooms.slice(0,8).map(room=>room.roomId)
+    : [];
+  const plannedRoomFields=(group, professional)=>{
+    const mandatory = group?.roomId || professional?.supportRoomId;
+    if(mandatory) return roomFields(mandatory);
+    if(candidates.length) return {room_candidates:candidates};
+    return roomFields(supportRoomId);
+  };
+  const poolingRoomId=(group, professional)=>{
+    const mandatory=group?.roomId||professional?.supportRoomId;
+    return String(mandatory||(candidates.length?'':supportRoomId)||'').trim();
+  };
   const allStudents=(state.students||[]).filter(student=>student.activo!==false && student.id);
   const students=new Map(allStudents.map(student=>[student.id,student]));
   const groupById=new Map((state.groups||[]).filter(group=>group.activo!==false).map(group=>[group.id,group]));
@@ -181,7 +197,7 @@ export function buildAnonymousSupportPreview(
       service:group.tipo,
       teacher_id:professor.id,
       session_minutes:duration,
-      participants,...roomFields(resolveSupportRoomId(group,professor,supportRoomId)),
+      participants,...plannedRoomFields(group,professor),
       allowed_days:[0,1,2,3,4],
       max_sessions_per_day:2
     });
@@ -205,9 +221,7 @@ export function buildAnonymousSupportPreview(
       if(!remaining)continue;
       individualCandidates.push({
         person,key,service,teacherId,remaining,
-        roomId:resolveSupportRoomId(
-          existing[0],professionals.get(teacherId),supportRoomId
-        ),
+        roomId:poolingRoomId(existing[0],professionals.get(teacherId)),
         policy:extractionRules(state,lessons,person,service)
       });
     }
@@ -226,7 +240,8 @@ export function buildAnonymousSupportPreview(
     groupSupports.push({
       request_id:`auto-support-${groupSupports.length+1}`,
       service:first.service,teacher_id:first.teacherId,
-      session_minutes:proposal.sessionMinutes,participants,...roomFields(first.roomId),
+      session_minutes:proposal.sessionMinutes,participants,
+      ...(first.roomId?roomFields(first.roomId):plannedRoomFields(null,null)),
       allowed_days:[0,1,2,3,4],max_sessions_per_day:2
     });
     for(const member of proposal.members)groupedKeys.add(member.key);
@@ -264,7 +279,7 @@ export function buildAnonymousSupportPreview(
         request_id,service,teacher_id:professional.id,
         pupil_token:token,group_id:student.grupoClase,
         weekly_minutes:remaining,durations:minutes,...policy,
-        ...roomFields(resolveSupportRoomId(groups[0],professional,supportRoomId)),
+        ...plannedRoomFields(groups[0],professional),
         allowed_days:[0,1,2,3,4],max_sessions_per_day:2
       });
       references.set(professional.id,professional);
@@ -285,6 +300,9 @@ export function buildAnonymousSupportPreview(
       }
     }
   }
+  if(candidates.length)warnings.push(
+    'El motor elegirá una sala entre las configuradas para cada apoyo sin aula fija; el resultado indica la sala elegida.'
+  );
   if(omitted)warnings.push(`${omitted} necesidad(es) PT/AL pendientes no se han incluido: falta un grupo inequívoco, clase configurada o duración compatible.`);
   if(supports.length||groupSupports.length)warnings.push(
     'Los apoyos propuestos requieren revisión antes de aplicarse. Solo se verifican salas y desplazamientos con identificadores y tiempos explícitos; no se calculan rutas reales.'
