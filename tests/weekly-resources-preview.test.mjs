@@ -372,7 +372,7 @@ test('manda características de sala y requisitos PT anónimos al solver',()=>{
     ],windows:[]}
   ];
   const {payload}=buildWeeklyPreviewRequest(state);
-  assert.deepEqual(payload.supports[0].room_candidates,['ROOM-1','ROOM-2']);
+  assert.deepEqual(payload.supports[0].room_candidates,['ROOM-2']);
   assert.deepEqual(payload.supports[0].required_features,[
     'mesa_regulable','acceso_sin_escalones'
   ]);
