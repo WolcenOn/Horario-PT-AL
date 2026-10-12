@@ -92,6 +92,17 @@ exclusiva (una sesión a la vez). La disponibilidad restringida no se aplica
 hasta que se configure. Las horas del centro y los horarios ya guardados
 no se alteran al solicitar esta vista previa.
 
+**Selección automática de salas:** con dos o más salas configuradas en
+«Planificación del centro» puedes activar la casilla de selección automática
+para que GestorEscuela asigne una sala a **cada sesión PT/AL que no tenga una
+sala obligatoria**. Se comprueban aforo, franjas disponibles, reservas y
+trayectos del profesional. La simulación indica la sala elegida, incluso
+cuando dos sesiones del mismo grupo acaban en espacios diferentes.
+Los grupos o profesionales con una sala explícita mantienen esa asignación;
+las sesiones existentes tampoco se trasladan.
+La opción comienza desactivada para conservar los horarios previos.
+
+
 ## Modo local y modo online
 
 El proyecto sigue pudiendo utilizarse sin cuenta: IndexedDB conserva el estado del navegador y las funciones locales continúan disponibles sin backend.
