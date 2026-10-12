@@ -64,7 +64,13 @@ function extractionRules(state, lessons, student, service) {
   };
 }
 
-export function buildAnonymousSupportPreview(state, lessons, {autoFormGroups=true}={}) {
+export function buildAnonymousSupportPreview(
+  state, lessons, {autoFormGroups=true, supportRoomId=''}={}
+) {
+  const room = String(supportRoomId || '').trim();
+  const roomFields = room
+    ? {room_id:room, location_id:`room:${room}`}
+    : {};
   const allStudents=(state.students||[]).filter(student=>student.activo!==false && student.id);
   const students=new Map(allStudents.map(student=>[student.id,student]));
   const groupById=new Map((state.groups||[]).filter(group=>group.activo!==false).map(group=>[group.id,group]));
@@ -107,7 +113,10 @@ export function buildAnonymousSupportPreview(state, lessons, {autoFormGroups=tru
       warnings.push('Hay una sesión PT/AL con un profesional no disponible en la configuración.');
       continue;
     }
-    busy.push({weekday,start_time:session.inicio,end_time:session.fin,teacher_id:teacherId});
+    busy.push({
+      weekday,start_time:session.inicio,end_time:session.fin,
+      teacher_id:teacherId,...roomFields
+    });
     references.set(teacherId,professionals.get(teacherId));
     const excluded=new Set(session.excludedStudentIds||[]);
     for (const id of group.studentIds||[]) {
@@ -132,8 +141,10 @@ export function buildAnonymousSupportPreview(state, lessons, {autoFormGroups=tru
   for (const group of activeGroups) {
     const enrolled=(group.studentIds||[]).filter(id=>students.has(id));
     if (enrolled.length<2)continue;
-    if (enrolled.length > 8) continue;
-    if (enrolled.length>8) { warnings.push('Hay un grupo PT/AL que supera el máximo de 8 alumnos de esta vista previa.'); continue; }
+    if (enrolled.length>8) {
+      warnings.push('Hay un grupo PT/AL que supera el máximo de 8 alumnos de esta vista previa.');
+      continue;
+    }
     const professor=professionals.get(group.professionalId);
     if (!professor||professor.tipo!==group.tipo)continue;
     const persons=[];
@@ -167,7 +178,7 @@ export function buildAnonymousSupportPreview(state, lessons, {autoFormGroups=tru
       service:group.tipo,
       teacher_id:professor.id,
       session_minutes:duration,
-      participants,
+      participants,...roomFields,
       allowed_days:[0,1,2,3,4],
       max_sessions_per_day:2
     });
@@ -209,7 +220,7 @@ export function buildAnonymousSupportPreview(state, lessons, {autoFormGroups=tru
     groupSupports.push({
       request_id:`auto-support-${groupSupports.length+1}`,
       service:first.service,teacher_id:first.teacherId,
-      session_minutes:proposal.sessionMinutes,participants,
+      session_minutes:proposal.sessionMinutes,participants,...roomFields,
       allowed_days:[0,1,2,3,4],max_sessions_per_day:2
     });
     for(const member of proposal.members)groupedKeys.add(member.key);
@@ -246,7 +257,7 @@ export function buildAnonymousSupportPreview(state, lessons, {autoFormGroups=tru
       supports.push({
         request_id,service,teacher_id:professional.id,
         pupil_token:token,group_id:student.grupoClase,
-        weekly_minutes:remaining,durations:minutes,...policy,
+        weekly_minutes:remaining,durations:minutes,...policy,...roomFields,
         allowed_days:[0,1,2,3,4],max_sessions_per_day:2
       });
       references.set(professional.id,professional);
