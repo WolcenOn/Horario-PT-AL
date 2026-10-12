@@ -2,7 +2,14 @@
 
 Aplicación web para construir, revisar y operar el horario de un centro educativo combinando **horario académico ordinario + apoyos PT + apoyos AL**.
 
-**Aplicación publicada:** https://wolcenon.github.io/Horario-PT-AL/
+**Aplicación publicada en GitHub Pages:** https://wolcenon.github.io/Horario-PT-AL/
+
+**Ramas de desarrollo y publicación del planificador escolar:**
+
+- **Frontend y fuente de GitHub Pages:** `WolcenOn/Horario-PT-AL`, rama `integracion-gestor-escuela`.
+- **Backend y motor de optimización:** `WolcenOn/GestorEscuela`, rama `integracion-horario-pt-al`.
+- Las dos ramas `main` no reciben cambios ni fusiones durante este trabajo de integración.
+- `.github/workflows/pages.yml` valida la rama `integracion-gestor-escuela` con unitarios y Playwright. El despliegue GitHub Pages se registra además como una ejecución separada `pages build and deployment`.
 
 La filosofía del producto es:
 
