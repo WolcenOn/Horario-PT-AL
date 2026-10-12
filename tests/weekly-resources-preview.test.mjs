@@ -262,3 +262,67 @@ test('una sala sin aforo permanece reservada en exclusiva como en versiones ante
   assert.equal(payload.supports[0].room_id,'ROOM-1');
   assert.ok(payload.warnings===undefined);
 });
+
+
+test('asignación automática opcional envía salas candidatas en vez de inventar una fija',()=>{
+  const state=fixture();
+  state.centerPlanningSettings.generation.autoAssignSupportRooms=true;
+  state.centerPlanningSettings.generation.roomResources=[
+    {roomId:'ROOM-1',capacity:1,windows:[]},
+    {roomId:'ROOM-2',capacity:3,windows:[]}
+  ];
+  const {payload,warnings}=buildWeeklyPreviewRequest(state);
+  assert.equal(payload.supports.length,1);
+  assert.deepEqual(payload.supports[0].room_candidates,['ROOM-1','ROOM-2']);
+  assert.equal(payload.supports[0].room_id,undefined);
+  // Existing sessions never move automatically.
+  assert.equal(payload.busy.find(b=>b.teacher_id==='pt').room_id,'ROOM-1');
+  assert.ok(warnings.some(msg=>msg.includes('elegirá una sala')));
+  assert.equal(JSON.stringify(payload).includes('p-1'),false);
+});
+
+test('una sala obligatoria del grupo no queda a disposición del selector',()=>{
+  const state=fixture();
+  state.groups[0].roomId='ROOM-FIXED';
+  state.centerPlanningSettings.generation.autoAssignSupportRooms=true;
+  state.centerPlanningSettings.generation.roomResources=[
+    {roomId:'ROOM-1',capacity:1,windows:[]},
+    {roomId:'ROOM-2',capacity:3,windows:[]}
+  ];
+  const {payload}=buildWeeklyPreviewRequest(state);
+  assert.equal(payload.supports[0].room_id,'ROOM-FIXED');
+  assert.equal(payload.supports[0].room_candidates,undefined);
+});
+
+test('un grupo PT AL puede proponer distintas salas por sesión con su aforo',()=>{
+  const state=fixture();
+  state.centerPlanningSettings.generation.autoAssignSupportRooms=true;
+  state.centerPlanningSettings.generation.roomResources=[
+    {roomId:'ROOM-1',capacity:1,windows:[]},
+    {roomId:'ROOM-2',capacity:2,windows:[]}
+  ];
+  state.students.push({
+    id:'private-second',curso:'1º',grupoClase:'1ºA',
+    horasPTObjetivoMin:45,activo:true
+  });
+  state.groups[0].studentIds.push('private-second');
+  state.sessions[0].excludedStudentIds=['private-second'];
+  const {payload}=buildWeeklyPreviewRequest(state);
+  assert.equal(payload.group_supports.length,1);
+  assert.deepEqual(payload.group_supports[0].room_candidates,['ROOM-1','ROOM-2']);
+  assert.equal(payload.group_supports[0].room_id,undefined);
+  assert.equal(JSON.stringify(payload).includes('private-second'),false);
+});
+
+test('si la selección automática no está activada se conserva el flujo anterior',()=>{
+  const state=fixture();
+  state.centerPlanningSettings.generation.roomResources=[
+    {roomId:'ROOM-1',capacity:2,windows:[]},
+    {roomId:'ROOM-2',capacity:2,windows:[]}
+  ];
+  const payload=buildWeeklyPreviewRequest(state).payload;
+  assert.equal(payload.supports[0].room_id,'ROOM-1');
+  assert.equal(payload.supports[0].room_candidates,undefined);
+  const defaults=normalizeCenterPlanningSettings({mode:'global'}).generation;
+  assert.equal(defaults.autoAssignSupportRooms,false);
+});
