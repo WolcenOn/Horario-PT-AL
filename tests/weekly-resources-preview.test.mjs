@@ -408,3 +408,21 @@ test('no se inventan requisitos ni capacidades en las configuraciones antiguas',
   assert.equal(payload.supports[0].required_features,undefined);
   assert.equal(payload.rooms.length,0);
 });
+
+
+test('considera una sala compatible aunque esté después de las ocho primeras',()=>{
+  const state=fixture();
+  state.centerPlanningSettings.generation.autoAssignSupportRooms=true;
+  state.centerPlanningSettings.generation.supportRoomRequirements={
+    PT:['material_logopedico'],AL:[]
+  };
+  state.centerPlanningSettings.generation.roomResources=[
+    ...Array.from({length:8},(_,i)=>({
+      roomId:'BASIC-'+i,capacity:1,windows:[]
+    })),
+    {roomId:'PROPER',capacity:2,windows:[],features:['material_logopedico']}
+  ];
+  const {payload}=buildWeeklyPreviewRequest(state);
+  assert.deepEqual(payload.supports[0].room_candidates,['PROPER']);
+  assert.deepEqual(payload.supports[0].required_features,['material_logopedico']);
+});
