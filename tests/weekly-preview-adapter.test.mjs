@@ -91,3 +91,102 @@ test('API usa Bearer y jamás publica el proyecto completo',async()=>{
     assert.equal(inspected,true);
   }finally{globalThis.fetch=originalFetch;}
 });
+
+
+test('calcula solo minutos PT restantes con token aleatorio por petición',()=>{
+  const state=makeState();
+  state.professionals.push({
+    id:'teacher-pt',nombre:'Especialista PT',activo:true,tipo:'PT',disponibilidad:availability
+  });
+  state.students[0].curso='1º';
+  state.students[0].grupoClase='1ºA';
+  state.students[0].horasPTObjetivoMin=90;
+  state.groups[0]={id:'PTgrupo',tipo:'PT',professionalId:'teacher-pt',studentIds:['alumno-sensible']};
+  state.sessions[0].professionalId='teacher-pt';
+  state.automationSettings={
+    courseRules:{'1º':{
+      subjectPriorities:{Matemáticas:'high'},
+      subjectPolicies:{Matemáticas:{extraction:'blocked',preference:'avoid'}}
+    }}
+  };
+  const {payload}=buildWeeklyPreviewRequest(state);
+  assert.equal(payload.supports.length,1);
+  const request=payload.supports[0];
+  assert.equal(request.service,'PT');
+  assert.equal(request.weekly_minutes,45);
+  assert.deepEqual(request.durations,[45]);
+  assert.deepEqual(request.blocked_subjects,['Matemáticas']);
+  assert.ok(request.pupil_token);
+  assert.notEqual(request.pupil_token,'alumno-sensible');
+  assert.ok(payload.busy.some(entry=>entry.pupil_token===request.pupil_token&&entry.weekday===0));
+  assert.ok(payload.busy.some(entry=>entry.teacher_id==='teacher-pt'&&entry.weekday===0));
+  const next=buildWeeklyPreviewRequest(state);
+  assert.notEqual(next.payload.supports[0].pupil_token,request.pupil_token);
+  const wire=JSON.stringify(payload);
+  for(const secret of ['alumno-sensible','Dato personal privado','informe PT/AL','Especialista PT']) {
+    assert.equal(wire.includes(secret),false);
+  }
+});
+
+test('mantiene el mismo token anónimo entre PT y AL sin mezclar horas objetivo',()=>{
+  const state=makeState();
+  state.students[0].curso='1º';
+  state.students[0].grupoClase='1ºA';
+  state.students[0].horasPTObjetivoMin=45;
+  state.students[0].horasALObjetivoMin=45;
+  state.professionals.push({
+    id:'pt',nombre:'PT',tipo:'PT',activo:true,disponibilidad:availability
+  },{
+    id:'al',nombre:'AL',tipo:'AL',activo:true,disponibilidad:availability
+  });
+  state.groups=[
+    {id:'one-pt',tipo:'PT',professionalId:'pt',studentIds:['alumno-sensible']},
+    {id:'one-al',tipo:'AL',professionalId:'al',studentIds:['alumno-sensible']}
+  ];
+  state.sessions=[];
+  const result=buildWeeklyPreviewRequest(state);
+  assert.equal(result.payload.supports.length,2);
+  assert.equal(result.payload.supports[0].pupil_token,result.payload.supports[1].pupil_token);
+  assert.deepEqual(result.payload.supports.map(s=>s.service),['PT','AL']);
+  assert.deepEqual(result.payload.supports.map(s=>s.weekly_minutes),[45,45]);
+});
+
+test('no inventa sesiones grupales cuando los objetivos individuales son distintos',()=>{
+  const state=makeState();
+  state.professionals.push({
+    id:'pt',nombre:'PT',tipo:'PT',activo:true,disponibilidad:availability
+  });
+  state.students[0].curso='1º';
+  state.students[0].grupoClase='1ºA';
+  state.students[0].horasPTObjetivoMin=90;
+  state.students.push({
+    id:'student-other',curso:'1º',grupoClase:'1ºA',horasPTObjetivoMin:45,activo:true
+  });
+  state.groups=[{
+    id:'pt-two-pupils',tipo:'PT',professionalId:'pt',
+    studentIds:['alumno-sensible','student-other']
+  }];
+  state.sessions=[];
+  const {payload,warnings}=buildWeeklyPreviewRequest(state);
+  assert.equal(payload.supports.length,0);
+  assert.ok(warnings.some(note=>note.includes('necesidad(es) PT/AL pendientes')));
+  assert.equal(JSON.stringify(payload).includes('student-other'),false);
+});
+
+test('respeta restricciones individuales de no salir durante apoyos',()=>{
+  const state=makeState();
+  state.professionals.push({id:'pt',nombre:'PT',tipo:'PT',activo:true,disponibilidad:availability});
+  state.students[0].curso='1º';
+  state.students[0].grupoClase='1ºA';
+  state.students[0].horasPTObjetivoMin=45;
+  state.students[0].restricciones=[{
+    tipo:'no-salir',dia:'martes',inicio:'09:00',fin:'10:00'
+  }];
+  state.groups=[{id:'pt-one',tipo:'PT',professionalId:'pt',studentIds:['alumno-sensible']}];
+  state.sessions=[];
+  const payload=buildWeeklyPreviewRequest(state).payload;
+  assert.equal(payload.supports.length,1);
+  assert.ok(payload.busy.some(entry=>
+    entry.pupil_token===payload.supports[0].pupil_token&&entry.weekday===1
+    &&entry.start_time==='09:00'&&entry.end_time==='10:00'));
+});
