@@ -14,6 +14,7 @@ import {
   logoutAllBackend,
   logoutBackend,
   pushAcademicConfiguration,
+  previewWeeklyTimetable,
   registerSchoolBackend,
   revokeAuthSession,
   saveBackendSettings,
@@ -21,6 +22,7 @@ import {
 } from './backend-service.js';
 import { renderIntegrationView } from './integration-view.js';
 import { toJsonCompatible } from './gestor-serialization.js';
+import { buildWeeklyPreviewRequest } from './weekly-preview-adapter.js';
 import { loadState } from './repository.js';
 import { applySharePackage, createSharePackage } from './sharing.js';
 import { showToast } from './ui.js';
@@ -242,6 +244,31 @@ async function openIntegration() {
           showToast(error.message || 'La copia remota no es válida y no se ha aplicado.', 'error');
         }
         await openIntegration();
+      },
+      onPreviewWeekly:async () => {
+        const current = loadBackendSettings();
+        const { payload, warnings } = buildWeeklyPreviewRequest(state);
+        const result = await previewWeeklyTimetable(current, payload);
+        const titles = {
+          feasible:'Se ha encontrado una propuesta válida para las materias incluidas.',
+          infeasible:'Restricciones incompatibles: no existe una propuesta para estos datos.',
+          unknown:'Se agotó el tiempo sin determinar si existe una solución.'
+        };
+        const lines = [
+          titles[result.status] || 'El motor no devolvió un estado reconocido.',
+          `Clases/asignaturas: ${payload.lessons.length}; sesiones colocadas: ${result.lessons?.length || 0}.`,
+          'No se ha aplicado ni sustituido ningún horario.',
+          ...((result.reasons || []).map(message => `• ${message}`)),
+          ...warnings.map(message => `Aviso: ${message}`)
+        ];
+        if (result.status === 'feasible') {
+          const dayNames = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes'];
+          for (const entry of (result.lessons || []).slice(0, 40)) {
+            lines.push(`${dayNames[entry.weekday]} · ${entry.start_time}–${entry.end_time} · ${entry.group_id} · ${entry.subject_id}`);
+          }
+          if (result.lessons.length > 40) lines.push(`Y ${result.lessons.length - 40} sesiones más.`);
+        }
+        return lines.join('\n');
       },
       onSync:async (_value, adapter) => {
         const current = loadBackendSettings();
