@@ -78,6 +78,20 @@ La vista previa solo comprueba salas y trayectos cuyos identificadores se
 hayan suministrado. No calcula distancias reales, no guarda la propuesta
 y no modifica las sesiones ya existentes.
 
+**Aforos y horarios de salas:** en los Parámetros de generación global también
+puedes definir `Sala | 4` (cuatro plazas, disponible toda la jornada) o
+`Sala | 4 | lunes | 09:00 | 12:00` (solo ese tramo el lunes).
+Repite la segunda forma para los demás días o franjas admitidos; los días
+que no aparezcan quedan cerrados. Se admiten 1–30 plazas por sala.
+El cálculo descuenta las plazas realmente ocupadas por los alumnos de una
+sesión PT/AL y permite simultaneidad hasta el aforo, respetando también
+la agenda de cada profesional y alumno.
+
+**Compatibilidad:** las salas sin aforo explícito mantienen su reserva
+exclusiva (una sesión a la vez). La disponibilidad restringida no se aplica
+hasta que se configure. Las horas del centro y los horarios ya guardados
+no se alteran al solicitar esta vista previa.
+
 ## Modo local y modo online
 
 El proyecto sigue pudiendo utilizarse sin cuenta: IndexedDB conserva el estado del navegador y las funciones locales continúan disponibles sin backend.
