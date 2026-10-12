@@ -54,15 +54,23 @@ test('forma una propuesta entre dos grupos individuales compatibles',()=>{
   assert.equal(candidates.length,2);
 });
 
-test('no combina distintos docentes, clases, cursos o prohibiciones de extracción',()=>{
+test('no combina distintos docentes, cursos ni prohibiciones de extracción',()=>{
   const base=item('one',90);
   for(const different of [
     item('two',45,{teacherId:'another'}),
     item('two',45,{person:{id:'two',curso:'2º',grupoClase:'1ºA'}}),
-    item('two',45,{person:{id:'two',curso:'1º',grupoClase:'1ºB'}}),
     item('two',45,{policy:{blocked_subjects:['Matemáticas']}}),
     item('two',45,{service:'AL'})
   ]) assert.equal(proposeAutomaticSupportGroups([base,different]).length,0);
+});
+
+test('permite dos clases del mismo curso manteniendo restricciones personales',()=>{
+  const a=item('first',90);
+  const b=item('second',45,{person:{id:'second',curso:'1º',grupoClase:'1ºB'}});
+  const selected=proposeAutomaticSupportGroups([a,b]);
+  assert.equal(selected.length,1);
+  assert.deepEqual(selected[0].members.map(member=>member.person.grupoClase),['1ºA','1ºB']);
+  assert.equal(selected[0].sessionMinutes,45);
 });
 
 test('nunca se propone un bloque que sobrepasa objetivos o límites del piloto',()=>{
@@ -99,6 +107,24 @@ test('la vista previa agrupa PT de 90 y 45 sin almacenar ni enviar alumnos',()=>
   assert.equal(withoutGrouping.payload.group_supports.length,0);
   assert.equal(withoutGrouping.payload.supports.length,2);
   assert.deepEqual(withoutGrouping.payload.supports.map(s=>s.weekly_minutes),[90,45]);
+});
+
+test('agrupa entre clases de 1º sin enviar datos identificativos de menores',()=>{
+  const data=state();
+  data.schoolSettings.structure.courseLines={'1º':2};
+  data.professionals[0].teachingAssignments.push({grupoClase:'1ºB',materia:'Matemáticas'});
+  data.students[1].grupoClase='1ºB';
+  const report=buildWeeklyPreviewRequest(data);
+  assert.equal(report.autoGroups,1);
+  assert.deepEqual(
+    report.payload.group_supports[0].participants.map(person=>person.group_id),
+    ['1ºA','1ºB']
+  );
+  const wire=JSON.stringify(report.payload);
+  for(const secret of ['student-A','student-B','Nombre A','Nombre B']){
+    assert.equal(wire.includes(secret),false);
+  }
+  assert.deepEqual(report.payload.lessons.map(item=>item.group_id),['1ºA','1ºB']);
 });
 
 test('no fusiona objetivos de cursos diferentes aunque compartan profesional',()=>{
