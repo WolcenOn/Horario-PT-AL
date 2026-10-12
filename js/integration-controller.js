@@ -22,7 +22,7 @@ import {
 } from './backend-service.js';
 import { renderIntegrationView } from './integration-view.js';
 import { toJsonCompatible } from './gestor-serialization.js';
-import { buildWeeklyPreviewRequest } from './weekly-preview-adapter.js';
+import { requestWeeklyPreviewWithFallback } from './weekly-preview-client.js';
 import { loadState } from './repository.js';
 import { applySharePackage, createSharePackage } from './sharing.js';
 import { showToast } from './ui.js';
@@ -247,22 +247,9 @@ async function openIntegration() {
       },
       onPreviewWeekly:async () => {
         const current = loadBackendSettings();
-        let { payload, warnings, autoGroups } = buildWeeklyPreviewRequest(state);
-        let result = await previewWeeklyTimetable(current, payload);
-        if (result.status === 'infeasible' && autoGroups > 0) {
-          // A proposed grouping is not a mandatory school constraint.
-          // Retry the same remaining goals as independent PT/AL sessions.
-          const alternative = buildWeeklyPreviewRequest(
-            state, state.centerPlanningSettings, {autoFormGroups:false}
-          );
-          const fallback = await previewWeeklyTimetable(current, alternative.payload);
-          warnings = [
-            ...alternative.warnings,
-            'La agrupación automática no encajó con las restricciones. Se ha recalculado sin esas agrupaciones, conservando los apoyos existentes.'
-          ];
-          payload = alternative.payload;
-          result = fallback;
-        }
+        const {payload,result,warnings}=await requestWeeklyPreviewWithFallback(
+          state,current,previewWeeklyTimetable
+        );
         const titles = {
           feasible:'Se ha encontrado una propuesta válida para las materias incluidas.',
           infeasible:'Restricciones incompatibles: no existe una propuesta para estos datos.',
