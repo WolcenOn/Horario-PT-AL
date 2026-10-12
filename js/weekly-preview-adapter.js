@@ -110,8 +110,13 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
     ...((generation.travelMinutes || generation.travelRules.length) && !generation.supportRoomId
       ? ['Desplazamientos PT/AL: no se conoce la sala de apoyos; solo se aplica traslado entre las aulas de clase configuradas.']
       : []),
-    ...(generation.supportRoomId
-      ? ['La sala PT/AL indicada se trata como un único recurso físico exclusivo para todos los apoyos enviados.']
+    ...(generation.supportRoomId && !generation.roomResources.some(
+      room=>room.roomId===generation.supportRoomId
+    )
+      ? ['La sala general PT/AL conserva ocupación exclusiva porque no tiene aforo configurado.']
+      : []),
+    ...(generation.roomResources.length
+      ? ['Las salas con aforo definido se verifican por asistentes reales y respetan los días y horas configurados.']
       : []),
     'Los horarios existentes no se sustituyen ni se envían a la base de datos como propuesta confirmada.',
     ...support.warnings
@@ -152,6 +157,15 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
         from_location_id:rule.fromLocationId,
         to_location_id:rule.toLocationId,
         minutes:rule.minutes
+      })),
+      rooms:generation.roomResources.map(room=>({
+        room_id:room.roomId,
+        capacity:room.capacity,
+        windows:room.windows.map(window=>({
+          weekday:window.weekday,
+          start_time:window.startTime,
+          end_time:window.endTime
+        }))
       }))
     },
     warnings,
