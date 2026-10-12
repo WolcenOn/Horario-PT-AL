@@ -54,6 +54,31 @@ export function parseTravelRules(source) {
 }
 
 
+// Non-sensitive environment/equipment tags; no pupil-specific information.
+export const ROOM_FEATURES=[
+  {value:'acceso_sin_escalones',label:'Acceso sin escalones'},
+  {value:'mesa_regulable',label:'Mesa regulable'},
+  {value:'aislamiento_acustico',label:'Aislamiento acústico'},
+  {value:'material_logopedico',label:'Material logopédico'},
+  {value:'pizarra_digital',label:'Pizarra digital'}
+];
+const ROOM_FEATURE_KEYS=new Set(ROOM_FEATURES.map(feature=>feature.value));
+
+export function normalizeRoomFeatures(value) {
+  if(!Array.isArray(value)) return [];
+  return [...new Set(value.filter(feature=>ROOM_FEATURE_KEYS.has(feature)))];
+}
+
+function parseFeatureList(value, lineno) {
+  if(!value)return [];
+  const features=value.split(',').map(feature=>feature.trim()).filter(Boolean);
+  if(features.length>5 || features.length!==new Set(features).size
+    ||features.some(feature=>!ROOM_FEATURE_KEYS.has(feature))) {
+    throw new Error(`Sala línea ${lineno}: utiliza solo las características de sala admitidas, sin duplicados.`);
+  }
+  return features;
+}
+
 const WEEKDAYS=['lunes','martes','miercoles','jueves','viernes'];
 
 function validClock(value) {
@@ -84,7 +109,8 @@ export function normalizeRoomResources(source) {
     seen.add(roomId);
     const windows=(Array.isArray(input.windows)?input.windows:[])
       .slice(0,30).map(normalizeRoomWindow).filter(Boolean);
-    rooms.push({roomId,capacity,windows});
+    const features=normalizeRoomFeatures(input.features);
+    rooms.push({roomId,capacity,windows,...(features.length?{features}:{})});
   }
   return rooms;
 }
@@ -96,10 +122,14 @@ export function parseRoomResources(source) {
   const rooms=new Map();
   for (const [index,line] of lines.entries()) {
     const parts=line.split('|').map(p=>p.trim());
-    if(parts.length!==2&&parts.length!==5){
-      throw new Error(`Sala línea ${index+1}: usa sala | aforo [| día | inicio | fin].`);
+    if(![2,3,5,6].includes(parts.length)){
+      throw new Error(`Sala línea ${index+1}: usa sala | aforo [| día | inicio | fin] [| características].`);
     }
-    const [roomId,capacityText,weekdayText,startTime,endTime]=parts;
+    const [roomId,capacityText]=parts;
+    const [weekdayText,startTime,endTime]=parts.length>=5?parts.slice(2,5):[];
+    const features=parseFeatureList(
+      parts.length===3?parts[2]:parts.length===6?parts[5]:'', index+1
+    );
     const capacity=Number(capacityText);
     if(!roomId || roomId.length>64 || capacityText==='' ||
         !Number.isInteger(capacity)||capacity<1||capacity>30) {
@@ -107,13 +137,13 @@ export function parseRoomResources(source) {
     }
     if(!rooms.has(roomId)){
       if(rooms.size>=50)throw new Error('Se admiten hasta 50 salas.');
-      rooms.set(roomId,{roomId,capacity,windows:[],unrestricted:false});
+      rooms.set(roomId,{roomId,capacity,features,windows:[],unrestricted:false});
     }
     const room=rooms.get(roomId);
-    if(room.capacity!==capacity) {
-      throw new Error(`Sala línea ${index+1}: el aforo de ${roomId} es inconsistente.`);
+    if(room.capacity!==capacity || JSON.stringify(room.features)!==JSON.stringify(features)) {
+      throw new Error(`Sala línea ${index+1}: el aforo o equipamiento de ${roomId} es inconsistente.`);
     }
-    if(parts.length===2) {
+    if(parts.length<=3) {
       if(room.windows.length || room.unrestricted) {
         throw new Error(`Sala línea ${index+1}: configuración de ${roomId} duplicada.`);
       }
@@ -131,8 +161,8 @@ export function parseRoomResources(source) {
     if(room.windows.length>=30)throw new Error(`Sala ${roomId}: máximo 30 franjas.`);
     room.windows.push({weekday,startTime,endTime});
   }
-  const specs=[...rooms.values()].map(({roomId,capacity,windows})=>({
-    roomId,capacity,windows:windows.sort(
+  const specs=[...rooms.values()].map(({roomId,capacity,windows,features})=>({
+    roomId,capacity,...(features.length?{features}:{}),windows:windows.sort(
       (a,b)=>a.weekday-b.weekday||a.startTime.localeCompare(b.startTime)
     )
   }));
@@ -151,10 +181,12 @@ export function parseRoomResources(source) {
 }
 
 export function formatRoomResources(source) {
-  return normalizeRoomResources(source).flatMap(room=>room.windows.length
-    ? room.windows.map(window=>
-        `${room.roomId} | ${room.capacity} | ${WEEKDAYS[window.weekday]} | ${window.startTime} | ${window.endTime}`
-      )
-    : [`${room.roomId} | ${room.capacity}`]
-  ).join('\n');
+  return normalizeRoomResources(source).flatMap(room=>{
+    const features=room.features?.length?` | ${room.features.join(',')}`:'';
+    return room.windows.length
+      ? room.windows.map(window=>
+          `${room.roomId} | ${room.capacity} | ${WEEKDAYS[window.weekday]} | ${window.startTime} | ${window.endTime}${features}`
+        )
+      : [`${room.roomId} | ${room.capacity}${features}`];
+  }).join('\n');
 }
