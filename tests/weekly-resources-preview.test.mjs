@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeCenterPlanningSettings } from '../js/center-planning.js';
 import { buildWeeklyPreviewRequest } from '../js/weekly-preview-adapter.js';
-import { parseTravelRules, supportRoomId } from '../js/weekly-location-rules.js';
+import { parseRoomResources, formatRoomResources, parseTravelRules, supportRoomId } from '../js/weekly-location-rules.js';
 
 const intervals=Object.fromEntries(
   ['lunes','martes','miercoles','jueves','viernes']
@@ -189,4 +189,76 @@ test('una ruta concreta activa las ubicaciones aunque el margen general sea cero
   assert.deepEqual(result.payload.lessons.map(i=>i.location_id),[
     'class:1ºA','class:2ºA'
   ]);
+});
+
+
+test('configuración de aforo: una sala libre y otra con franjas semanales',()=>{
+  const data=parseRoomResources(
+    'Sala A | 2\nSala PT | 4 | lunes | 09:00 | 12:00\nSala PT | 4 | martes | 10:00 | 11:45'
+  );
+  assert.deepEqual(data,[
+    {roomId:'Sala A',capacity:2,windows:[]},
+    {roomId:'Sala PT',capacity:4,windows:[
+      {weekday:0,startTime:'09:00',endTime:'12:00'},
+      {weekday:1,startTime:'10:00',endTime:'11:45'}
+    ]}
+  ]);
+  assert.deepEqual(parseRoomResources(formatRoomResources(data)),data);
+});
+
+test('rechaza aforos inválidos, horarios solapados y días fuera de la semana',()=>{
+  for(const definition of [
+    'Sala | 0','Sala | 31','Sala | 3 | domingo | 09:00 | 10:00',
+    'Sala | 2 | lunes | 09:05 | 10:00',
+    'Sala | 2 | lunes | 10:00 | 09:00',
+    'Sala | 2\nSala | 2 | martes | 09:00 | 10:00',
+    'Sala | 2 | lunes | 09:00 | 10:00\nSala | 3 | martes | 10:00 | 11:00',
+    'Sala | 2 | lunes | 09:00 | 10:00\nSala | 2 | lunes | 09:45 | 11:00'
+  ]) assert.throws(()=>parseRoomResources(definition),/Sala/);
+});
+
+test('envía los aforos y franjas sin nombres ni identificadores originales de alumnos',()=>{
+  const state=fixture();
+  state.centerPlanningSettings.generation.roomResources=[{
+    roomId:'ROOM-1',capacity:4,windows:[
+      {weekday:0,startTime:'09:00',endTime:'11:00'},
+      {weekday:2,startTime:'10:00',endTime:'12:00'}
+    ]
+  }];
+  const {payload,warnings}=buildWeeklyPreviewRequest(state);
+  assert.deepEqual(payload.rooms,[{
+    room_id:'ROOM-1',capacity:4,windows:[
+      {weekday:0,start_time:'09:00',end_time:'11:00'},
+      {weekday:2,start_time:'10:00',end_time:'12:00'}
+    ]
+  }]);
+  assert.ok(payload.busy.some(block=>
+    block.room_id==='ROOM-1'&&block.room_units===1
+  ));
+  assert.ok(warnings.some(w=>w.includes('aforo definido')));
+  assert.equal(JSON.stringify(payload).includes('p-1'),false);
+});
+
+test('el recuento de una sesión existente excluye al alumno que no asiste',()=>{
+  const state=fixture();
+  state.students.push({
+    id:'p-2',curso:'1º',grupoClase:'1ºA',
+    horasPTObjetivoMin:45,activo:true
+  });
+  state.groups[0].studentIds.push('p-2');
+  state.sessions[0].excludedStudentIds=['p-2'];
+  const payload=buildWeeklyPreviewRequest(state).payload;
+  const reservation=payload.busy.find(block=>
+    block.room_id==='ROOM-1'&&block.teacher_id==='pt'
+  );
+  assert.equal(reservation.room_units,1);
+  assert.equal(JSON.stringify(payload).includes('p-2'),false);
+});
+
+test('una sala sin aforo permanece reservada en exclusiva como en versiones anteriores',()=>{
+  const state=fixture();
+  const payload=buildWeeklyPreviewRequest(state).payload;
+  assert.deepEqual(payload.rooms,[]);
+  assert.equal(payload.supports[0].room_id,'ROOM-1');
+  assert.ok(payload.warnings===undefined);
 });
