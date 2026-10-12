@@ -4,6 +4,7 @@ import { DAYS } from './constants.js';
 import { curriculumForCourse, normalizeCenterPlanningSettings, normalizeProfessionalProfile, validateGlobalGeneration } from './center-planning.js';
 import { configuredClassGroups, courseForClassGroup, recessForStage, stageForCourse } from './education.js';
 import { professionalCanWork } from './professional-availability.js';
+import { buildAnonymousSupportPreview } from './weekly-support-preview.js';
 import { dayAllowed, effectiveMaxSessionsPerDay, planSessionDurations, subjectPatternForCourse, validateTimePattern } from './time-patterns.js';
 import { minutesToTime, timeToMinutes } from './utils.js';
 
@@ -92,26 +93,17 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
     }
   }
 
-  // Reserve teachers already serving PT/AL groups; no student identities
-  // or participation lists are transmitted to the backend.
-  const groups = new Map((state.groups || []).map(group => [group.id, group]));
-  for (const session of state.sessions || []) {
-    const weekday = days.get(session.dia);
-    const teacherId = session.professionalId || groups.get(session.groupId)?.professionalId;
-    if (weekday == null || !teachersUsed.has(teacherId)) continue;
-    const start = timeToMinutes(session.inicio);
-    const end = timeToMinutes(session.fin);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end || start % 15 || end % 15) {
-      throw new Error('Hay una sesión PT/AL sin intervalo compatible con la rejilla de 15 minutos.');
-    }
-    busy.push({
-      weekday, start_time:session.inicio, end_time:session.fin, teacher_id:teacherId
-    });
+  const support = buildAnonymousSupportPreview(state, lessons);
+  busy.push(...support.busy);
+  for (const teacher of support.teachers) {
+    if (teachersUsed.has(teacher.id)) continue;
+    for (const day of DAYS) appendUnavailability(busy, teacher, day, begin, finish);
   }
 
   const warnings = [
-    'Vista previa parcial: no integra todavía actividades del centro sin horario fijo, recursos/aulas, desplazamientos ni restricciones individuales de extracción PT/AL.',
-    'Los horarios existentes no se sustituyen ni se envían a la base de datos como propuesta confirmada.'
+    'Vista previa parcial: todavía no integra actividades móviles sin horario fijo, recursos/aulas, desplazamientos ni agrupaciones automáticas PT/AL.',
+    'Los horarios existentes no se sustituyen ni se envían a la base de datos como propuesta confirmada.',
+    ...support.warnings
   ];
   for (const activity of settings.weeklyActivities.filter(item => item.active !== false && item.weeklyMinutes > 0)) {
     if (!(activity.scheduledSlots || []).length) continue;
@@ -130,13 +122,16 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
       }
     }
   }
-  if (lessons.length > 100 || lessons.reduce((sum, lesson) => sum + lesson.durations.length, 0) > 150 || busy.length > 500) {
+  if (lessons.length + support.supports.length > 100 ||
+      lessons.reduce((sum, lesson) => sum + lesson.durations.length, 0)
+        + support.supports.reduce((sum, request) => sum + request.durations.length, 0) > 150 ||
+      busy.length > 500) {
     throw new Error('La vista previa supera los límites actuales de GestorEscuela; reduce el alcance del cálculo.');
   }
   return {
     payload:{
       start_time:generation.start, end_time:generation.end,
-      lessons, busy, max_time_seconds:5
+      lessons, supports:support.supports, busy, max_time_seconds:5
     },
     warnings
   };
