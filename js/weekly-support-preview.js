@@ -2,6 +2,7 @@
 // Never send local student IDs, names, diagnostic notes or membership rosters.
 import { DAYS } from './constants.js';
 import { proposeAutomaticSupportGroups } from './auto-support-groups.js';
+import { roomFields, supportRoomId as resolveSupportRoomId } from './weekly-location-rules.js';
 import { canExtractForSupport, resolveSupportPolicy } from './support-policy.js';
 import { minutesToTime, timeToMinutes } from './utils.js';
 
@@ -67,10 +68,6 @@ function extractionRules(state, lessons, student, service) {
 export function buildAnonymousSupportPreview(
   state, lessons, {autoFormGroups=true, supportRoomId=''}={}
 ) {
-  const room = String(supportRoomId || '').trim();
-  const roomFields = room
-    ? {room_id:room, location_id:`room:${room}`}
-    : {};
   const allStudents=(state.students||[]).filter(student=>student.activo!==false && student.id);
   const students=new Map(allStudents.map(student=>[student.id,student]));
   const groupById=new Map((state.groups||[]).filter(group=>group.activo!==false).map(group=>[group.id,group]));
@@ -113,9 +110,12 @@ export function buildAnonymousSupportPreview(
       warnings.push('Hay una sesión PT/AL con un profesional no disponible en la configuración.');
       continue;
     }
+    const room=resolveSupportRoomId(
+      {roomId:session.aula || group.roomId},professionals.get(teacherId),supportRoomId
+    );
     busy.push({
       weekday,start_time:session.inicio,end_time:session.fin,
-      teacher_id:teacherId,...roomFields
+      teacher_id:teacherId,...roomFields(room)
     });
     references.set(teacherId,professionals.get(teacherId));
     const excluded=new Set(session.excludedStudentIds||[]);
@@ -178,7 +178,7 @@ export function buildAnonymousSupportPreview(
       service:group.tipo,
       teacher_id:professor.id,
       session_minutes:duration,
-      participants,...roomFields,
+      participants,...roomFields(resolveSupportRoomId(group,professor,supportRoomId)),
       allowed_days:[0,1,2,3,4],
       max_sessions_per_day:2
     });
@@ -202,6 +202,9 @@ export function buildAnonymousSupportPreview(
       if(!remaining)continue;
       individualCandidates.push({
         person,key,service,teacherId,remaining,
+        roomId:resolveSupportRoomId(
+          existing[0],professionals.get(teacherId),supportRoomId
+        ),
         policy:extractionRules(state,lessons,person,service)
       });
     }
@@ -220,7 +223,7 @@ export function buildAnonymousSupportPreview(
     groupSupports.push({
       request_id:`auto-support-${groupSupports.length+1}`,
       service:first.service,teacher_id:first.teacherId,
-      session_minutes:proposal.sessionMinutes,participants,...roomFields,
+      session_minutes:proposal.sessionMinutes,participants,...roomFields(first.roomId),
       allowed_days:[0,1,2,3,4],max_sessions_per_day:2
     });
     for(const member of proposal.members)groupedKeys.add(member.key);
@@ -257,7 +260,8 @@ export function buildAnonymousSupportPreview(
       supports.push({
         request_id,service,teacher_id:professional.id,
         pupil_token:token,group_id:student.grupoClase,
-        weekly_minutes:remaining,durations:minutes,...policy,...roomFields,
+        weekly_minutes:remaining,durations:minutes,...policy,
+        ...roomFields(resolveSupportRoomId(groups[0],professional,supportRoomId)),
         allowed_days:[0,1,2,3,4],max_sessions_per_day:2
       });
       references.set(professional.id,professional);
@@ -279,6 +283,8 @@ export function buildAnonymousSupportPreview(
     }
   }
   if(omitted)warnings.push(`${omitted} necesidad(es) PT/AL pendientes no se han incluido: falta un grupo inequívoco, clase configurada o duración compatible.`);
-  if(supports.length||groupSupports.length)warnings.push('Los apoyos propuestos todavía requieren revisión antes de aplicarse. No se modelan desplazamientos ni espacios compartidos.');
+  if(supports.length||groupSupports.length)warnings.push(
+    'Los apoyos propuestos requieren revisión antes de aplicarse. Solo se verifican salas y desplazamientos con identificadores y tiempos explícitos; no se calculan rutas reales.'
+  );
   return {supports,groupSupports,busy,teachers:[...references.values()],warnings,autoGroups:automaticGroups.length};
 }
