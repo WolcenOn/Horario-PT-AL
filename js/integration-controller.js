@@ -247,8 +247,22 @@ async function openIntegration() {
       },
       onPreviewWeekly:async () => {
         const current = loadBackendSettings();
-        const { payload, warnings } = buildWeeklyPreviewRequest(state);
-        const result = await previewWeeklyTimetable(current, payload);
+        let { payload, warnings, autoGroups } = buildWeeklyPreviewRequest(state);
+        let result = await previewWeeklyTimetable(current, payload);
+        if (result.status === 'infeasible' && autoGroups > 0) {
+          // A proposed grouping is not a mandatory school constraint.
+          // Retry the same remaining goals as independent PT/AL sessions.
+          const alternative = buildWeeklyPreviewRequest(
+            state, state.centerPlanningSettings, {autoFormGroups:false}
+          );
+          const fallback = await previewWeeklyTimetable(current, alternative.payload);
+          warnings = [
+            ...alternative.warnings,
+            'La agrupación automática no encajó con las restricciones. Se ha recalculado sin esas agrupaciones, conservando los apoyos existentes.'
+          ];
+          payload = alternative.payload;
+          result = fallback;
+        }
         const titles = {
           feasible:'Se ha encontrado una propuesta válida para las materias incluidas.',
           infeasible:'Restricciones incompatibles: no existe una propuesta para estos datos.',
