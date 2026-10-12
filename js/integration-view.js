@@ -27,7 +27,8 @@ export function renderIntegrationView(root, {
   onSelectScenario,
   onSaveScenarioSnapshot,
   onRestoreScenarioSnapshot,
-  onSync
+  onSync,
+  onPreviewWeekly
 }) {
   const normalized = normalizeBackendSettings(settings);
   const adapter = buildGestorEscuelaConfiguration(state);
@@ -77,6 +78,12 @@ export function renderIntegrationView(root, {
           <button class="button button-primary" type="button" data-sync-backend ${canSync ? '' : 'disabled'}>Sincronizar configuración para operativa diaria</button>
           <span class="field-hint">La sincronización requiere una sesión activa. Las conexiones Actor ID ya existentes se mantienen solo durante la transición y no se pueden crear desde esta pantalla.</span>
         </div>
+        <div class="help-note">
+          <strong>Vista previa semanal con duraciones por materia</strong>
+          <p>Calcula en GestorEscuela una propuesta provisional usando las cargas semanales, patrones temporales y docentes del navegador. Envía IDs de grupos y docentes, nunca identidades ni notas de alumnos. Esta primera fase reserva las sesiones PT/AL ya programadas, pero todavía no genera nuevos apoyos ni modela todos los recursos y conflictos individuales.</p>
+          <button class="button" type="button" data-preview-weekly ${configured ? '' : 'disabled'}>Comprobar horario semanal en el motor</button>
+          <pre data-weekly-preview-result role="status" aria-live="polite" style="white-space:pre-wrap;max-height:18rem;overflow:auto;"></pre>
+        </div>
       </div>
     </section>
 
@@ -100,6 +107,20 @@ export function renderIntegrationView(root, {
   });
   root.querySelector('[data-test-backend]')?.addEventListener('click', async () => onTest(readSettings(form, normalized)));
   root.querySelector('[data-sync-backend]')?.addEventListener('click', async () => onSync(normalized, adapter));
+  root.querySelector('[data-preview-weekly]')?.addEventListener('click', async () => {
+    const node = root.querySelector('[data-weekly-preview-result]');
+    const button = root.querySelector('[data-preview-weekly]');
+    button.disabled = true;
+    if (node) node.textContent = 'Calculando vista previa (no se modifica ningún horario)…';
+    try {
+      const report = await onPreviewWeekly();
+      if (node) node.textContent = report;
+    } catch (error) {
+      if (node) node.textContent = error?.message || 'No se pudo calcular la vista previa.';
+    } finally {
+      button.disabled = false;
+    }
+  });
   root.querySelector('[data-save-scenario-snapshot]')?.addEventListener('click', async () => onSaveScenarioSnapshot());
   root.querySelector('[data-restore-scenario-snapshot]')?.addEventListener('click', async () => onRestoreScenarioSnapshot(context.snapshot));
   root.querySelector('[data-logout-backend]')?.addEventListener('click', async () => onLogout());
