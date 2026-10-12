@@ -18,7 +18,8 @@ export function proposeAutomaticSupportGroups(candidates) {
         !Number.isInteger(remaining)||remaining<=0||remaining>900||remaining%15)continue;
     const key=JSON.stringify([
       teacherId,service,person.curso,
-      sameHardPolicy(policy?.blocked_subjects)
+      sameHardPolicy(policy?.blocked_subjects),
+      String(candidate.roomId||'').trim()
     ]);
     if(!pools.has(key))pools.set(key,[]);
     pools.get(key).push(candidate);
