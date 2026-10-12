@@ -105,7 +105,7 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
   }
 
   const warnings = [
-    'Vista previa parcial: no optimiza actividades móviles sin hora fija, rutas reales ni asignaciones automáticas de salas.',
+    'Vista previa parcial PT/AL: no optimiza actividades móviles sin hora fija, rutas reales ni asignaciones automáticas de salas.',
     ...(generation.travelMinutes && !generation.supportRoomId
       ? ['Desplazamientos PT/AL: no se conoce la sala de apoyos; solo se aplica traslado entre las aulas de clase configuradas.']
       : []),
