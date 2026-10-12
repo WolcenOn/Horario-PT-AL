@@ -216,7 +216,7 @@ export function buildAnonymousSupportPreview(state, lessons, {autoFormGroups=tru
     references.set(first.teacherId,professionals.get(first.teacherId));
   }
   if(automaticGroups.length)warnings.push(
-    `${automaticGroups.length} agrupación(es) PT/AL propuestas automáticamente entre alumnos con el mismo docente, servicio, curso, clase y prohibiciones de extracción. Son una alternativa de cálculo, no se guardan.`
+    `${automaticGroups.length} agrupación(es) PT/AL temporales entre alumnos con el mismo docente, servicio, curso y restricciones de extracción compatibles. Pueden proceder de distintas clases; no se guardan ni se aplican automáticamente.`
   );
 
   for (const student of allStudents) {
