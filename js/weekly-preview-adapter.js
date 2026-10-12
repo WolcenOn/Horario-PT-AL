@@ -122,16 +122,20 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
       }
     }
   }
-  if (lessons.length + support.supports.length > 100 ||
+  if (lessons.length + support.supports.length + support.groupSupports.length > 100 ||
       lessons.reduce((sum, lesson) => sum + lesson.durations.length, 0)
-        + support.supports.reduce((sum, request) => sum + request.durations.length, 0) > 150 ||
+        + support.supports.reduce((sum, request) => sum + request.durations.length, 0)
+        + support.groupSupports.reduce((sum, group) =>
+          sum + Math.max(...group.participants.map(person=>person.weekly_minutes))/group.session_minutes, 0
+        ) > 150 ||
       busy.length > 500) {
     throw new Error('La vista previa supera los límites actuales de GestorEscuela; reduce el alcance del cálculo.');
   }
   return {
     payload:{
       start_time:generation.start, end_time:generation.end,
-      lessons, supports:support.supports, busy, max_time_seconds:5
+      lessons, supports:support.supports, group_supports:support.groupSupports,
+      busy, max_time_seconds:5
     },
     warnings
   };
