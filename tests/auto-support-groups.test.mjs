@@ -98,7 +98,7 @@ test('la vista previa agrupa PT de 90 y 45 sin almacenar ni enviar alumnos',()=>
     assert.equal(serialized.includes(secret),false);
   }
   assert.equal(JSON.stringify(data),original);
-  assert.ok(result.warnings.some(w=>w.includes('agrupación(es) PT/AL propuestas')));
+  assert.ok(result.warnings.some(w=>w.includes('agrupación(es) PT/AL temporales')));
 
   const withoutGrouping=buildWeeklyPreviewRequest(
     data,data.centerPlanningSettings,{autoFormGroups:false}
