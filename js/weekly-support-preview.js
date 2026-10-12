@@ -68,9 +68,14 @@ function extractionRules(state, lessons, student, service) {
 export function buildAnonymousSupportPreview(
   state, lessons, {
     autoFormGroups=true, supportRoomId='',
-    autoAssignSupportRooms=false, availableRooms=[]
+    autoAssignSupportRooms=false, availableRooms=[],
+    roomRequirements={}
   }={}
 ) {
+  const requiredFields=(service)=>{
+    const tags=roomRequirements?.[service]||[];
+    return tags.length ? {required_features:tags} : {};
+  };
   const candidates = autoAssignSupportRooms
     ? availableRooms.slice(0,8).map(room=>room.roomId)
     : [];
@@ -198,6 +203,7 @@ export function buildAnonymousSupportPreview(
       teacher_id:professor.id,
       session_minutes:duration,
       participants,...plannedRoomFields(group,professor),
+      ...requiredFields(group.tipo),
       allowed_days:[0,1,2,3,4],
       max_sessions_per_day:2
     });
@@ -242,6 +248,7 @@ export function buildAnonymousSupportPreview(
       service:first.service,teacher_id:first.teacherId,
       session_minutes:proposal.sessionMinutes,participants,
       ...(first.roomId?roomFields(first.roomId):plannedRoomFields(null,null)),
+      ...requiredFields(first.service),
       allowed_days:[0,1,2,3,4],max_sessions_per_day:2
     });
     for(const member of proposal.members)groupedKeys.add(member.key);
@@ -280,6 +287,7 @@ export function buildAnonymousSupportPreview(
         pupil_token:token,group_id:student.grupoClase,
         weekly_minutes:remaining,durations:minutes,...policy,
         ...plannedRoomFields(groups[0],professional),
+        ...requiredFields(service),
         allowed_days:[0,1,2,3,4],max_sessions_per_day:2
       });
       references.set(professional.id,professional);
