@@ -59,6 +59,25 @@ Entre otras, la rama de integración contiene:
 - cambio y recuperación de contraseña;
 - sincronización de configuración académica para operativa diaria.
 
+## Salas PT/AL y trayectos por ubicación (vista previa GestorEscuela)
+
+En **Centro → Planificación del centro** puedes fijar un tiempo de traslado
+general (0–60 minutos, en pasos de 15) y rutas específicas con formato
+`origen | destino | minutos`. Los sentidos se configuran por separado, por
+ejemplo `class:1ºA | room:Sala AL | 15` y
+`room:Sala AL | class:1ºA | 30`. Sin regla específica se usa el margen
+general; con margen 0 y sin rutas no hay cambios respecto al legado.
+
+La asignación de salas para un apoyo tiene esta prioridad: **aula explícita
+de una sesión existente > sala configurada en su grupo > sala habitual del
+profesional > sala global de PT/AL**. Las salas específicas se editan en
+**Grupos de apoyo** y **Profesionales**. No se mezclan automáticamente
+grupos con salas obligatorias diferentes.
+
+La vista previa solo comprueba salas y trayectos cuyos identificadores se
+hayan suministrado. No calcula distancias reales, no guarda la propuesta
+y no modifica las sesiones ya existentes.
+
 ## Modo local y modo online
 
 El proyecto sigue pudiendo utilizarse sin cuenta: IndexedDB conserva el estado del navegador y las funciones locales continúan disponibles sin backend.
