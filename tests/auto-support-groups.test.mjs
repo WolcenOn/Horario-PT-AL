@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { proposeAutomaticSupportGroups } from '../js/auto-support-groups.js';
 import { buildWeeklyPreviewRequest } from '../js/weekly-preview-adapter.js';
+import { requestWeeklyPreviewWithFallback } from '../js/weekly-preview-client.js';
 
 function item(id, minutes, overrides={}) {
   return {
@@ -119,4 +120,55 @@ test('resta sesiones existentes antes de evaluar la agrupación',()=>{
   assert.equal(preview.autoGroups,1);
   assert.deepEqual(preview.payload.group_supports[0].participants.map(p=>p.weekly_minutes),[90,45]);
   assert.ok(preview.payload.busy.some(b=>b.teacher_id==='pt-specialist'&&b.weekday===0&&b.start_time==='09:00'));
+});
+
+
+test('reintenta por separado cuando la agrupación opcional es inviable',async()=>{
+  const data=state();
+  let calls=0;
+  const sent=[];
+  const fakeBackend={schoolId:'pilot'};
+  const send=async(backend,payload)=>{
+    assert.equal(backend,fakeBackend);
+    sent.push(payload);
+    calls++;
+    return calls===1
+      ? {status:'infeasible',preview_only:true,reasons:['group constraint']}
+      : {status:'feasible',preview_only:true,lessons:[],supports:[],group_supports:[]};
+  };
+  const result=await requestWeeklyPreviewWithFallback(data,fakeBackend,send);
+  assert.equal(calls,2);
+  assert.equal(sent[0].group_supports.length,1);
+  assert.equal(sent[0].supports.length,0);
+  assert.equal(sent[1].group_supports.length,0);
+  assert.equal(sent[1].supports.length,2);
+  assert.equal(result.result.status,'feasible');
+  assert.equal(result.groupingFallback,true);
+  assert.ok(result.warnings.some(w=>w.includes('se ha vuelto a calcular')));
+  for(const request of sent){
+    for(const forbidden of ['student-A','student-B','Nombre A','Nombre B']){
+      assert.equal(JSON.stringify(request).includes(forbidden),false);
+    }
+  }
+});
+
+test('no reintenta si la propuesta es factible o la búsqueda es inconclusa',async()=>{
+  const data=state();
+  for(const status of ['feasible','unknown']){
+    let calls=0;
+    const result=await requestWeeklyPreviewWithFallback(data,{},async()=>{
+      calls++;
+      return {status,preview_only:true,lessons:[],supports:[],group_supports:[]};
+    });
+    assert.equal(calls,1);
+    assert.equal(result.groupingFallback,false);
+    assert.equal(result.result.status,status);
+  }
+});
+
+test('rechaza una respuesta que no garantiza solo vista previa',async()=>{
+  await assert.rejects(
+    ()=>requestWeeklyPreviewWithFallback(state(),{},async()=>({status:'feasible'})),
+    /vista previa/
+  );
 });
