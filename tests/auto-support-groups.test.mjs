@@ -198,3 +198,31 @@ test('rechaza una respuesta que no garantiza solo vista previa',async()=>{
     /vista previa/
   );
 });
+
+
+test('no agrupa automáticamente alumnos asignados a salas de apoyo incompatibles',()=>{
+  const people=[
+    item('one',90,{roomId:'ROOM-PT-1'}),
+    item('two',45,{roomId:'ROOM-PT-2'})
+  ];
+  assert.equal(proposeAutomaticSupportGroups(people).length,0);
+  people[1].roomId='ROOM-PT-1';
+  assert.equal(proposeAutomaticSupportGroups(people).length,1);
+});
+
+test('las salas de los grupos originales preservan agrupaciones separadas',()=>{
+  const data=state();
+  data.groups[0].roomId='ROOM-1';
+  data.groups[1].roomId='ROOM-2';
+  const withoutSharedRoom=buildWeeklyPreviewRequest(data);
+  assert.equal(withoutSharedRoom.autoGroups,0);
+  assert.deepEqual(
+    withoutSharedRoom.payload.supports.map(entry=>entry.room_id),
+    ['ROOM-1','ROOM-2']
+  );
+  data.groups[1].roomId='ROOM-1';
+  const combined=buildWeeklyPreviewRequest(data);
+  assert.equal(combined.autoGroups,1);
+  assert.equal(combined.payload.group_supports[0].room_id,'ROOM-1');
+  assert.equal(combined.payload.group_supports[0].location_id,'room:ROOM-1');
+});
