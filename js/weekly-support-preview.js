@@ -79,10 +79,22 @@ export function buildAnonymousSupportPreview(
   const candidates = autoAssignSupportRooms
     ? availableRooms.slice(0,8).map(room=>room.roomId)
     : [];
-  const plannedRoomFields=(group, professional)=>{
+  const candidatesForService=(service)=>{
+    if(!autoAssignSupportRooms)return [];
+    const required=roomRequirements?.[service]||[];
+    const matching=availableRooms.filter(room=>
+      required.every(feature=>(room.features||[]).includes(feature))
+    );
+    // If no configured room is suitable, keep the candidate list so the
+    // backend proves infeasibility rather than falling back to an unsafe room.
+    return (matching.length?matching:availableRooms)
+      .slice(0,8).map(room=>room.roomId);
+  };
+  const plannedRoomFields=(group, professional, service)=>{
     const mandatory = group?.roomId || professional?.supportRoomId;
     if(mandatory) return roomFields(mandatory);
-    if(candidates.length) return {room_candidates:candidates};
+    const eligible=candidatesForService(service);
+    if(eligible.length) return {room_candidates:eligible};
     return roomFields(supportRoomId);
   };
   const poolingRoomId=(group, professional)=>{
@@ -202,7 +214,7 @@ export function buildAnonymousSupportPreview(
       service:group.tipo,
       teacher_id:professor.id,
       session_minutes:duration,
-      participants,...plannedRoomFields(group,professor),
+      participants,...plannedRoomFields(group,professor,group.tipo),
       ...requiredFields(group.tipo),
       allowed_days:[0,1,2,3,4],
       max_sessions_per_day:2
@@ -247,7 +259,7 @@ export function buildAnonymousSupportPreview(
       request_id:`auto-support-${groupSupports.length+1}`,
       service:first.service,teacher_id:first.teacherId,
       session_minutes:proposal.sessionMinutes,participants,
-      ...(first.roomId?roomFields(first.roomId):plannedRoomFields(null,null)),
+      ...(first.roomId?roomFields(first.roomId):plannedRoomFields(null,null,first.service)),
       ...requiredFields(first.service),
       allowed_days:[0,1,2,3,4],max_sessions_per_day:2
     });
@@ -286,7 +298,7 @@ export function buildAnonymousSupportPreview(
         request_id,service,teacher_id:professional.id,
         pupil_token:token,group_id:student.grupoClase,
         weekly_minutes:remaining,durations:minutes,...policy,
-        ...plannedRoomFields(groups[0],professional),
+        ...plannedRoomFields(groups[0],professional,service),
         ...requiredFields(service),
         allowed_days:[0,1,2,3,4],max_sessions_per_day:2
       });
