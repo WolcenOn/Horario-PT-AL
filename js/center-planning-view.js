@@ -2,7 +2,9 @@ import { COURSE_OPTIONS, configuredClassGroups, schoolStructureConfigured } from
 import { curriculumCoverage, curriculumForCourse, curriculumSubjectsForCourse, normalizeCenterPlanningSettings, normalizeProfessionalProfile, PLANNING_MODES, RESPONSIBILITY_TYPES } from './center-planning.js';
 import { buildGlobalReadiness } from './global-scheduler.js';
 import { saveCenterPlanningSettings } from './repository.js';
-import { formatRoomResources, parseRoomResources, parseTravelRules } from './weekly-location-rules.js';
+import {
+  formatRoomResources, parseRoomResources, parseTravelRules, ROOM_FEATURES
+} from './weekly-location-rules.js';
 import { escapeHtml, formatDuration } from './utils.js';
 
 export function renderCenterPlanning(root, { state, centerPlanningSettings, globalProposal, onSave, onNavigate, onGenerateGlobal, onApplyGlobal, onDiscardGlobal }) {
@@ -47,7 +49,9 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
         <div class="form-field"><label for="travelMinutes">Tiempo entre ubicaciones (vista previa GestorEscuela)</label><select id="travelMinutes" name="travelMinutes">${[0,15,30,45,60].map(value => `<option value="${value}" ${settings.generation.travelMinutes === value ? 'selected' : ''}>${value === 0 ? 'Sin desplazamiento obligatorio' : `${value} minutos`}</option>`).join('')}</select><span class="field-hint">Se aplica cuando un especialista pasa entre ubicaciones distintas conocidas. No se deducen distancias.</span></div>
         <div class="form-field"><label for="supportRoomId">Sala PT/AL compartida (opcional)</label><input id="supportRoomId" name="supportRoomId" maxlength="64" value="${escapeHtml(settings.generation.supportRoomId)}" placeholder="Ej.: Sala de apoyos 1"><span class="field-hint">Si se indica, PT y AL deben respetar la ocupación exclusiva de esta misma sala en la vista previa del motor.</span></div>
         <div class="form-field full"><label><input type="checkbox" name="autoAssignSupportRooms" ${settings.generation.autoAssignSupportRooms?'checked':''}> Permitir que GestorEscuela elija automáticamente una sala para los apoyos sin aula obligatoria</label><small class="field-hint">Usa únicamente las salas cuyo aforo y disponibilidad hayas configurado; respeta cualquier sala asignada al grupo o al profesional. No cambia sesiones existentes.</small></div>
-        <div class="form-field full"><label for="roomResources">Aforo y disponibilidad de salas PT/AL (opcional)</label><textarea id="roomResources" name="roomResources" rows="5" spellcheck="false" placeholder="Sala PT | 1&#10;Sala compartida | 4 | lunes | 09:00 | 12:00&#10;Sala compartida | 4 | martes | 10:00 | 13:00">${escapeHtml(formatRoomResources(settings.generation.roomResources))}</textarea><span class="field-hint">Una línea «sala | aforo» habilita la sala toda la jornada. Para limitar días y horas, repite «sala | aforo | día | inicio | fin» en cada franja. Cuando defines franjas, los demás días quedan cerrados. La ocupación se calcula por alumnos asistentes. Las salas no configuradas mantienen su uso exclusivo.</span></div>
+        <div class="form-field full"><label for="roomResources">Salas: aforo, horarios y equipamiento (opcional)</label><textarea id="roomResources" name="roomResources" rows="5" spellcheck="false" placeholder="Sala PT | 1 | mesa_regulable&#10;Sala AL | 4 | lunes | 09:00 | 12:00 | aislamiento_acustico,material_logopedico">${escapeHtml(formatRoomResources(settings.generation.roomResources))}</textarea><span class="field-hint">Sala | aforo [| característica1,característica2], o sala | aforo | día | inicio | fin [| características]. Usa los códigos de las opciones que aparecen debajo. Sin características no se presupone ningún equipo. Las salas no configuradas conservan uso exclusivo.</span></div>
+        <div class="form-field full"><strong>Equipamiento exigido para apoyos PT</strong><div class="form-grid">${ROOM_FEATURES.map(item=>`<label><input type="checkbox" name="requiredFeaturePT" value="${item.value}" ${settings.generation.supportRoomRequirements.PT.includes(item.value)?'checked':''}> ${escapeHtml(item.label)}</label>`).join('')}</div><small class="field-hint">Se exige a todos los apoyos PT propuestos; no se extrae del perfil del alumnado.</small></div>
+        <div class="form-field full"><strong>Equipamiento exigido para apoyos AL</strong><div class="form-grid">${ROOM_FEATURES.map(item=>`<label><input type="checkbox" name="requiredFeatureAL" value="${item.value}" ${settings.generation.supportRoomRequirements.AL.includes(item.value)?'checked':''}> ${escapeHtml(item.label)}</label>`).join('')}</div><small class="field-hint">Se exige a todos los apoyos AL propuestos; no se envían necesidades individuales.</small></div>
         <div class="form-field full"><label for="travelRules">Trayectos personalizados (opcionales)</label><textarea id="travelRules" name="travelRules" rows="4" spellcheck="false" placeholder="class:1ºA | room:Sala PT | 15&#10;room:Sala PT | class:1ºA | 30">${escapeHtml((settings.generation.travelRules||[]).map(rule=>`${rule.fromLocationId} | ${rule.toLocationId} | ${rule.minutes}`).join('\n'))}</textarea><span class="field-hint">Una ruta por línea: ubicación origen | ubicación destino | minutos (0, 15, 30, 45 o 60). La ruta inversa puede tener otro tiempo. Sin ruta concreta se usa el tiempo general.</span></div>
       </div>
     </section>` : ''}
@@ -236,7 +240,13 @@ function readSettings(form, settings) {
       autoAssignSupportRooms:data.get('autoAssignSupportRooms') === null
         ? (form.elements.autoAssignSupportRooms
             ? false : settings.generation.autoAssignSupportRooms)
-        : true
+        : true,
+      supportRoomRequirements:data.get('roomResources')===null
+        ? settings.generation.supportRoomRequirements
+        : {
+          PT:data.getAll('requiredFeaturePT'),
+          AL:data.getAll('requiredFeatureAL')
+        }
     },
     curriculum:readCurriculumInputs(form)
   });
