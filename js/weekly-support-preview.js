@@ -72,7 +72,7 @@ export function buildAnonymousSupportPreview(state, lessons) {
 
   for (const session of eligibleSessions) {
     const group=groupById.get(session.groupId);
-    if (!group || !SERVICES.includes(group.tipo)) continue;
+    if (!group) continue;
     const weekday=DAY.get(session.dia);
     if (weekday==null) continue;
     const duration=validInterval(session);
@@ -88,8 +88,10 @@ export function buildAnonymousSupportPreview(state, lessons) {
       if (excluded.has(id)||!students.has(id)) continue;
       const pupil_token=pseudonym(id);
       busy.push({weekday,start_time:session.inicio,end_time:session.fin,pupil_token});
-      const key=`${id}\u0000${group.tipo}`;
-      scheduled.set(key,(scheduled.get(key)||0)+duration);
+      if (SERVICES.includes(group.tipo)) {
+        const key=`${id}\u0000${group.tipo}`;
+        scheduled.set(key,(scheduled.get(key)||0)+duration);
+      }
     }
   }
 
