@@ -257,6 +257,7 @@ async function openIntegration() {
         const lines = [
           titles[result.status] || 'El motor no devolvió un estado reconocido.',
           `Clases/asignaturas: ${payload.lessons.length}; sesiones colocadas: ${result.lessons?.length || 0}.`,
+          `Necesidades PT/AL individuales: ${payload.supports?.length || 0}; sesiones adicionales colocadas: ${result.supports?.length || 0}.`,
           'No se ha aplicado ni sustituido ningún horario.',
           ...((result.reasons || []).map(message => `• ${message}`)),
           ...warnings.map(message => `Aviso: ${message}`)
@@ -267,6 +268,10 @@ async function openIntegration() {
             lines.push(`${dayNames[entry.weekday]} · ${entry.start_time}–${entry.end_time} · ${entry.group_id} · ${entry.subject_id}`);
           }
           if (result.lessons.length > 40) lines.push(`Y ${result.lessons.length - 40} sesiones más.`);
+          for (const entry of (result.supports || []).slice(0, 30)) {
+            lines.push(`${dayNames[entry.weekday]} · ${entry.start_time}–${entry.end_time} · Apoyo ${entry.service} (sin identificar al alumno)`);
+          }
+          if ((result.supports || []).length > 30) lines.push(`Y ${result.supports.length - 30} apoyos más.`);
         }
         return lines.join('\n');
       },
