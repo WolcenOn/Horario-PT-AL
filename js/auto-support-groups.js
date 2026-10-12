@@ -1,6 +1,7 @@
 // Proposals only: never mutate staff assignments or PT/AL rosters.
-// Enforce shared service, professional, course, class and *hard* extraction
-// policy. Softer extraction preferences stay individual for the solver.
+// Enforce shared service, professional, course and *hard* extraction
+// policy. Different classes in that course may share a support group;
+// per-pupil class restrictions and preferences remain separate in the solver.
 const MAX_GROUP_SIZE=8;
 const MAX_WEEKLY_SESSIONS=10; // five school days, at most two per day
 const LENGTHS=[45,30,15];
@@ -16,7 +17,7 @@ export function proposeAutomaticSupportGroups(candidates) {
     if (!person?.curso||!person?.grupoClase||!teacherId||
         !Number.isInteger(remaining)||remaining<=0||remaining>900||remaining%15)continue;
     const key=JSON.stringify([
-      teacherId,service,person.curso,person.grupoClase,
+      teacherId,service,person.curso,
       sameHardPolicy(policy?.blocked_subjects)
     ]);
     if(!pools.has(key))pools.set(key,[]);
