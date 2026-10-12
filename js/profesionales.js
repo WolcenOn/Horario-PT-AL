@@ -68,6 +68,7 @@ export function openProfessionalForm(professional, { state, onSave }) {
     bodyHtml:`<div class="form-grid">
       <div class="form-field"><label for="nombre">Nombre *</label><input id="nombre" name="nombre" required value="${escapeHtml(current.nombre || '')}"></div>
       <div class="form-field"><label for="tipo">Tipo *</label><select id="tipo" name="tipo">${PROFESSIONAL_TYPES.map(type => `<option value="${type}" ${current.tipo===type?'selected':''}>${type === 'DOCENTE' ? 'Docente ordinario' : type}</option>`).join('')}</select></div>
+      <div class="form-field"><label for="supportRoomId">Sala habitual de apoyos (opcional)</label><input id="supportRoomId" name="supportRoomId" maxlength="64" value="${escapeHtml(current.supportRoomId||'')}" placeholder="Ej.: Sala AL"><small class="field-hint">La sala del grupo o de una sesión puede tener prioridad. Se usa solo para la vista previa semanal.</small></div>
       <div class="form-field"><label for="especialidad">Especialidad / puesto</label><input id="especialidad" name="especialidad" value="${escapeHtml(current.especialidad || '')}" placeholder="Primaria, Inglés, Música, PT…"></div>
       <div class="form-field"><label for="teacherRole">Papel en la plantilla</label><select id="teacherRole" name="teacherRole">${TEACHER_ROLES.map(item => `<option value="${item.value}" ${current.teacherRole===item.value?'selected':''}>${escapeHtml(item.label)}</option>`).join('')}</select><span class="field-hint">Sirve para analizar qué especialistas podrían asumir tutoría si faltan generalistas.</span></div>
       <div class="form-field"><label for="tutoriaGrupo">Tutoría fijada</label><select id="tutoriaGrupo" name="tutoriaGrupo">${classOptions}</select></div>
@@ -163,6 +164,7 @@ export function openProfessionalForm(professional, { state, onSave }) {
         nombre,
         tipo,
         especialidad:data.get('especialidad')?.trim(),
+        supportRoomId:String(data.get('supportRoomId')||'').trim().slice(0,64),
         teacherRole:data.get('teacherRole'),
         tutorPreference:data.get('tutorPreference'),
         minimumTutorMinutes,
