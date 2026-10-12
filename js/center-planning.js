@@ -1,6 +1,7 @@
 import { COURSE_OPTIONS, configuredClassGroups, courseForClassGroup, stageForCourse } from './education.js';
 import { subjectsForStage } from './subjects.js';
 import { normalizeScheduledSlots, normalizeSubjectPatterns, normalizeTimePattern } from './time-patterns.js';
+import { normalizeTravelRules } from './weekly-location-rules.js';
 import { timeToMinutes } from './utils.js';
 
 export const CENTER_PLANNING_ID = 'centerPlanning';
@@ -129,7 +130,8 @@ export function normalizeGlobalGeneration(value) {
     travelMinutes:[0,15,30,45,60].includes(Number(source.travelMinutes))
       ? Number(source.travelMinutes)
       : DEFAULT_GLOBAL_GENERATION.travelMinutes,
-    supportRoomId:String(source.supportRoomId || '').trim().slice(0,64)
+    supportRoomId:String(source.supportRoomId || '').trim().slice(0,64),
+    travelRules:normalizeTravelRules(source.travelRules)
   };
 }
 
