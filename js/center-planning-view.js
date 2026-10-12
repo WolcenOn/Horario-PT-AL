@@ -43,6 +43,8 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
         <div class="form-field"><label for="globalEnd">Fin de jornada</label><input id="globalEnd" name="globalEnd" type="time" value="${escapeHtml(settings.generation.end)}"></div>
         <div class="form-field"><label for="lessonMinutes">Duración habitual de tramo</label><select id="lessonMinutes" name="lessonMinutes">${[30,45,60,75,90].map(value => `<option value="${value}" ${settings.generation.lessonMinutes === value ? 'selected' : ''}>${value} minutos</option>`).join('')}</select><span class="field-hint">Las materias pueden sobrescribir esta duración desde Patrones temporales. Si queda un resto menor, el último bloque conserva ese resto en múltiplos de 15 min.</span></div>
         <div class="form-field"><label for="maxSameSubjectPerDay">Máximo de la misma materia al día</label><select id="maxSameSubjectPerDay" name="maxSameSubjectPerDay">${[1,2,3,4].map(value => `<option value="${value}" ${settings.generation.maxSameSubjectPerDay === value ? 'selected' : ''}>${value}</option>`).join('')}</select><span class="field-hint">También puede personalizarse por materia desde Patrones temporales.</span></div>
+        <div class="form-field"><label for="travelMinutes">Tiempo entre ubicaciones (vista previa GestorEscuela)</label><select id="travelMinutes" name="travelMinutes">${[0,15,30,45,60].map(value => `<option value="${value}" ${settings.generation.travelMinutes === value ? 'selected' : ''}>${value === 0 ? 'Sin desplazamiento obligatorio' : `${value} minutos`}</option>`).join('')}</select><span class="field-hint">Se aplica cuando un especialista pasa entre ubicaciones distintas conocidas. No se deducen distancias.</span></div>
+        <div class="form-field"><label for="supportRoomId">Sala PT/AL compartida (opcional)</label><input id="supportRoomId" name="supportRoomId" maxlength="64" value="${escapeHtml(settings.generation.supportRoomId)}" placeholder="Ej.: Sala de apoyos 1"><span class="field-hint">Si se indica, PT y AL deben respetar la ocupación exclusiva de esta misma sala en la vista previa del motor.</span></div>
       </div>
     </section>` : ''}
 
@@ -201,7 +203,9 @@ function readSettings(form, settings) {
       start:data.get('globalStart') || settings.generation.start,
       end:data.get('globalEnd') || settings.generation.end,
       lessonMinutes:Number(data.get('lessonMinutes') || settings.generation.lessonMinutes),
-      maxSameSubjectPerDay:Number(data.get('maxSameSubjectPerDay') || settings.generation.maxSameSubjectPerDay)
+      maxSameSubjectPerDay:Number(data.get('maxSameSubjectPerDay') || settings.generation.maxSameSubjectPerDay),
+      travelMinutes:Number(data.get('travelMinutes') ?? settings.generation.travelMinutes),
+      supportRoomId:String(data.get('supportRoomId') ?? settings.generation.supportRoomId)
     },
     curriculum:readCurriculumInputs(form)
   });
