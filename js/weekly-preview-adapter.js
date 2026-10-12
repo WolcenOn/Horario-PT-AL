@@ -64,7 +64,8 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
         latest_end:pattern.latestEnd || null,
         max_sessions_per_day:effectiveMaxSessionsPerDay(pattern, generation.maxSameSubjectPerDay),
         // Classroom ID is a location proxy only for user-configured travel time.
-        ...(generation.travelMinutes ? {location_id:`class:${grupoClase}`} : {})
+        ...((generation.travelMinutes || generation.travelRules.length)
+          ? {location_id:`class:${grupoClase}`} : {})
       });
       teachersUsed.set(eligible[0].id, eligible[0]);
       groupsUsed.add(grupoClase);
@@ -106,7 +107,7 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
 
   const warnings = [
     'Vista previa parcial PT/AL: no optimiza actividades móviles sin hora fija, rutas reales ni asignaciones automáticas de salas.',
-    ...(generation.travelMinutes && !generation.supportRoomId
+    ...((generation.travelMinutes || generation.travelRules.length) && !generation.supportRoomId
       ? ['Desplazamientos PT/AL: no se conoce la sala de apoyos; solo se aplica traslado entre las aulas de clase configuradas.']
       : []),
     ...(generation.supportRoomId
