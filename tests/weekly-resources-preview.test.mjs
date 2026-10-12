@@ -171,3 +171,22 @@ test('las sesiones agrupadas respetan la sala configurada en su grupo',()=>{
   assert.equal(payload.group_supports[0].location_id,'room:ROOM-GROUP');
   assert.equal(JSON.stringify(payload).includes('new-pupil'),false);
 });
+
+
+test('una ruta concreta activa las ubicaciones aunque el margen general sea cero',()=>{
+  const state=fixture();
+  state.centerPlanningSettings.generation.travelMinutes=0;
+  state.centerPlanningSettings.generation.travelRules=[
+    {fromLocationId:'class:1ºA',toLocationId:'class:2ºA',minutes:30}
+  ];
+  const result=buildWeeklyPreviewRequest(state);
+  assert.equal(result.payload.travel_minutes,0);
+  assert.deepEqual(result.payload.travel_rules,[{
+    from_location_id:'class:1ºA',
+    to_location_id:'class:2ºA',
+    minutes:30
+  }]);
+  assert.deepEqual(result.payload.lessons.map(i=>i.location_id),[
+    'class:1ºA','class:2ºA'
+  ]);
+});
