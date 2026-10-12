@@ -132,6 +132,7 @@ export function buildAnonymousSupportPreview(state, lessons, {autoFormGroups=tru
   for (const group of activeGroups) {
     const enrolled=(group.studentIds||[]).filter(id=>students.has(id));
     if (enrolled.length<2)continue;
+    if (enrolled.length > 8) continue;
     if (enrolled.length>8) { warnings.push('Hay un grupo PT/AL que supera el máximo de 8 alumnos de esta vista previa.'); continue; }
     const professor=professionals.get(group.professionalId);
     if (!professor||professor.tipo!==group.tipo)continue;
