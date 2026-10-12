@@ -97,7 +97,10 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
   }
 
   const support = buildAnonymousSupportPreview(state, lessons, {
-    autoFormGroups, supportRoomId:generation.supportRoomId
+    autoFormGroups,
+    supportRoomId:generation.supportRoomId,
+    autoAssignSupportRooms:generation.autoAssignSupportRooms,
+    availableRooms:generation.roomResources
   });
   busy.push(...support.busy);
   for (const teacher of support.teachers) {
