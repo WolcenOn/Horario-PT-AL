@@ -52,6 +52,7 @@ export function openGroupForm(group, { state, onSave }) {
       <div class="form-field"><label for="tipo">Servicio *</label><select id="tipo" name="tipo"><option value="PT" ${current.tipo==='PT'?'selected':''}>PT</option><option value="AL" ${current.tipo==='AL'?'selected':''}>AL</option></select></div>
       <div class="form-field full"><label for="professionalId">Profesional responsable *</label><select id="professionalId" name="professionalId" required>${profOptions}</select><small class="field-hint">Solo se consideran válidos los profesionales del mismo servicio.</small></div>
       <div class="form-field"><label for="niveles">Curso o niveles predominantes</label><input id="niveles" name="niveles" value="${escapeHtml(current.niveles || '')}" placeholder="4º / 5º"></div>
+      <div class="form-field"><label for="roomId">Sala habitual de este grupo (opcional)</label><input id="roomId" name="roomId" maxlength="64" value="${escapeHtml(current.roomId||'')}" placeholder="Ej.: Sala PT-1"><small class="field-hint">Tiene prioridad sobre la sala del profesional y la sala general solo para la vista previa de GestorEscuela.</small></div>
       <div class="form-field"><label for="maxStudents">Máximo recomendado</label><input id="maxStudents" name="maxStudents" type="number" min="1" max="20" value="${current.maxStudents || 4}"></div>
       <fieldset class="full"><legend>Alumnos del grupo</legend>
         <div class="support-student-picker-tools"><input data-student-picker-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno"><select data-student-picker-class aria-label="Filtrar por clase"><option value="ALL">Todas las clases</option>${classes.map(classGroup => `<option value="${escapeHtml(classGroup)}">${escapeHtml(classGroup)}</option>`).join('')}</select><span data-student-picker-count></span></div>
@@ -101,7 +102,7 @@ export function openGroupForm(group, { state, onSave }) {
       const studentIds=data.getAll('studentId').map(String);
       const maxStudents=Number(data.get('maxStudents')||0);
       if(maxStudents>0 && studentIds.length>maxStudents){setModalMessage(message,`El grupo tiene ${studentIds.length} alumnos y supera el máximo recomendado (${maxStudents}). Puedes guardarlo si aumentas ese máximo.`, 'warning');return false;}
-      await onSave({...current,id:current.id||uid('grp'),nombre,tipo,professionalId,studentIds,niveles:data.get('niveles')?.trim(),maxStudents:maxStudents||4,color:data.get('color')||'#dceef5',observaciones:data.get('observaciones')?.trim(),activo:data.get('activo')==='on'}); return true;
+      await onSave({...current,id:current.id||uid('grp'),nombre,tipo,professionalId,studentIds,roomId:String(data.get('roomId')||'').trim().slice(0,64),niveles:data.get('niveles')?.trim(),maxStudents:maxStudents||4,color:data.get('color')||'#dceef5',observaciones:data.get('observaciones')?.trim(),activo:data.get('activo')==='on'}); return true;
     }
   });
 }
