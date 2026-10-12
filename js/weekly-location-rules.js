@@ -52,3 +52,109 @@ export function parseTravelRules(source) {
     return {fromLocationId,toLocationId,minutes};
   });
 }
+
+
+const WEEKDAYS=['lunes','martes','miercoles','jueves','viernes'];
+
+function validClock(value) {
+  return /^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/.test(value);
+}
+
+function normalizeRoomWindow(window) {
+  if (!window || !Number.isInteger(window.weekday)
+    || window.weekday<0 || window.weekday>4
+    || !validClock(window.startTime) || !validClock(window.endTime)
+    || window.startTime>=window.endTime) return null;
+  return {
+    weekday:window.weekday,
+    startTime:window.startTime,
+    endTime:window.endTime
+  };
+}
+
+export function normalizeRoomResources(source) {
+  if(!Array.isArray(source))return [];
+  const rooms=[];
+  const seen=new Set();
+  for(const input of source.slice(0,50)) {
+    const roomId=String(input?.roomId||'').trim();
+    const capacity=Number(input?.capacity);
+    if(!roomId || roomId.length>64 || seen.has(roomId)
+      ||!Number.isInteger(capacity)||capacity<1||capacity>30) continue;
+    seen.add(roomId);
+    const windows=(Array.isArray(input.windows)?input.windows:[])
+      .slice(0,30).map(normalizeRoomWindow).filter(Boolean);
+    rooms.push({roomId,capacity,windows});
+  }
+  return rooms;
+}
+
+export function parseRoomResources(source) {
+  const lines=String(source||'').split(/\r?\n/)
+    .map(line=>line.trim()).filter(Boolean);
+  if(lines.length>250)throw new Error('Se admiten hasta 250 líneas de salas y horarios.');
+  const rooms=new Map();
+  for (const [index,line] of lines.entries()) {
+    const parts=line.split('|').map(p=>p.trim());
+    if(parts.length!==2&&parts.length!==5){
+      throw new Error(`Sala línea ${index+1}: usa sala | aforo [| día | inicio | fin].`);
+    }
+    const [roomId,capacityText,weekdayText,startTime,endTime]=parts;
+    const capacity=Number(capacityText);
+    if(!roomId || roomId.length>64 || capacityText==='' ||
+        !Number.isInteger(capacity)||capacity<1||capacity>30) {
+      throw new Error(`Sala línea ${index+1}: indica un ID y aforo entre 1 y 30.`);
+    }
+    if(!rooms.has(roomId)){
+      if(rooms.size>=50)throw new Error('Se admiten hasta 50 salas.');
+      rooms.set(roomId,{roomId,capacity,windows:[],unrestricted:false});
+    }
+    const room=rooms.get(roomId);
+    if(room.capacity!==capacity) {
+      throw new Error(`Sala línea ${index+1}: el aforo de ${roomId} es inconsistente.`);
+    }
+    if(parts.length===2) {
+      if(room.windows.length || room.unrestricted) {
+        throw new Error(`Sala línea ${index+1}: configuración de ${roomId} duplicada.`);
+      }
+      room.unrestricted=true;
+      continue;
+    }
+    if(room.unrestricted){
+      throw new Error(`Sala línea ${index+1}: ${roomId} mezcla horario libre y restringido.`);
+    }
+    const weekday=WEEKDAYS.indexOf(weekdayText.toLowerCase());
+    if(weekday<0 || !validClock(startTime)||!validClock(endTime)
+      ||startTime>=endTime) {
+      throw new Error(`Sala línea ${index+1}: día u horas inválidas. Usa lunes-viernes y bloques de 15 minutos.`);
+    }
+    if(room.windows.length>=30)throw new Error(`Sala ${roomId}: máximo 30 franjas.`);
+    room.windows.push({weekday,startTime,endTime});
+  }
+  const specs=[...rooms.values()].map(({roomId,capacity,windows})=>({
+    roomId,capacity,windows:windows.sort(
+      (a,b)=>a.weekday-b.weekday||a.startTime.localeCompare(b.startTime)
+    )
+  }));
+  if(specs.reduce((total,room)=>total+room.windows.length,0)>200) {
+    throw new Error('Solo se admiten 200 franjas de sala en conjunto.');
+  }
+  for(const room of specs){
+    for(let i=1;i<room.windows.length;i++){
+      const prev=room.windows[i-1],next=room.windows[i];
+      if(prev.weekday===next.weekday && prev.endTime>next.startTime) {
+        throw new Error(`Sala ${room.roomId}: hay franjas horarias solapadas.`);
+      }
+    }
+  }
+  return specs;
+}
+
+export function formatRoomResources(source) {
+  return normalizeRoomResources(source).flatMap(room=>room.windows.length
+    ? room.windows.map(window=>
+        `${room.roomId} | ${room.capacity} | ${WEEKDAYS[window.weekday]} | ${window.startTime} | ${window.endTime}`
+      )
+    : [`${room.roomId} | ${room.capacity}`]
+  ).join('\n');
+}
