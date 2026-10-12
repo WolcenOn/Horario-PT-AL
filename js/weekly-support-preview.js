@@ -45,9 +45,13 @@ function extractionRules(state, lessons, student, service) {
   for (const lesson of lessonSubjects) {
     const subject=lesson.subject_id;
     const priority=courseRules.subjectPriorities?.[subject]||'medium';
-    const override=courseRules.subjectPolicies?.[subject]?.extraction
-      ??courseRules.subjectPolicies?.[subject]??null;
-    const policy=resolveSupportPolicy(priority,override);
+    const stored=courseRules.subjectPolicies?.[subject]??null;
+    const policy=stored && typeof stored==='object'
+      ? resolveSupportPolicy({
+          extraction:stored.extraction,
+          preference:stored.preference||resolveSupportPolicy(priority).preference
+        })
+      : resolveSupportPolicy(priority,stored);
     if (!canExtractForSupport(policy,service))allowed.blocked.push(subject);
     else if (policy.preference==='avoid')allowed.avoided.push(subject);
     else if (policy.preference==='preferred')allowed.preferred.push(subject);
