@@ -113,12 +113,15 @@ export function buildAnonymousSupportPreview(
     const room=resolveSupportRoomId(
       {roomId:session.aula || group.roomId},professionals.get(teacherId),supportRoomId
     );
+    const excluded=new Set(session.excludedStudentIds||[]);
+    const occupants=(group.studentIds||[])
+      .filter(id=>!excluded.has(id)&&students.has(id)).length;
     busy.push({
       weekday,start_time:session.inicio,end_time:session.fin,
-      teacher_id:teacherId,...roomFields(room)
+      teacher_id:teacherId,...roomFields(room),
+      ...(room && occupants>=1 && occupants<=30 ? {room_units:occupants} : {})
     });
     references.set(teacherId,professionals.get(teacherId));
-    const excluded=new Set(session.excludedStudentIds||[]);
     for (const id of group.studentIds||[]) {
       if (excluded.has(id)||!students.has(id)) continue;
       const pupil_token=pseudonym(id);
