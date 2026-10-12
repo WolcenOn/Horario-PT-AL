@@ -1,6 +1,7 @@
 // Request-scoped, anonymous student participation for PT/AL dry-run previews.
 // Never send local student IDs, names, diagnostic notes or membership rosters.
 import { DAYS } from './constants.js';
+import { proposeAutomaticSupportGroups } from './auto-support-groups.js';
 import { canExtractForSupport, resolveSupportPolicy } from './support-policy.js';
 import { minutesToTime, timeToMinutes } from './utils.js';
 
@@ -63,7 +64,7 @@ function extractionRules(state, lessons, student, service) {
   };
 }
 
-export function buildAnonymousSupportPreview(state, lessons) {
+export function buildAnonymousSupportPreview(state, lessons, {autoFormGroups=true}={}) {
   const allStudents=(state.students||[]).filter(student=>student.activo!==false && student.id);
   const students=new Map(allStudents.map(student=>[student.id,student]));
   const groupById=new Map((state.groups||[]).filter(group=>group.activo!==false).map(group=>[group.id,group]));
@@ -131,6 +132,7 @@ export function buildAnonymousSupportPreview(state, lessons) {
   for (const group of activeGroups) {
     const enrolled=(group.studentIds||[]).filter(id=>students.has(id));
     if (enrolled.length<2)continue;
+    if (enrolled.length>8) { warnings.push('Hay un grupo PT/AL que supera el máximo de 8 alumnos de esta vista previa.'); continue; }
     const professor=professionals.get(group.professionalId);
     if (!professor||professor.tipo!==group.tipo)continue;
     const persons=[];
@@ -172,6 +174,49 @@ export function buildAnonymousSupportPreview(state, lessons) {
     references.set(professor.id,professor);
     if (duration<45)warnings.push('Un apoyo grupal requiere bloques inferiores a 45 minutos para repartir exactamente los objetivos individuales.');
   }
+
+  const individualCandidates=[];
+  for(const person of allStudents) {
+    for(const service of SERVICES) {
+      const key=`${person.id}\u0000${service}`;
+      if(groupedKeys.has(key))continue;
+      const existing=eligibleGroups.get(key)||[];
+      if(existing.length!==1||(existing[0].studentIds||[]).length!==1)continue;
+      if(!linkedGroups.has(person.grupoClase))continue;
+      const teacherId=existing[0].professionalId;
+      if(!professionals.has(teacherId))continue;
+      const target=Number(service==='PT'?person.horasPTObjetivoMin:person.horasALObjetivoMin)||0;
+      const remaining=Math.max(0,target-(scheduled.get(key)||0));
+      if(!remaining)continue;
+      individualCandidates.push({
+        person,key,service,teacherId,remaining,
+        policy:extractionRules(state,lessons,person,service)
+      });
+    }
+  }
+  const automaticGroups=autoFormGroups
+    ? proposeAutomaticSupportGroups(individualCandidates)
+    : [];
+  for(const proposal of automaticGroups) {
+    const first=proposal.members[0];
+    const participants=proposal.members.map(member=>({
+      pupil_token:pseudonym(member.person.id),
+      group_id:member.person.grupoClase,
+      weekly_minutes:member.remaining,
+      ...member.policy
+    }));
+    groupSupports.push({
+      request_id:`auto-support-${groupSupports.length+1}`,
+      service:first.service,teacher_id:first.teacherId,
+      session_minutes:proposal.sessionMinutes,participants,
+      allowed_days:[0,1,2,3,4],max_sessions_per_day:2
+    });
+    for(const member of proposal.members)groupedKeys.add(member.key);
+    references.set(first.teacherId,professionals.get(first.teacherId));
+  }
+  if(automaticGroups.length)warnings.push(
+    `${automaticGroups.length} agrupación(es) PT/AL propuestas automáticamente entre alumnos con el mismo docente, servicio, curso, clase y prohibiciones de extracción. Son una alternativa de cálculo, no se guardan.`
+  );
 
   for (const student of allStudents) {
     for (const service of SERVICES) {
