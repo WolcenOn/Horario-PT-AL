@@ -2,6 +2,7 @@ import { COURSE_OPTIONS, configuredClassGroups, schoolStructureConfigured } from
 import { curriculumCoverage, curriculumForCourse, curriculumSubjectsForCourse, normalizeCenterPlanningSettings, normalizeProfessionalProfile, PLANNING_MODES, RESPONSIBILITY_TYPES } from './center-planning.js';
 import { buildGlobalReadiness } from './global-scheduler.js';
 import { saveCenterPlanningSettings } from './repository.js';
+import { parseTravelRules } from './weekly-location-rules.js';
 import { escapeHtml, formatDuration } from './utils.js';
 
 export function renderCenterPlanning(root, { state, centerPlanningSettings, globalProposal, onSave, onNavigate, onGenerateGlobal, onApplyGlobal, onDiscardGlobal }) {
@@ -45,6 +46,7 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
         <div class="form-field"><label for="maxSameSubjectPerDay">Máximo de la misma materia al día</label><select id="maxSameSubjectPerDay" name="maxSameSubjectPerDay">${[1,2,3,4].map(value => `<option value="${value}" ${settings.generation.maxSameSubjectPerDay === value ? 'selected' : ''}>${value}</option>`).join('')}</select><span class="field-hint">También puede personalizarse por materia desde Patrones temporales.</span></div>
         <div class="form-field"><label for="travelMinutes">Tiempo entre ubicaciones (vista previa GestorEscuela)</label><select id="travelMinutes" name="travelMinutes">${[0,15,30,45,60].map(value => `<option value="${value}" ${settings.generation.travelMinutes === value ? 'selected' : ''}>${value === 0 ? 'Sin desplazamiento obligatorio' : `${value} minutos`}</option>`).join('')}</select><span class="field-hint">Se aplica cuando un especialista pasa entre ubicaciones distintas conocidas. No se deducen distancias.</span></div>
         <div class="form-field"><label for="supportRoomId">Sala PT/AL compartida (opcional)</label><input id="supportRoomId" name="supportRoomId" maxlength="64" value="${escapeHtml(settings.generation.supportRoomId)}" placeholder="Ej.: Sala de apoyos 1"><span class="field-hint">Si se indica, PT y AL deben respetar la ocupación exclusiva de esta misma sala en la vista previa del motor.</span></div>
+        <div class="form-field full"><label for="travelRules">Trayectos personalizados (opcionales)</label><textarea id="travelRules" name="travelRules" rows="4" spellcheck="false" placeholder="class:1ºA | room:Sala PT | 15&#10;room:Sala PT | class:1ºA | 30">${escapeHtml((settings.generation.travelRules||[]).map(rule=>`${rule.fromLocationId} | ${rule.toLocationId} | ${rule.minutes}`).join('\n'))}</textarea><span class="field-hint">Una ruta por línea: ubicación origen | ubicación destino | minutos (0, 15, 30, 45 o 60). La ruta inversa puede tener otro tiempo. Sin ruta concreta se usa el tiempo general.</span></div>
       </div>
     </section>` : ''}
 
@@ -109,7 +111,18 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
   root.querySelector('[data-discard-global]')?.addEventListener('click', () => onDiscardGlobal());
   root.querySelector('#centerPlanningForm')?.addEventListener('submit', async event => {
     event.preventDefault();
-    await onSave(readSettings(event.currentTarget, settings));
+    try {
+      await onSave(readSettings(event.currentTarget, settings));
+    } catch(error) {
+      const field=event.currentTarget.elements.travelRules;
+      if(field && error?.message?.startsWith('Trayecto')) {
+        field.setCustomValidity(error.message);
+        field.reportValidity();
+        field.addEventListener('input',()=>field.setCustomValidity(''),{once:true});
+      } else {
+        window.alert(error?.message||'No se pudo guardar la configuración.');
+      }
+    }
   });
 }
 
@@ -205,7 +218,8 @@ function readSettings(form, settings) {
       lessonMinutes:Number(data.get('lessonMinutes') || settings.generation.lessonMinutes),
       maxSameSubjectPerDay:Number(data.get('maxSameSubjectPerDay') || settings.generation.maxSameSubjectPerDay),
       travelMinutes:Number(data.get('travelMinutes') ?? settings.generation.travelMinutes),
-      supportRoomId:String(data.get('supportRoomId') ?? settings.generation.supportRoomId)
+      supportRoomId:String(data.get('supportRoomId') ?? settings.generation.supportRoomId),
+      travelRules:parseTravelRules(data.get('travelRules')??'')
     },
     curriculum:readCurriculumInputs(form)
   });
