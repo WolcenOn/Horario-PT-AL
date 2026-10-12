@@ -271,11 +271,11 @@ async function openIntegration() {
           }
           if (result.lessons.length > 40) lines.push(`Y ${result.lessons.length - 40} sesiones más.`);
           for (const entry of (result.supports || []).slice(0, 30)) {
-            lines.push(`${dayNames[entry.weekday]} · ${entry.start_time}–${entry.end_time} · Apoyo ${entry.service} (sin identificar al alumno)`);
+            lines.push(`${dayNames[entry.weekday]} · ${entry.start_time}–${entry.end_time} · Apoyo ${entry.service}${entry.room_id ? ` · sala ${entry.room_id}` : ''} (sin identificar al alumno)`);
           }
           if ((result.supports || []).length > 30) lines.push(`Y ${result.supports.length - 30} apoyos más.`);
           for (const entry of (result.group_supports || []).slice(0, 30)) {
-            lines.push(`${dayNames[entry.weekday]} · ${entry.start_time}–${entry.end_time} · Apoyo ${entry.service} grupal, ${entry.participant_count} participante(s) (identidad protegida)`);
+            lines.push(`${dayNames[entry.weekday]} · ${entry.start_time}–${entry.end_time} · Apoyo ${entry.service} grupal, ${entry.participant_count} participante(s)${entry.room_id ? ` · sala ${entry.room_id}` : ''} (identidad protegida)`);
           }
           if ((result.group_supports || []).length > 30) {
             lines.push(`Y ${result.group_supports.length - 30} sesiones grupales más.`);
