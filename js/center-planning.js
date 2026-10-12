@@ -132,7 +132,8 @@ export function normalizeGlobalGeneration(value) {
       : DEFAULT_GLOBAL_GENERATION.travelMinutes,
     supportRoomId:String(source.supportRoomId || '').trim().slice(0,64),
     travelRules:normalizeTravelRules(source.travelRules),
-    roomResources:normalizeRoomResources(source.roomResources)
+    roomResources:normalizeRoomResources(source.roomResources),
+    autoAssignSupportRooms:source.autoAssignSupportRooms === true
   };
 }
 
