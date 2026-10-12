@@ -75,3 +75,19 @@ test('sin sala no presume la ubicación de las sesiones PT',()=>{
   assert.equal(payload.supports[0].room_id,undefined);
   assert.ok(warnings.some(w=>w.includes('no se conoce la sala')));
 });
+
+
+test('una sesión grupal también utiliza la sala compartida indicada',()=>{
+  const state=fixture();
+  state.students.push({
+    id:'p-2',curso:'1º',grupoClase:'1ºA',
+    horasPTObjetivoMin:45,activo:true
+  });
+  state.groups[0].studentIds.push('p-2');
+  state.sessions[0].excludedStudentIds=['p-2'];
+  const {payload}=buildWeeklyPreviewRequest(state);
+  assert.equal(payload.group_supports.length,1);
+  assert.equal(payload.group_supports[0].room_id,'ROOM-1');
+  assert.equal(payload.group_supports[0].location_id,'room:ROOM-1');
+  assert.equal(JSON.stringify(payload).includes('p-2'),false);
+});
