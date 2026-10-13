@@ -92,7 +92,7 @@ export function analyzeWeeklyReadiness(state) {
     const required=generation.supportRoomRequirements?.[service]||[];
     if(!required.length)continue;
     const eligible=[...roomById.values()].filter(room=>
-      required.every(feature=>(room.features||[]).includes(feature)
+      required.every(feature=>(room.features||[]).includes(feature))
     );
     if(!eligible.length){
       issues.push(issue(
