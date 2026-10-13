@@ -59,6 +59,25 @@ Entre otras, la rama de integración contiene:
 - cambio y recuperación de contraseña;
 - sincronización de configuración académica para operativa diaria.
 
+## Avisos con acceso directo a la corrección
+
+En **Cuenta y sincronización**, la comprobación de una propuesta semanal
+señala errores locales antes de llamar a GestorEscuela. Cada problema que
+tiene una ubicación inequívoca muestra un botón para abrir la pantalla
+donde se corrige: profesorado, estructura de clases, currículo, patrones
+temporales o inventario de salas. Cuando procede, se enfoca el campo.
+
+Las advertencias de sincronización y las causas concretas comunicadas
+por el motor también pueden incluir ese acceso. No se abre ninguna dirección
+web aportada por una respuesta remota: las acciones pertenecen a una lista
+cerrada de vistas locales. Los motivos genéricos de inviabilidad o búsqueda
+inconclusa no reciben un botón que adivine la causa.
+
+El panel de **Planificación académica** ofrece los mismos accesos junto
+a sus indicadores de preparación pendientes. Navegar para corregir no
+guarda ni aplica horarios; vuelve a ejecutar la comprobación para revisar
+el resultado después de guardar los cambios.
+
 ## Salas PT/AL y trayectos por ubicación (vista previa GestorEscuela)
 
 En **Centro → Planificación del centro** puedes fijar un tiempo de traslado
