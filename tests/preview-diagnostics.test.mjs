@@ -108,3 +108,52 @@ test('destinos de corrección no contienen rutas URL procedentes del backend',()
   assert.equal(generic.action,null);
   assert.equal(generic.message,unknown);
 });
+
+
+test('sala obligatoria sin inventariar remite a la configuración precisa',()=>{
+  const data=state();
+  data.centerPlanningSettings.generation.supportRoomRequirements={
+    PT:['mesa_regulable'],AL:[]
+  };
+  data.centerPlanningSettings.generation.roomResources=[
+    {roomId:'OTRA',capacity:2,features:['mesa_regulable'],windows:[]}
+  ];
+  data.groups=[{
+    id:'g1',tipo:'PT',professionalId:'t1',roomId:'SALA-SIN-FICHA',studentIds:[]
+  }];
+  const issues=analyzeWeeklyReadiness(data);
+  const actual=issues.find(item=>item.message.includes('SALA-SIN-FICHA'));
+  assert.equal(actual.severity,'error');
+  assert.equal(actual.action.view,'centerPlanning');
+  assert.equal(actual.action.focusId,'roomResources');
+});
+
+test('sala fija incompatible con equipamiento requerido impide la vista previa',()=>{
+  const data=state();
+  data.centerPlanningSettings.generation.supportRoomRequirements={
+    PT:['acceso_sin_escalones'],AL:[]
+  };
+  data.centerPlanningSettings.generation.roomResources=[
+    {roomId:'SALA',capacity:2,features:['mesa_regulable'],windows:[]},
+    {roomId:'ACCESIBLE',capacity:3,features:['acceso_sin_escalones'],windows:[]}
+  ];
+  data.groups=[{
+    id:'g1',tipo:'PT',professionalId:'t1',roomId:'SALA',studentIds:[]
+  }];
+  const issues=analyzeWeeklyReadiness(data);
+  assert.ok(issues.some(item=>
+    item.severity==='error'&&item.message.includes('SALA')
+    &&item.action.focusId==='roomResources'
+  ));
+});
+
+test('aviso de sala PT/AL ausente enlaza al inventario del centro',()=>{
+  const data=state();
+  data.centerPlanningSettings.generation.travelMinutes=15;
+  data.groups=[{id:'g1',tipo:'PT',professionalId:'t1',studentIds:[]}];
+  const issues=analyzeWeeklyReadiness(data);
+  assert.ok(issues.some(item=>
+    item.severity==='warning'&&item.message.includes('ubicación PT/AL')
+    &&item.action.focusId==='roomResources'
+  ));
+});
