@@ -71,7 +71,7 @@ test('las vistas independientes comparten el mismo estado de cabecera y lo resta
     ['centerActivities', 'Actividades del centro'],
     ['temporalPatterns', 'Patrones temporales'],
     ['capacityStudy', 'Estudio de plantilla'],
-    ['operations', 'Operativa diaria'],
+    ['staffAbsences', 'Calendario y cobertura de ausencias'],
     ['integration', 'Cuenta y sincronización']
   ]) {
     const nav = page.locator(`.nav-item[data-view="${view}"]`);
