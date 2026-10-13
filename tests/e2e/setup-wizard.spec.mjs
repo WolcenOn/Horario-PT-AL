@@ -116,7 +116,7 @@ test('un perfil versionado del catálogo solo se aplica tras revisión y las ada
   };
   const pack={...entry,profileName:'Perfil ficticio de pruebas',
     effectiveFrom:'2026-09-01',sourceUrl:'https://example.org/norma',
-    weeklyHours:{'1º':{Matemáticas:4.5}}
+    weeklyHours:{'1º':{Matemáticas:4.5,'Lengua Castellana y Literatura':5}}
   };
   await page.route('**/curriculum-regulations/catalog.json',route=>route.fulfill({
     status:200,contentType:'application/json',
@@ -149,6 +149,12 @@ test('un perfil versionado del catálogo solo se aplica tras revisión y las ada
   });
   expect(saved.curriculumSource.profileId).toBe('es-example-primaria');
   expect(saved.curriculumSource.version).toBe('2026.1');
+  expect(saved.curriculumSource.modified).toBe(false);
+  await page.getByRole('button',{name:'Guardar configuración global'}).click();
+  saved=await page.evaluate(async()=>{
+    const {get}=await import('/js/db.js');
+    return get('settings','centerPlanning');
+  });
   expect(saved.curriculumSource.modified).toBe(false);
   await page.locator('[data-curriculum-course="1º"][data-curriculum-subject="Matemáticas"]').fill('4.75');
   await page.getByRole('button',{name:'Guardar configuración global'}).click();

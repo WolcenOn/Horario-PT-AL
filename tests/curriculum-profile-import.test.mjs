@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCurriculumProfile, applyCurriculumProfile } from '../js/curriculum-profile-import.js';
+import { parseCurriculumProfile, applyCurriculumProfile, sameCurriculumValues } from '../js/curriculum-profile-import.js';
 import { normalizeCenterPlanningSettings } from '../js/center-planning.js';
 
 const example=()=>({
@@ -107,4 +107,19 @@ test('rechaza IDs o versiones incompletos o malformados',()=>{
   assert.throws(()=>parse({...example(),version:'2026.1'}),/profileId/);
   assert.throws(()=>parse({...example(),profileId:'../escape',version:'2026.1'}),/profileId/);
   assert.throws(()=>parse({...example(),profileId:'es-example',version:'latest'}),/profileId/);
+});
+
+test('no marca personalización por el mero orden de materias del formulario',()=>{
+  assert.equal(sameCurriculumValues(
+    {'1º':{'Matemáticas':270,'Lengua Castellana y Literatura':300}},
+    {'1º':{'Lengua Castellana y Literatura':300,'Matemáticas':270}}
+  ),true);
+  assert.equal(sameCurriculumValues({'1º':{Matemáticas:270}},
+    {'1º':{Matemáticas:285}}),false);
+  assert.equal(sameCurriculumValues({'1º':{Matemáticas:270}},
+    {'1º':{Matemáticas:270},'2º':{}}),true);
+});
+
+test('una fecha de vigencia imposible no se acepta en el perfil',()=>{
+  assert.throws(()=>parse({...example(),effectiveFrom:'2026-02-30'}),/fecha válida/);
 });

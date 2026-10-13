@@ -3,7 +3,7 @@ import { curriculumCoverage, curriculumForCourse, curriculumSubjectsForCourse, n
 import { buildGlobalReadiness } from './global-scheduler.js';
 import { correctionForMessage } from './preview-diagnostics.js';
 import { saveCenterPlanningSettings } from './repository.js';
-import { applyCurriculumProfile, parseCurriculumProfile } from './curriculum-profile-import.js';
+import { applyCurriculumProfile, parseCurriculumProfile, sameCurriculumValues } from './curriculum-profile-import.js';
 import { listCurriculumRegulations,loadCurriculumRegulation,regulationKey } from './curriculum-regulations.js';
 import {
   formatRoomResources, parseRoomResources, parseTravelRules, ROOM_FEATURES
@@ -375,7 +375,7 @@ function readSettings(form, settings) {
   // Keep the version's provenance but flag local changes; updating catalog.json
   // can never update the minutes of a previously saved school.
   if(next.curriculumSource?.kind==='imported'&&(
-    JSON.stringify(next.curriculum)!==JSON.stringify(settings.curriculum)||
+    !sameCurriculumValues(next.curriculum,settings.curriculum)||
     next.territory!==settings.territory||next.legalReference!==settings.legalReference
   ))next.curriculumSource={...next.curriculumSource,modified:true};
   return next;

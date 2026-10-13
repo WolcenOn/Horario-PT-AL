@@ -41,8 +41,10 @@ export function parseCurriculumProfile(raw,selectedTerritory='') {
     (version&&!/^\d{4}\.\d{1,3}$/.test(version)))
     throw new Error('Indica un profileId y una version (AAAA.N) válidos.');
   const effectiveFrom=data.effectiveFrom===undefined?'':String(data.effectiveFrom).trim();
-  if(effectiveFrom&&!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom))
-    throw new Error('effectiveFrom debe estar en formato AAAA-MM-DD.');
+  if(effectiveFrom&&(!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)||
+    Number.isNaN(new Date(effectiveFrom+'T00:00:00Z').valueOf())||
+    new Date(effectiveFrom+'T00:00:00Z').toISOString().slice(0,10)!==effectiveFrom))
+    throw new Error('effectiveFrom debe ser una fecha válida AAAA-MM-DD.');
   const curriculum={};
   let totalSubjects=0;
   for(const [course,subjects] of Object.entries(data.weeklyHours)){
@@ -88,4 +90,17 @@ export function applyCurriculumProfile(settings,profile) {
       modified:false
     }
   };
+}
+
+// Compare normalized positive-minute entries, not property insertion order.
+// Browsers render subjects in catalog order, which need not match JSON order.
+export function sameCurriculumValues(a,b) {
+  const entries=value=>Object.entries(value||{}).flatMap(([course,subjects])=>
+    Object.entries(subjects||{}).filter(([,minutes])=>minutes>0)
+      .map(([subject,minutes])=>[course,subject,minutes])
+  ).sort((x,y)=>x[0].localeCompare(y[0])||x[1].localeCompare(y[1]));
+  const left=entries(a),right=entries(b);
+  return left.length===right.length&&left.every((item,index)=>
+    item.every((part,field)=>part===right[index][field])
+  );
 }
