@@ -27,6 +27,16 @@ const route=key=>{
 };
 const issue=(message,severity,key)=>({message,severity,action:route(key)});
 
+// Only these backend diagnostic codes may suggest first-party sections.
+// A proven overlap can come from multiple sources; don't guess a correction.
+const solverCodeRoutes=Object.freeze({
+  LESSON_WINDOW_CAPACITY:'patterns',
+  TEACHER_WEEKLY_CAPACITY:'teachers',
+  CLASS_WEEKLY_CAPACITY:'centerPlanning',
+  FIXED_TEACHER_OVERLAP:null,
+  FIXED_CLASS_OVERLAP:null
+});
+
 export function correctionForMessage(message) {
   const text=normalize(message);
   // Specific diagnoses before more general class/professional hints.
@@ -53,6 +63,31 @@ export function issuesFromMessages(messages,severity='warning') {
   return (messages||[]).map(message=>issue(message,severity,null)).map(item=>({
     ...item,action:correctionForMessage(item.message)
   }));
+}
+
+// New backend contract: prefer stable codes and never treat server-provided
+// view/focus/URL values or unclassified explanations as navigation instructions.
+// Older servers without "diagnostics" still use the legacy message adapter.
+export function issuesFromPreviewResult(result) {
+  const severity=result?.status==='infeasible'?'error':'warning';
+  const reasons=Array.isArray(result?.reasons)?result.reasons:[];
+  if(!Array.isArray(result?.diagnostics))return issuesFromMessages(reasons,severity);
+  const structured=result.diagnostics.filter(item=>
+    item && typeof item.message==='string' && item.message.trim()
+  ).map(item=>({
+    code:typeof item.code==='string'?item.code:'',
+    message:item.message,
+    severity,
+    action:Object.hasOwn(solverCodeRoutes,item.code)
+      ?route(solverCodeRoutes[item.code]):null
+  }));
+  const seen=new Set(structured.map(item=>item.message));
+  // Unclassified backend reasons are still visible, but cannot guess an action.
+  return [
+    ...structured,
+    ...reasons.filter(message=>typeof message==='string'&&!seen.has(message))
+      .map(message=>issue(message,severity,null))
+  ];
 }
 
 export function analyzeWeeklyReadiness(state) {

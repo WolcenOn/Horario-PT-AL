@@ -24,7 +24,7 @@ import { renderIntegrationView } from './integration-view.js';
 import { toJsonCompatible } from './gestor-serialization.js';
 import { requestWeeklyPreviewWithFallback } from './weekly-preview-client.js';
 import {
-  analyzeWeeklyReadiness, issuesFromMessages
+  analyzeWeeklyReadiness, issuesFromMessages, issuesFromPreviewResult
 } from './preview-diagnostics.js';
 import { loadState } from './repository.js';
 import { applySharePackage, createSharePackage } from './sharing.js';
@@ -304,7 +304,7 @@ async function openIntegration() {
           text:lines.join('\n'),
           issues:[
             ...readiness,
-            ...issuesFromMessages(result.reasons || [],result.status==='infeasible'?'error':'warning'),
+            ...issuesFromPreviewResult(result),
             ...issuesFromMessages(warnings,'warning')
           ]
         };

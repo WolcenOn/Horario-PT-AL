@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  analyzeWeeklyReadiness, correctionForMessage, issuesFromMessages
+  analyzeWeeklyReadiness, correctionForMessage, issuesFromMessages,
+  issuesFromPreviewResult
 } from '../js/preview-diagnostics.js';
 
 function state() {
@@ -201,4 +202,74 @@ test('las rutas dirigidas necesitan ubicación y enlazan al campo preciso',()=>{
   assert.equal(correctionForMessage(
     'Desplazamientos PT/AL: hay apoyos sin ubicación conocida; indica una sala.'
   ).focusId,'supportRoomId');
+});
+
+
+test('un diagnóstico con código estable usa el destino, no las palabras del mensaje',()=>{
+  const [lesson,teacher,school]=issuesFromPreviewResult({
+    status:'infeasible',
+    diagnostics:[
+      {code:'LESSON_WINDOW_CAPACITY',message:'Texto renombrado para materia y horarios'},
+      {code:'TEACHER_WEEKLY_CAPACITY',message:'Carga docente insuficiente'},
+      {code:'CLASS_WEEKLY_CAPACITY',message:'Faltan minutos para el grupo'}
+    ],
+    reasons:[
+      'Texto renombrado para materia y horarios',
+      'Carga docente insuficiente',
+      'Faltan minutos para el grupo'
+    ]
+  });
+  assert.equal(lesson.action.view,'temporalPatterns');
+  assert.equal(teacher.action.view,'professionals');
+  assert.equal(school.action.view,'centerPlanning');
+  assert.equal(lesson.code,'LESSON_WINDOW_CAPACITY');
+  assert.equal(lesson.severity,'error');
+});
+
+test('códigos desconocidos o solapamientos no permiten rutas sugeridas por el servidor',()=>{
+  const [unknown,overlap]=issuesFromPreviewResult({
+    status:'infeasible',
+    diagnostics:[
+      {code:'UNKNOWN_ROOM_CODE',message:'Sala inexistente',view:'https://outside.test',
+        focusId:'#external'},
+      {code:'FIXED_TEACHER_OVERLAP',message:'Profesional y clase con bloqueos solapados',
+        action:{view:'https://outside.test'}}
+    ],
+    reasons:['Sala inexistente','Profesional y clase con bloqueos solapados']
+  });
+  assert.equal(unknown.action,null);
+  assert.equal(overlap.action,null);
+  // Old text heuristics would have produced an unsafe or misleading room action.
+  assert.equal(issuesFromMessages(['Sala inexistente'],'error')[0].action.focusId,
+    'roomResources');
+});
+
+test('nuevo backend sin prueba concreta muestra la razón sin inventar corrección',()=>{
+  const [generic]=issuesFromPreviewResult({
+    status:'infeasible',diagnostics:[],
+    reasons:['La sala y las restricciones del centro son incompatibles.']
+  });
+  assert.equal(generic.severity,'error');
+  assert.equal(generic.action,null);
+});
+
+test('las razones sin clasificar se preservan sin duplicar las estructuradas',()=>{
+  const rows=issuesFromPreviewResult({
+    status:'infeasible',
+    diagnostics:[{code:'TEACHER_WEEKLY_CAPACITY',message:'Carga insuficiente'}],
+    reasons:['Carga insuficiente','Sala sin equipamiento conocido']
+  });
+  assert.equal(rows.length,2);
+  assert.equal(rows[0].action.view,'professionals');
+  assert.equal(rows[1].message,'Sala sin equipamiento conocido');
+  assert.equal(rows[1].action,null);
+});
+
+test('las respuestas antiguas siguen ofreciendo las correcciones por texto',()=>{
+  const [legacy]=issuesFromPreviewResult({
+    status:'infeasible',
+    reasons:['El profesional tiene disponibilidad insuficiente.']
+  });
+  assert.equal(legacy.action.view,'professionals');
+  assert.equal(legacy.severity,'error');
 });
