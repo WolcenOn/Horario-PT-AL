@@ -65,7 +65,10 @@ test('las advertencias generales no contienen enlaces externos improvisados',asy
 
 
 test('la comparación semanal es solo lectura, anónima y no altera IndexedDB',async({page})=>{
+  // Avoid asynchronous demo seeding while checking IndexedDB integrity.
+  await page.addInitScript(()=>localStorage.setItem('horario-user-cleared','true'));
   await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
   const result=await page.evaluate(async()=>{
     const {loadState}=await import('/js/repository.js');
     const {buildWeeklyPreviewCalendar,renderWeeklyPreviewCalendar}=
@@ -104,7 +107,10 @@ test('la comparación semanal es solo lectura, anónima y no altera IndexedDB',a
 
 
 test('muestra diferencias y minutos sin modificar los horarios guardados',async({page})=>{
+  // Avoid asynchronous demo seeding while checking IndexedDB integrity.
+  await page.addInitScript(()=>localStorage.setItem('horario-user-cleared','true'));
   await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
   const result=await page.evaluate(async()=>{
     const {loadState}=await import('/js/repository.js');
     const {buildWeeklyPreviewCalendar,renderWeeklyPreviewCalendar}=
@@ -145,7 +151,10 @@ test('muestra diferencias y minutos sin modificar los horarios guardados',async(
 
 
 test('los filtros de clase, profesional y sala cambian solo la vista; limpiar restaura minutos',async({page})=>{
+  // Avoid asynchronous demo seeding while checking IndexedDB integrity.
+  await page.addInitScript(()=>localStorage.setItem('horario-user-cleared','true'));
   await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
   const result=await page.evaluate(async()=>{
     const {loadState}=await import('/js/repository.js');
     const {buildWeeklyPreviewCalendar,renderWeeklyPreviewCalendar,
