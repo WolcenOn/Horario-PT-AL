@@ -145,3 +145,141 @@ test('la prevalidación no cambia los datos locales',async()=>{
   });
   assert.equal(JSON.stringify(data),before);
 });
+
+
+test('extraer durante una materia protegida que llena toda la franja es imposible',()=>{
+  const payload=base();
+  payload.supports[0].group_id='1A';
+  payload.supports[0].blocked_subjects=['MAT'];
+  payload.lessons=[{
+    group_id:'1A',subject_id:'MAT',weekly_minutes:120,
+    allowed_days:[0]
+  }];
+  const issues=analyzeWeeklyPayloadCapacity(payload);
+  assert.deepEqual(issues.map(item=>item.code),['SUPPORT_BLOCKED_SUBJECT_CAPACITY']);
+  assert.equal(issues[0].action.view,'automation');
+  assert.equal(issues[0].severity,'error');
+  assert.match(issues[0].message,/90 min.*0 min/);
+  assert.ok(!JSON.stringify(issues).includes('opaque-request-token'));
+});
+
+test('una materia desplazable a otro día no se declara obligatoriamente bloqueante',()=>{
+  const payload=base();
+  payload.supports[0].group_id='1A';
+  payload.supports[0].blocked_subjects=['MAT'];
+  payload.lessons=[{
+    group_id:'1A',subject_id:'MAT',weekly_minutes:120,
+    allowed_days:[0,1]
+  }];
+  assert.deepEqual(analyzeWeeklyPayloadCapacity(payload),[]);
+});
+
+test('solo se descuentan minutos protegidos inevitables en días permitidos',()=>{
+  const payload=base();
+  payload.supports[0].group_id='1A';
+  payload.supports[0].blocked_subjects=['MAT'];
+  payload.supports[0].weekly_minutes=105;
+  payload.lessons=[{
+    group_id:'1A',subject_id:'MAT',weekly_minutes:150,
+    allowed_days:[0,1],earliest_start:'09:00',latest_end:'10:30'
+  }];
+  // Como máximo 90 min de Matemáticas pueden ir al martes.
+  // Los 60 restantes ocupan al menos 60 de los 120 min del lunes.
+  const issues=analyzeWeeklyPayloadCapacity(payload);
+  assert.equal(issues.length,1);
+  assert.equal(issues[0].code,'SUPPORT_BLOCKED_SUBJECT_CAPACITY');
+  assert.match(issues[0].message,/60 min/);
+});
+
+test('evitar o preferir una materia nunca se interpreta como extracción prohibida',()=>{
+  const payload=base();
+  payload.supports[0].group_id='1A';
+  payload.supports[0].avoided_subjects=['MAT'];
+  payload.supports[0].preferred_subjects=['MAT'];
+  payload.lessons=[{group_id:'1A',subject_id:'MAT',
+    weekly_minutes:120,allowed_days:[0]}];
+  assert.deepEqual(analyzeWeeklyPayloadCapacity(payload),[]);
+});
+
+test('no confunde materias protegidas de otra clase ni asignaturas distintas',()=>{
+  const payload=base();
+  payload.supports[0].group_id='1A';
+  payload.supports[0].blocked_subjects=['MAT'];
+  payload.lessons=[
+    {group_id:'2A',subject_id:'MAT',weekly_minutes:120,allowed_days:[0]},
+    {group_id:'1A',subject_id:'LENGUA',weekly_minutes:120,allowed_days:[0]}
+  ];
+  assert.deepEqual(analyzeWeeklyPayloadCapacity(payload),[]);
+});
+
+test('los apoyos grupales respetan las políticas propias de cada participante',()=>{
+  const payload=base();
+  payload.supports=[];
+  payload.group_supports=[{
+    service:'PT',teacher_id:'pt',allowed_days:[0],
+    participants:[
+      {group_id:'1A',pupil_token:'secret-1',weekly_minutes:60,
+        blocked_subjects:['MAT']},
+      {group_id:'2A',pupil_token:'secret-2',weekly_minutes:60,
+        blocked_subjects:[]}
+    ]
+  }];
+  payload.lessons=[{
+    group_id:'1A',subject_id:'MAT',weekly_minutes:90,allowed_days:[0]
+  }];
+  const issues=analyzeWeeklyPayloadCapacity(payload);
+  assert.deepEqual(issues.map(item=>item.code),['SUPPORT_BLOCKED_SUBJECT_CAPACITY']);
+  assert.equal(issues[0].action.view,'automation');
+  assert.ok(!JSON.stringify(issues).includes('secret-1'));
+  assert.ok(!JSON.stringify(issues).includes('secret-2'));
+});
+
+test('bloqueos fijos y materias protegidas no se restan dos veces',()=>{
+  const payload=base();
+  payload.supports[0].group_id='1A';
+  payload.supports[0].blocked_subjects=['MAT'];
+  payload.supports[0].weekly_minutes=45;
+  payload.lessons=[{
+    group_id:'1A',subject_id:'MAT',weekly_minutes:60,allowed_days:[0]
+  }];
+  payload.busy=[{
+    weekday:0,start_time:'09:00',end_time:'10:00',
+    pupil_token:'opaque-request-token'
+  }];
+  // Ambas ocupaciones pueden coincidir; la capacidad superior sigue siendo 60.
+  assert.deepEqual(analyzeWeeklyPayloadCapacity(payload),[]);
+});
+
+test('datos incompletos de las materias no provocan avisos de extracción falsos',()=>{
+  const payload=base();
+  payload.supports[0].group_id='1A';
+  payload.supports[0].blocked_subjects=['MAT'];
+  payload.lessons=[{
+    group_id:'1A',subject_id:'MAT',weekly_minutes:120,allowed_days:[],
+  }];
+  assert.deepEqual(analyzeWeeklyPayloadCapacity(payload),[]);
+});
+
+test('las restricciones de extracción pueden impedir una llamada HTTP innecesaria',async()=>{
+  const data=state();
+  const days=['lunes','martes','miercoles','jueves','viernes'];
+  data.professionals[1].disponibilidad=Object.fromEntries(days.map(day=>[
+    day,[{inicio:'09:00',fin:'10:00'}]
+  ]));
+  data.centerPlanningSettings.curriculum['1º'].Matemáticas=225;
+  data.students[0].horasPTObjetivoMin=90;
+  data.automationSettings={courseRules:{'1º':{
+    subjectPolicies:{Matemáticas:{extraction:'blocked',preference:'avoid'}}
+  }}};
+  let calls=0;
+  const preview=await requestWeeklyPreviewWithFallback(data,{},async()=>{
+    calls++;
+    throw new Error('El motor no debe recibir una imposibilidad demostrada');
+  });
+  assert.equal(calls,0);
+  assert.equal(preview.result,null);
+  assert.ok(preview.preflightIssues.some(item=>
+    item.code==='SUPPORT_BLOCKED_SUBJECT_CAPACITY'
+  ));
+  assert.ok(!JSON.stringify(preview.preflightIssues).includes('secret-student'));
+});

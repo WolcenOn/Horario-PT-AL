@@ -130,6 +130,39 @@ function freeMinutes(payload,kind,id,allowedDays) {
   return free;
 }
 
+// Lower bound on blocked-class minutes that *must* fall on the support days.
+// Lessons of a single class cannot overlap. A lesson can be moved to its
+// permitted days outside the support window, up to their full daily capacity.
+// We intentionally ignore soft avoidance/preference policies and never add
+// these obstructions to fixed pupil blocks: the two could overlap.
+function protectedLessonCapacity(payload,groupId,blockedSubjects,allowedDays) {
+  if(!groupId||!Array.isArray(blockedSubjects)||!blockedSubjects.length||
+    !Array.isArray(payload.lessons)||!Array.isArray(allowedDays)||
+    !allowedDays.length||allowedDays.some(day=>!Number.isInteger(day)||day<0||day>4))
+    return null;
+  const start=clockMinutes(payload.start_time);
+  const end=clockMinutes(payload.end_time);
+  if(start===null||end===null||end<=start)return null;
+  const supportDays=new Set(allowedDays);
+  const prohibited=new Set(blockedSubjects);
+  let unavoidable=0;
+  for(const lesson of payload.lessons){
+    if(lesson?.group_id!==groupId||!prohibited.has(lesson.subject_id))continue;
+    if(!Number.isInteger(lesson.weekly_minutes)||lesson.weekly_minutes<=0||
+      !Array.isArray(lesson.allowed_days)||!lesson.allowed_days.length||
+      lesson.allowed_days.some(day=>!Number.isInteger(day)||day<0||day>4))
+      continue; // Unknown timing is never evidence of impossibility.
+    const earliest=lesson.earliest_start==null?start:clockMinutes(lesson.earliest_start);
+    const latest=lesson.latest_end==null?end:clockMinutes(lesson.latest_end);
+    if(earliest===null||latest===null)continue;
+    const span=Math.max(0,Math.min(end,latest)-Math.max(start,earliest));
+    const otherDays=new Set(lesson.allowed_days.filter(day=>!supportDays.has(day)));
+    const outsideMaximum=otherDays.size*span;
+    unavoidable+=Math.max(0,lesson.weekly_minutes-outsideMaximum);
+  }
+  return Math.max(0,supportDays.size*(end-start)-unavoidable);
+}
+
 export function analyzeWeeklyPayloadCapacity(payload) {
   if(!payload||!Array.isArray(payload.busy))return [];
   const issues=[];
@@ -154,6 +187,18 @@ export function analyzeWeeklyPayloadCapacity(payload) {
           'error',null
         ),
         code:'SUPPORT_PUPIL_CAPACITY'
+      });
+    }
+    const protectedFree=protectedLessonCapacity(
+      payload,need.group_id,need.blocked_subjects,need.allowed_days
+    );
+    if(protectedFree!==null&&required>protectedFree){
+      issues.push({
+        ...issue(
+          `${prefix}: necesita ${required} min, pero las materias con extracción prohibida dejan como máximo ${protectedFree} min en los días permitidos. Revisa las políticas de extracción o las franjas de las materias.`,
+          'error','extraction'
+        ),
+        code:'SUPPORT_BLOCKED_SUBJECT_CAPACITY'
       });
     }
   };
@@ -185,6 +230,18 @@ export function analyzeWeeklyPayloadCapacity(payload) {
             'error',null
           ),
           code:'SUPPORT_PUPIL_CAPACITY'
+        });
+      }
+      const protectedFree=protectedLessonCapacity(
+        payload,person.group_id,person.blocked_subjects,group.allowed_days
+      );
+      if(protectedFree!==null&&person.weekly_minutes>protectedFree){
+        issues.push({
+          ...issue(
+            `Apoyo ${group.service==='AL'?'AL':'PT'} grupal n.º ${index+1}: un participante necesita ${person.weekly_minutes} min, pero las materias con extracción prohibida dejan como máximo ${protectedFree} min en los días permitidos. Revisa las políticas de extracción.`,
+            'error','extraction'
+          ),
+          code:'SUPPORT_BLOCKED_SUBJECT_CAPACITY'
         });
       }
     }
