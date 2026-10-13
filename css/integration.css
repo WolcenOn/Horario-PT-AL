@@ -61,3 +61,14 @@
 .weekly-review-filter-status{margin:4px 0;padding:7px 9px;border-radius:8px;background:#f2f4f7;color:#475467;font-size:.78rem}
 [data-weekly-review-results]{display:grid;gap:10px}
 @media(max-width:520px){.weekly-review-filters{display:grid;grid-template-columns:1fr}.weekly-review-filters label{min-width:0}}
+
+/* Independent, global audit of the weekly solver preview. */
+.weekly-review-audit{display:grid;gap:9px;border:1px solid var(--line);border-radius:11px;padding:12px;background:#f8fafc}
+.weekly-review-audit h4,.weekly-review-audit h5{margin:4px 0;font-size:.91rem}
+.weekly-review-audit h5{font-size:.83rem}
+.weekly-review-audit-state{font-weight:750;font-size:.87rem;margin:0}
+.weekly-review-audit-note{margin:0;font-size:.79rem;color:var(--muted);line-height:1.45}
+.weekly-review-audit-metrics{display:flex;flex-wrap:wrap;gap:7px}
+.weekly-review-audit-metrics span{border-radius:9px;padding:8px;background:#fff;border:1px solid var(--line);font-size:.78rem}
+.weekly-review-audit p:not(.weekly-review-audit-note):not(.weekly-review-audit-state){margin:3px 0;font-size:.79rem;line-height:1.45}
+.weekly-review-audit ul{margin:3px 0;padding-left:19px;font-size:.8rem}

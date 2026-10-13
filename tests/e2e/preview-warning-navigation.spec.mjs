@@ -219,3 +219,56 @@ test('los filtros de clase, profesional y sala cambian solo la vista; limpiar re
   });
   expect(saved).toBe(result.snapshot);
 });
+
+
+test('la auditoría de cobertura permanece global al filtrar y no altera IndexedDB',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('horario-user-cleared','true'));
+  await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
+  const before=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    const {buildWeeklyPreviewCalendar,renderWeeklyPreviewCalendar,
+      bindWeeklyPreviewCalendarFilters}=await import('/js/weekly-preview-calendar.js');
+    const snapshot=JSON.stringify(await loadState());
+    const state={
+      classSchedules:[],sessions:[],groups:[],students:[],professionals:[],
+      schoolSettings:{structure:{configured:false}},
+      centerPlanningSettings:{mode:'global'}
+    };
+    const payload={
+      lessons:[{group_id:'1A',subject_id:'MAT',teacher_id:'T1',
+        weekly_minutes:90,durations:[45,45]}],
+      supports:[{request_id:'support1',service:'PT',teacher_id:'PT1',
+        group_id:'1A',pupil_token:'hidden-a',weekly_minutes:45}],
+      group_supports:[],rooms:[]
+    };
+    const result={status:'feasible',preview_only:true,
+      lessons:[{group_id:'1A',subject_id:'MAT',teacher_id:'T1',weekday:0,
+        start_time:'09:00',end_time:'09:45'}],
+      supports:[{request_id:'support1',service:'PT',weekday:1,
+        start_time:'10:00',end_time:'10:30',room_id:'PT-room'}],
+      group_supports:[]};
+    const projection=buildWeeklyPreviewCalendar(state,result,payload);
+    const host=document.createElement('div');host.id='weekly-audit-fixture';
+    host.innerHTML=renderWeeklyPreviewCalendar(projection);
+    document.body.append(host);
+    bindWeeklyPreviewCalendarFilters(host,projection);
+    return snapshot;
+  });
+  const host=page.locator('#weekly-audit-fixture');
+  await expect(host.locator('[data-weekly-audit-status]')).toHaveText('Se requiere revisión');
+  await expect(host.locator('[data-weekly-audit-curriculum]')).toContainText('Falta');
+  await expect(host.locator('[data-weekly-audit-individual]')).toContainText('15 min');
+  await host.locator('[data-weekly-filter="classGroup"]').selectOption('1A');
+  await host.locator('[data-weekly-filter="teacherId"]').selectOption('T1');
+  await expect(host.locator('[data-weekly-review-block]')).toHaveCount(1);
+  await expect(host.locator('[data-weekly-audit-curriculum]')).toContainText('45 min');
+  await host.locator('[data-weekly-filter-reset]').click();
+  await expect(host.locator('[data-weekly-review-block]')).toHaveCount(2);
+  await expect(host).not.toContainText('hidden-a');
+  const after=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    return JSON.stringify(await loadState());
+  });
+  expect(after).toBe(before);
+});

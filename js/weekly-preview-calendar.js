@@ -4,6 +4,7 @@
 import { DAYS } from './constants.js';
 import { compareWeeklyPreviewBlocks } from './weekly-preview-comparison.js';
 import { filterWeeklyPreviewCalendar,weeklyPreviewFilterOptions } from './weekly-preview-filters.js';
+import { analyzeWeeklyPreviewAudit,renderWeeklyPreviewAudit } from './weekly-preview-audit.js';
 import { escapeHtml } from './utils.js';
 
 const DAY_INDEX=new Map(DAYS.map((day,index)=>[day.id,index]));
@@ -18,7 +19,7 @@ const safeText=(value,max=120)=>typeof value==='string'
   ?value.trim().slice(0,max):'';
 const dayOf=value=>Number.isInteger(value)&&value>=0&&value<5
   ?value:DAY_INDEX.get(value);
-function block(kind,source,day,start,end,label,context='',room='',teacherId='',classGroups=[]){
+function block(kind,source,day,start,end,label,context='',room='',teacherId='',classGroups=[],roomUnits=null){
   const begin=minutes(start),finish=minutes(end);
   if(day===undefined||begin===null||finish===null||finish<=begin||
     begin%15||finish%15)return null;
@@ -26,6 +27,7 @@ function block(kind,source,day,start,end,label,context='',room='',teacherId='',c
     context:safeText(context),room:safeText(room,64),
     teacherId:safeText(teacherId,64),
     classGroups:[...new Set(classGroups.map(value=>safeText(value,64)).filter(Boolean))],
+    roomUnits:Number.isInteger(roomUnits)&&roomUnits>=1&&roomUnits<=30?roomUnits:null,
     duration:finish-begin};
 }
 const sorted=blocks=>blocks.sort((a,b)=>a.day-b.day||
@@ -77,7 +79,9 @@ export function buildWeeklyPreviewCalendar(state,result,payload=null){
       .map(id=>students.get(id)?.grupoClase).filter(Boolean))];
     const item=block(service,'fixed',dayOf(row.dia),row.inicio,row.fin,
       'Apoyo '+service+' existente','Franja fija',
-      row.aula||group?.roomId||'',teacherId,classes);
+      row.aula||group?.roomId||'',teacherId,classes,
+      (group?.studentIds||[]).filter(id=>!excluded.has(id)&&
+        students.get(id)?.activo!==false&&students.has(id)).length||null);
     if(item)recordTeacher(teacherId);
     return item;
   }).filter(Boolean);
@@ -98,7 +102,7 @@ export function buildWeeklyPreviewCalendar(state,result,payload=null){
     const item=block(row.service,'proposed',dayOf(row.weekday),
       row.start_time,row.end_time,'Apoyo '+row.service+' propuesto',
       'Individual · identidad protegida',row.room_id||'',
-      teacherId,requestClasses(matching));
+      teacherId,requestClasses(matching),1);
     if(item)recordTeacher(teacherId);
     return item;
   }).filter(Boolean);
@@ -112,7 +116,7 @@ export function buildWeeklyPreviewCalendar(state,result,payload=null){
     const item=block(row.service,'proposed',dayOf(row.weekday),
       row.start_time,row.end_time,'Apoyo '+row.service+' grupal',
       count===null?'Participantes anonimizados':count+' participante(s)',
-      row.room_id||'',teacherId,requestClasses(matching));
+      row.room_id||'',teacherId,requestClasses(matching),count);
     if(item)recordTeacher(teacherId);
     return item;
   }).filter(Boolean);
@@ -128,7 +132,7 @@ export function buildWeeklyPreviewCalendar(state,result,payload=null){
   );
   const current=sorted(comparison.current);
   const proposed=sorted(comparison.proposed);
-  return {
+  const projection={
     days:DAYS.map((day,index)=>({
       id:day.id,label:day.label,
       current:current.filter(item=>item.day===index),
@@ -148,6 +152,7 @@ export function buildWeeklyPreviewCalendar(state,result,payload=null){
       additionalSupports:proposedSupports.length+proposedGroups.length
     }
   };
+  return {...projection,audit:analyzeWeeklyPreviewAudit(state,payload,result,projection)};
 }
 
 function renderBlock(item){
@@ -277,6 +282,7 @@ export function renderWeeklyPreviewCalendar(projection,selection={}){
     renderSelect('room','Sala',available.rooms,chosen.room)+
     '<button type="button" class="button" data-weekly-filter-reset>Limpiar filtros</button>'+
     '</div>'+
+    renderWeeklyPreviewAudit(projection.audit)+
     renderFilteredComparison(filtered)+'</section>';
 }
 

@@ -105,9 +105,16 @@ sesiones vigentes. No duplicar sin más el calendario existente.
    conocida no se atribuyen a un docente, clase o sala de forma especulativa.
    Quedan pendientes vistas avanzadas por recurso y revisión individual
    anonimizada de coberturas, sin identidad del menor.
-4. **Revisión accionable**: conflictos, ocupación de salas, cobertura,
-   pendientes y mensajes `feasible`, `infeasible` o `unknown`
-   claramente diferenciados.
+4. **Revisión de conflictos y cobertura — primer incremento implementado**:
+   contraste de minutos por materia y demanda individual enviada al motor;
+   colisiones comprobables de docentes y clases y ocupación/ventanas de sala
+   cuando existen datos suficientes. Aforos desconocidos y reparto individual
+   de apoyos grupales se indican como no verificables. El informe es global
+   incluso al filtrar el calendario. `feasible` **no** certifica cobertura
+   íntegra del colegio ni cumplimiento de la normativa autonómica.
+   Pendiente: validación de actividades móviles, rutas y comprobación
+   individual por participante con contrato de respuesta adecuado; estados
+   `infeasible` y `unknown` más ricos y acciones de corrección.
 5. **Alternativas y recálculo**: probar/deshacer una propuesta visual,
    corregir restricciones y recalcular sin cambiar el horario existente.
 
