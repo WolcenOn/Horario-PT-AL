@@ -11,6 +11,8 @@ Aplicación web para construir, revisar y operar el horario de un centro educati
 - Las dos ramas `main` no reciben cambios ni fusiones durante este trabajo de integración.
 - `.github/workflows/pages.yml` valida la rama `integracion-gestor-escuela` con unitarios y Playwright. El despliegue GitHub Pages se registra además como una ejecución separada `pages build and deployment`.
 
+**Seguimiento del proyecto:** [Hoja de ruta general, fases y pendientes](docs/PROJECT_ROADMAP.md). Las líneas de normativa curricular y seguridad tienen documentos técnicos separados.
+
 La filosofía del producto es:
 
 > Configurar lo mínimo → calcular → revisar → corregir → recalcular.
