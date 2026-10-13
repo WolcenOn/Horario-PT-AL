@@ -28,7 +28,8 @@ const preview=()=>({
 test('distingue materias actuales, propuestas, apoyos fijos y adicionales',()=>{
   const result=buildWeeklyPreviewCalendar(current(),preview());
   assert.deepEqual(result.counts,{
-    ordinaryCurrent:1,ordinaryProposed:2,fixedSupports:1,additionalSupports:2
+    ordinaryCurrent:1,ordinaryProposed:2,ordinaryRetained:0,
+    fixedSupports:1,additionalSupports:2
   });
   const monday=result.days[0];
   assert.equal(monday.current[0].start,'09:00');
