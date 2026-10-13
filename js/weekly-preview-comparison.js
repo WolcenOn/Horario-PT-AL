@@ -13,7 +13,9 @@ function countMinutes(blocks){
   return blocks.reduce((total,row)=>total+row.duration,0);
 }
 
-export function compareWeeklyPreviewBlocks(currentLessons,proposedLessons,fixedSupports,additionalSupports){
+export function compareWeeklyPreviewBlocks(
+  currentLessons,proposedLessons,fixedSupports,additionalSupports,preservedLessons=[]
+){
   const existing=currentLessons.map(row=>({...row,change:'removed'}));
   const proposed=proposedLessons.map(row=>({...row,change:'new'}));
   const matched=new Set();
@@ -43,8 +45,13 @@ export function compareWeeklyPreviewBlocks(currentLessons,proposedLessons,fixedS
     }
   }
 
-  const current=[...existing,...fixedSupports.map(row=>({...row,change:'fixed'}))];
-  const next=[...proposed,...fixedSupports.map(row=>({...row,change:'fixed'})),
+  // Classes outside the solver's requested scope are never treated as
+  // removals: their real timetable is retained in both comparisons.
+  const retained=preservedLessons.map(row=>({...row,change:'outside'}));
+  const current=[...existing,...retained,
+    ...fixedSupports.map(row=>({...row,change:'fixed'}))];
+  const next=[...proposed,...retained.map(row=>({...row,source:'retained'})),
+    ...fixedSupports.map(row=>({...row,change:'fixed'})),
     ...additionalSupports.map(row=>({...row,change:'new'}))];
   const changes={
     same:proposed.filter(row=>row.change==='same').length,
@@ -54,7 +61,8 @@ export function compareWeeklyPreviewBlocks(currentLessons,proposedLessons,fixedS
     ambiguous:0
   };
   const groups=new Set([
-    ...existing.map(row=>row.context),...proposed.map(row=>row.context)
+    ...existing.map(row=>row.context),...proposed.map(row=>row.context),
+    ...retained.map(row=>row.context)
   ].filter(Boolean));
   // Entries that cannot be paired 1:1 might be multiple reschedulings,
   // splits or mergers. State the uncertainty, not a fictional equivalence.
@@ -72,8 +80,8 @@ export function compareWeeklyPreviewBlocks(currentLessons,proposedLessons,fixedS
     }
   }
   const classes=[...groups].sort((a,b)=>a.localeCompare(b,'es')).map(group=>{
-    const before=existing.filter(row=>row.context===group);
-    const after=proposed.filter(row=>row.context===group);
+    const before=[...existing,...retained].filter(row=>row.context===group);
+    const after=[...proposed,...retained].filter(row=>row.context===group);
     return {
       group,
       currentMinutes:countMinutes(before),

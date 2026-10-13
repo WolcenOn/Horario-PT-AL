@@ -140,3 +140,23 @@ test('los textos de comparación con material no fiable se escapan en HTML',()=>
   assert.ok(!html.includes('<script>'));
   assert.ok(html.includes('&lt;script&gt;'));
 });
+
+
+test('ninguna clase ajena al alcance del solver aparece retirada o pierde minutos',()=>{
+  const state=current();
+  state.classSchedules.push({grupoClase:'2ºB',materia:'Inglés',
+    dia:'jueves',inicio:'09:00',fin:'09:45'});
+  const response=preview();
+  const payload={lessons:[
+    {group_id:'1ºA',subject_id:'Matemáticas',weekly_minutes:60}
+  ]};
+  const projection=buildWeeklyPreviewCalendar(state,response,payload);
+  assert.equal(projection.counts.ordinaryRetained,1);
+  assert.equal(projection.comparison.changes.removed,0);
+  assert.equal(projection.comparison.classes.find(x=>x.group==='2ºB').currentMinutes,45);
+  assert.equal(projection.comparison.classes.find(x=>x.group==='2ºB').proposedMinutes,45);
+  const item=projection.days[3].proposed.find(x=>x.context==='2ºB');
+  assert.equal(item.change,'outside');
+  assert.equal(item.source,'retained');
+  assert.match(renderWeeklyPreviewCalendar(projection),/Fuera del cálculo/);
+});

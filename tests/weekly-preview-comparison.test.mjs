@@ -98,3 +98,18 @@ test('la comparación no altera las fuentes ni arrastra información de alumnos'
   assert.equal(JSON.stringify({current,proposed,fixed}),snapshot);
   assert.ok(!JSON.stringify(result).includes('pupil_token'));
 });
+
+
+test('las clases fuera del cálculo se preservan y no figuran como retiradas',()=>{
+  const original=[block('1A','MAT',0,'09:00','10:00')];
+  const other=[block('2B','ING',2,'11:00','12:00')];
+  const result=compareWeeklyPreviewBlocks(original,
+    [{...original[0],source:'proposed'}],[],[],other);
+  assert.deepEqual(result.changes,{
+    same:1,changed:0,added:0,removed:0,ambiguous:0
+  });
+  assert.deepEqual(result.classes.map(x=>[x.group,x.currentMinutes,x.proposedMinutes]),
+    [['1A',60,60],['2B',60,60]]);
+  assert.equal(result.proposed[1].source,'retained');
+  assert.equal(result.proposed[1].change,'outside');
+});

@@ -92,6 +92,8 @@ sesiones vigentes. No duplicar sin más el calendario existente.
 2. **Comparación con horario actual — segundo incremento implementado**:
    franjas coincidentes, reprogramaciones inequívocas, altas y bajas;
    escenarios ambiguos se presentan sin emparejamientos supuestos.
+   Las clases excluidas del alcance del motor conservan sus franjas y no
+   cuentan como supresiones de la propuesta parcial.
    Incluye minutos de sesiones por clase y de PT/AL (fijos y adicionales),
    sin confundir minutos del profesional con minutos por alumno.
    No equivale todavía a verificar la cobertura curricular exigida.

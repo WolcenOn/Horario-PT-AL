@@ -295,7 +295,7 @@ async function openIntegration() {
         }
         return {
           text:lines.join('\n'),
-          calendar:buildWeeklyPreviewCalendar(state,result),
+          calendar:buildWeeklyPreviewCalendar(state,result,payload),
           issues:[
             ...readiness,
             ...issuesFromPreviewResult(result),

@@ -29,7 +29,7 @@ const sorted=blocks=>blocks.sort((a,b)=>a.day-b.day||
   minutes(a.start)-minutes(b.start)||minutes(a.end)-minutes(b.end)||
   a.kind.localeCompare(b.kind));
 
-export function buildWeeklyPreviewCalendar(state,result){
+export function buildWeeklyPreviewCalendar(state,result,payload=null){
   if(result?.preview_only!==true||result?.status!=='feasible')return null;
   const groups=new Map((state?.groups||[]).map(row=>[row.id,row]));
   const currentLessons=(state?.classSchedules||[]).map(row=>
@@ -66,9 +66,15 @@ export function buildWeeklyPreviewCalendar(state,result){
       count===null?'Participantes anonimizados':count+' participante(s)',
       row.room_id||'');
   }).filter(Boolean);
+  const participating=new Set(
+    (Array.isArray(payload?.lessons)?payload.lessons:result.lessons||[])
+      .map(row=>safeText(row.group_id)).filter(Boolean)
+  );
+  const preservedLessons=currentLessons.filter(item=>!participating.has(item.context));
+  const affectedLessons=currentLessons.filter(item=>participating.has(item.context));
   const comparison=compareWeeklyPreviewBlocks(
-    currentLessons,proposedLessons,fixedSupports,
-    [...proposedSupports,...proposedGroups]
+    affectedLessons,proposedLessons,fixedSupports,
+    [...proposedSupports,...proposedGroups],preservedLessons
   );
   const current=sorted(comparison.current);
   const proposed=sorted(comparison.proposed);
@@ -86,6 +92,7 @@ export function buildWeeklyPreviewCalendar(state,result){
     counts:{
       ordinaryCurrent:currentLessons.length,
       ordinaryProposed:proposedLessons.length,
+      ordinaryRetained:preservedLessons.length,
       fixedSupports:fixedSupports.length,
       additionalSupports:proposedSupports.length+proposedGroups.length
     }
@@ -94,11 +101,13 @@ export function buildWeeklyPreviewCalendar(state,result){
 
 function renderBlock(item){
   const kind=item.kind==='lesson'?'lesson':item.kind==='PT'?'pt':'al';
-  const source=item.source==='fixed'?'fija':item.source==='proposed'?'propuesta':'actual';
+  const source=item.source==='fixed'?'fija':
+    item.source==='retained'?'conservada':
+    item.source==='proposed'?'propuesta':'actual';
   const changes={
     same:'Coincide',changed:item.source==='current'?'Antes':'Cambio',
     new:item.kind==='lesson'?'Nueva':'Adicional',
-    removed:'Solo actual',fixed:'Fija'
+    removed:'Solo actual',fixed:'Fija',outside:'Fuera del cálculo'
   };
   const badge=changes[item.change]||'Revisar';
   return '<article class="weekly-review-block is-'+kind+' is-change-'+item.change+
@@ -164,10 +173,11 @@ export function renderWeeklyPreviewCalendar(projection){
   const {counts,days,comparison}=projection;
   return '<section class="weekly-review" data-weekly-preview-calendar aria-label="Comparación semanal de solo lectura">'+
     '<header><h3>Semana actual y propuesta del motor</h3>'+
-    '<p>Consulta exclusivamente visual. Las materias propuestas sustituyen en esta comparación a las actuales; los apoyos fijos existentes se mantienen. Los apoyos propuestos son <strong>adicionales</strong>. No se muestran identidades del alumnado, ni se aplica nada.</p></header>'+
+    '<p>Consulta exclusivamente visual. Las materias propuestas sustituyen solo las de las clases incluidas en el cálculo; las de otras clases se conservan. Los apoyos fijos se mantienen y los apoyos propuestos son <strong>adicionales</strong>. No se muestran identidades del alumnado, ni se aplica nada.</p></header>'+
     '<div class="weekly-review-metrics">'+
     '<span>Materias actuales: <b>'+counts.ordinaryCurrent+'</b></span>'+
     '<span>Materias propuestas: <b>'+counts.ordinaryProposed+'</b></span>'+
+    '<span>Otras franjas conservadas: <b>'+counts.ordinaryRetained+'</b></span>'+
     '<span>Apoyos fijos: <b>'+counts.fixedSupports+'</b></span>'+
     '<span>Apoyos adicionales: <b>'+counts.additionalSupports+'</b></span></div>'+
     '<div class="weekly-review-legend"><span>Materia ordinaria</span><span>PT</span><span>AL</span><span>Fijo / existente</span></div>'+
