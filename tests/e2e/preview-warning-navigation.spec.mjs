@@ -29,21 +29,29 @@ test('cada aviso accionable lleva a la opción de configuración que falta',asyn
 });
 
 test('los indicadores de preparación enlazan con el lugar correcto',async({page})=>{
-  await makeLocalPlanningMode(page,'ptal');
-  await page.locator('.nav-item[data-view="centerPlanning"]').click();
-  await expect(page.locator('.global-readiness-item.is-pending').first()).toBeVisible();
-  const row=page.locator('.global-readiness-item').filter({
-    hasText:'Modo Centro completo'
+  await makeLocalPlanningMode(page,'global');
+  await page.evaluate(async()=>{
+    const repository=await import('/js/repository.js');
+    const data=await repository.loadState();
+    await repository.saveCenterPlanningSettings({
+      ...data.centerPlanningSettings,mode:'global',curriculum:{}
+    });
   });
-  await row.getByRole('button',{name:/Activar centro completo/}).click();
+  await page.reload();
+  await page.locator('.nav-item[data-view="centerPlanning"]').click();
+  const row=page.locator('.global-readiness-item').filter({
+    hasText:'Currículo objetivo'
+  });
+  await expect(row).toHaveClass(/is-pending/);
+  await row.getByRole('button',{name:/Revisar currículo/}).click();
   await expect(page.locator('#pageTitle')).toHaveText('Planificación académica');
-  await expect(page.locator('input[name="mode"]').first()).toBeFocused();
+  await expect(page.locator('.curriculum-course-list')).toBeVisible();
 });
 
 test('las advertencias generales no contienen enlaces externos improvisados',async({page})=>{
   await makeLocalPlanningMode(page,'ptal');
   await page.locator('.nav-item[data-view="integration"]').click();
-  await expect(page.locator('.integration-issues')).toBeVisible();
+  await expect(page.locator('.integration-issues.is-error').first()).toBeVisible();
   const links=await page.locator('[data-fix-view]').evaluateAll(nodes=>
     nodes.map(node=>({view:node.dataset.fixView,href:node.getAttribute('href')}))
   );
