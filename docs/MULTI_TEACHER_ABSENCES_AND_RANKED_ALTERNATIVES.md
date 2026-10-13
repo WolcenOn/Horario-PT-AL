@@ -1,6 +1,9 @@
 # Ausencias simultáneas de profesorado y ranking de alternativas
 
-**Estado:** calendario global, cálculo conjunto diario de clases ordinarias y revisión de borradores implementados. PT/AL, ranking y aplicación segura pendientes.  
+**Estado:** cálculo conjunto de clases y PT/AL incorporado en ramas de
+integración; la ampliación backend **no está desplegada**. La respuesta de
+servidores anteriores sigue marcando como desconocidos los apoyos que no
+resuelven. Ranking, verificación individual y aprobación pendientes.  
 **Fecha:** 13 de octubre de 2026.  
 **Ramas objetivo:** Horario-PT-AL/`integracion-gestor-escuela` y
 GestorEscuela/`integracion-horario-pt-al`, sin tocar `main`.
@@ -26,7 +29,7 @@ profesorado ni del alumnado.
 |---|---|---|
 | Disponibilidad semanal del personal | Existe `disponibilidad`, `bloqueosExternos` y `professionalCanWork` | Reutilizar para el control de disponibilidad permanente, no representar ahí una baja de fechas concretas |
 | Generador semanal | `buildWeeklyPreviewRequest` deriva materias y apoyo PT/AL de asignaciones y metas | Extender mediante una capa temporal validada, manteniendo la plantilla base |
-| GestorEscuela | La API diaria `solve-academic` ya admite **varias ausencias** en una petición y evita asignar simultáneamente el mismo sustituto a dos clases | Actualmente trata como demanda de sustitución solo `CLASS` con grupo identificado. PT/AL no se cubre con esta respuesta. Devuelve una solución, no un ranking de varias soluciones |
+| GestorEscuela | La API diaria `solve-academic` admite varias ausencias; el motor de integración también trata PT/AL sin grupo único y exige especialidad exacta, sin solapamientos | **No desplegado**. No comprueba asistencia por participante, aforos ni desplazamientos; sigue generando una única solución, no múltiples propuestas para ranking |
 | Comparación y auditoría | Existen calendarios, filtros y diferencias de minutos, salas y docentes en modo vista previa | Reutilizar la revisión para mostrar cada escenario con idénticos criterios |
 | Aplicación de escenarios | La aplicación conjunta de un resultado del solver sigue pendiente de Fase 3 | No confundir el ranking con una aprobación |
 
@@ -172,8 +175,14 @@ ya generada ni una regla legal universal.
       existente y mostrar propuesta, sin cubrir, desconocido y detalle por
       franja. La ejecución requiere aceptación del usuario y guarda un
       borrador remoto, nunca una aplicación automática.
-- [ ] Resolver PT/AL mediante contrato especializado, sin dar por cubiertas
-      sesiones que el solver diario excluye.
+- [x] Solver PT/AL conjunto en rama de integración, también con grupo-clase
+      desconocido o mixto; la especialidad exacta y los bloques protegidos
+      son restricciones duras. CI del backend en verde; **sin despliegue**.
+- [x] Clasificación conservadora por franja en frontend: PT/AL propuesto
+      por especialista compatible, sin cubrir o sin verificar si la respuesta
+      antigua omite el apoyo. Sin aplicar horarios ni cambiar estados.
+- [ ] Comprobar legalidad, aforo, desplazamientos y atención individual
+      PT/AL antes de declarar cobertura aplicada.
 - [ ] Confirmar/aplicar cada franja con control de versiones y trazabilidad
       diferenciada de la simple propuesta.
 - [ ] Probar escenarios de más semanas, vacaciones y zona horaria en E2E.
@@ -221,8 +230,9 @@ Trabajar en ramas de integración; nunca desplegar cambios del backend sin
 autorización. Cada paso requiere pruebas unitarias y navegador, privacidad,
 CI verde y comprobación de que `main` permanece intacta.
 
-**Orden recomendado desde el estado actual:** probar el cálculo conjunto de
-clases en centros ficticios, extender cobertura a PT/AL y habilitar varias
-alternativas reales. Después añadir ranking explicable y aprobación segura.
-Las propuestas se guardan como borradores remotos tras confirmación previa,
-pero jamás resuelven ausencias ni alteran el horario base por sí solas.
+**Orden recomendado desde el estado actual:** probar en centros ficticios
+el cálculo conjunto con PT/AL, varias clases, faltas y grupos mixtos;
+verificar cobertura individual, salas y desplazamientos. El backend ampliado
+solo se desplegará tras autorización expresa. Después: generar alternativas
+reales diferentes, construir un ranking explicable y abordar la aprobación
+segura. Las propuestas no resuelven ausencias ni alteran el horario base.

@@ -34,6 +34,11 @@ const sample=()=>{
       ]
     },
     configuration:{
+      teachers:[
+        {id:'PT-SUB',specialties:new Set(['PT']),can_cover_groups:new Set(['G-1'])},
+        {id:'AL-SUB',specialties:new Set(['AL']),can_cover_groups:new Set(['G-1'])},
+        {id:'GENERAL',specialties:new Set(),can_cover_groups:new Set(['G-1'])}
+      ],
       activities:[
         {id:'math-1',weekday:0,teacher_id:'T-A',slot_id:'TS01',
           activity_type:'CLASS',group_id:'G-1'},
@@ -110,14 +115,19 @@ test('cálculo de lunes-viernes: fin de semana bloqueado y fecha imposible recha
   assert.equal(plan.ready,false);
   assert.ok(plan.errors.some(s=>s.includes('lunes a viernes')));
 });
-test('las ausencias solo PT/AL no se presentan como sustituidas por el motor',()=>{
+test('las ausencias solo PT/AL pueden solicitar cálculo y siguen sin certificar cobertura',()=>{
   const {state,adapter,date}=sample();
   state.staffAbsences=state.staffAbsences.slice(2);
   const plan=buildJointAbsenceRequest(state,adapter,date);
-  assert.equal(plan.ready,false);
+  assert.equal(plan.ready,true);
   assert.equal(plan.classCount,0);
   assert.equal(plan.supportCount,1);
-  assert.ok(plan.errors.some(x=>x.includes('PT/AL')));
+  assert.equal(plan.details[0].supportActivities[0].kind,'PT');
+  const old=assessJointAbsenceResult(plan,{payload:{solution:{
+    substitutions:[],uncovered:[]
+  }}});
+  assert.equal(old.supportUnknown,1);
+  assert.equal(old.status,'unknown');
 });
 test('identificador no asignado o sin franjas nunca se envía como sustitución inventada',()=>{
   const {state,adapter,date}=sample();
@@ -132,14 +142,15 @@ test('identificador no asignado o sin franjas nunca se envía como sustitución 
   assert.equal(plan.ready,false);
   assert.ok(plan.errors.some(x=>x.includes('franjas')));
 });
-test('respuesta parcial se atribuye correctamente a cada ausencia y deja PT pendiente',()=>{
+test('respuesta antigua omite PT y por tanto sigue siendo no verificable',()=>{
   const args=sample(),plan=buildJointAbsenceRequest(...[args.state,args.adapter,args.date]);
   const result=assessJointAbsenceResult(plan,validResult());
-  assert.deepEqual(result.rows.map(x=>x.status),['proposed','uncovered','not-assessed']);
+  assert.deepEqual(result.rows.map(x=>x.status),['proposed','uncovered','unknown']);
   assert.equal(result.proposed,2);
   assert.equal(result.uncovered,1);
-  assert.equal(result.unknown,0);
-  assert.equal(result.status,'partial');
+  assert.equal(result.unknown,1);
+  assert.equal(result.supportUnknown,1);
+  assert.equal(result.status,'unknown');
   assert.equal(result.hasPendingSupports,true);
 });
 test('salida incompleta o inconsistente no se interpreta como cobertura',()=>{
@@ -148,7 +159,7 @@ test('salida incompleta o inconsistente no se interpreta como cobertura',()=>{
   const missing=assessJointAbsenceResult(plan,{payload:{solution:{
     substitutions:[],uncovered:[]
   }}});
-  assert.equal(missing.unknown,3);
+  assert.equal(missing.unknown,4);
   assert.equal(missing.status,'unknown');
   const other=validResult();
   other.payload.solution.substitutions[0].absent_teacher_id='NON-EXISTENT';
@@ -164,4 +175,90 @@ test('no se filtran tokens de alumnado a solicitudes o evaluaciones',()=>{
   const output=JSON.stringify([plan,assessJointAbsenceResult(plan,validResult())]);
   assert.ok(!output.includes('secret-pupil'));
   assert.ok(!output.includes('Menor Privado'));
+});
+
+
+test('el motor actualizado puede proponer PT con especialidad y grupo compatibles',()=>{
+  const {state,adapter,date}=sample();
+  const plan=buildJointAbsenceRequest(state,adapter,date);
+  const payload=validResult();
+  payload.payload.solution.substitutions.push({
+    activity_id:'pt-1',slot_id:'TS02',absent_teacher_id:'PT-C',
+    substitute_teacher_id:'PT-SUB'
+  });
+  const answer=assessJointAbsenceResult(plan,payload);
+  assert.equal(answer.supportProposed,1);
+  assert.equal(answer.supportUnknown,0);
+  assert.equal(answer.supportUncovered,0);
+  assert.equal(answer.hasPendingSupports,false);
+  assert.equal(answer.status,'partial');
+  assert.equal(answer.rows[2].status,'proposed');
+  assert.equal(answer.rows[2].supportDetails[0].substituteTeacherId,'PT-SUB');
+});
+
+test('si faltan especialistas PT la respuesta indica apoyos sin cubrir',()=>{
+  const {state,adapter,date}=sample();
+  const plan=buildJointAbsenceRequest(state,adapter,date);
+  const payload=validResult();
+  payload.payload.solution.uncovered.push({
+    activity_id:'pt-1',slot_id:'TS02',absent_teacher_id:'PT-C',
+    reason:'No hay profesional PT compatible'
+  });
+  const answer=assessJointAbsenceResult(plan,payload);
+  assert.equal(answer.supportUncovered,1);
+  assert.equal(answer.supportUnknown,0);
+  assert.equal(answer.hasPendingSupports,true);
+});
+
+test('la vista rechaza cobertura PT sin especialidad, grupo o disponibilidad',()=>{
+  for(const substitute of ['GENERAL','AL-SUB','PT-C','NO-EXISTE']){
+    const {state,adapter,date}=sample();
+    const plan=buildJointAbsenceRequest(state,adapter,date);
+    const result=validResult();
+    result.payload.solution.substitutions.push({
+      activity_id:'pt-1',slot_id:'TS02',absent_teacher_id:'PT-C',
+      substitute_teacher_id:substitute
+    });
+    const assessed=assessJointAbsenceResult(plan,result);
+    assert.equal(assessed.supportUnknown,1,substitute);
+    assert.equal(assessed.status,'unknown',substitute);
+    assert.equal(assessed.anomalies.length,1,substitute);
+  }
+});
+
+test('los apoyos PT sin grupo único requieren especialidad, no un grupo inventado',()=>{
+  const {state,adapter,date}=sample();
+  adapter.configuration.activities.find(x=>x.id==='pt-1').group_id=null;
+  adapter.configuration.teachers.find(x=>x.id==='PT-SUB').can_cover_groups=new Set();
+  state.staffAbsences=state.staffAbsences.slice(2);
+  const plan=buildJointAbsenceRequest(state,adapter,date);
+  assert.equal(plan.ready,true);
+  const result={payload:{solution:{
+    substitutions:[{
+      activity_id:'pt-1',slot_id:'TS02',absent_teacher_id:'PT-C',
+      substitute_teacher_id:'PT-SUB'
+    }],uncovered:[]
+  }}};
+  const answer=assessJointAbsenceResult(plan,result);
+  assert.equal(answer.supportProposed,1);
+  assert.equal(answer.status,'proposed');
+  assert.equal(answer.rows[0].supportDetails[0].groupId,'');
+});
+
+test('AL es distinto de PT y exige acreditación AL incluso en grupos mixtos',()=>{
+  const {state,adapter,date}=sample();
+  const activity=adapter.configuration.activities.find(x=>x.id==='pt-1');
+  activity.activity_type='AL';
+  activity.group_id=null;
+  state.staffAbsences=state.staffAbsences.slice(2);
+  const plan=buildJointAbsenceRequest(state,adapter,date);
+  const result={payload:{solution:{
+    substitutions:[{
+      activity_id:'pt-1',slot_id:'TS02',absent_teacher_id:'PT-C',
+      substitute_teacher_id:'PT-SUB'
+    }],uncovered:[]
+  }}};
+  assert.equal(assessJointAbsenceResult(plan,result).supportUnknown,1);
+  result.payload.solution.substitutions[0].substitute_teacher_id='AL-SUB';
+  assert.equal(assessJointAbsenceResult(plan,result).supportProposed,1);
 });

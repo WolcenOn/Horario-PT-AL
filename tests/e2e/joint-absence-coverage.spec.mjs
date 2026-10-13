@@ -91,9 +91,75 @@ test('la vista de evaluación conjunta muestra faltas y PT/AL sin fingir resoluc
     document.body.append(fixture);
   });
   const node=page.locator('#joint-fixture');
-  await expect(node.locator('[data-joint-assessment]')).toContainText('Cobertura parcial');
+  await expect(node.locator('[data-joint-assessment]')).toContainText('Revisión incompleta');
   await expect(node.locator('[data-joint-absence-row="a"]')).toContainText('sin cubrir');
-  await expect(node.locator('[data-joint-absence-row="b"]')).toContainText('pendiente de reorganizar');
+  await expect(node.locator('[data-joint-absence-row="b"]')).toContainText('1 sin verificar');
   await expect(node.locator('[data-joint-assessment]')).toContainText('NO certifica los apoyos PT/AL');
   await expect(node.locator('[data-joint-absence-solve]')).toBeDisabled();
+});
+
+
+test('la vista PT/AL solo presenta propuesta especializada sin marcar ausencia resuelta',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('horario-user-cleared','true'));
+  await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
+  const before=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    const original=JSON.stringify(await loadState());
+    const {renderJointAbsencePanel}=await import('/js/joint-absence-view.js');
+    const {buildJointAbsenceRequest,assessJointAbsenceResult}
+      =await import('/js/joint-absence-coverage.js');
+    const state={
+      professionals:[{id:'pt-absent',nombre:'Profesional PT'}],
+      students:[{id:'private-child',nombre:'Nombre oculto'}],
+      staffAbsences:[{
+        id:'absence1',professionalId:'pt-absent',
+        fromDate:'2026-10-12',toDate:'2026-10-12',
+        startTime:'',endTime:'',status:'pending',resolvedAt:''
+      }]
+    };
+    const adapter={
+      report:{mappings:{teachers:{'pt-absent':'BACKEND-PT'}},
+        slots:[{id:'S1',start:'09:00',end:'09:45',label:'09:00–09:45'}]},
+      configuration:{
+        groups:[],teachers:[
+          {id:'PT-SUB',specialties:['PT'],can_cover_groups:[]}
+        ],
+        activities:[{
+          id:'SUPPORT-PT',weekday:0,slot_id:'S1',teacher_id:'BACKEND-PT',
+          activity_type:'PT',group_id:null
+        }]
+      }
+    };
+    const plan=buildJointAbsenceRequest(state,adapter,'2026-10-12');
+    const solution={payload:{solution:{
+      substitutions:[{
+        activity_id:'SUPPORT-PT',slot_id:'S1',
+        absent_teacher_id:'BACKEND-PT',substitute_teacher_id:'PT-SUB'
+      }],uncovered:[]
+    }}};
+    const assessment=assessJointAbsenceResult(plan,solution);
+    const fixture=document.createElement('div');
+    fixture.id='joint-pt-fixture';
+    fixture.innerHTML=renderJointAbsencePanel({
+      date:'2026-10-12',plan,assessment,state,adapter,
+      connected:false,adapterReady:true
+    });
+    document.body.append(fixture);
+    return original;
+  });
+  const root=page.locator('#joint-pt-fixture');
+  await expect(root.locator('[data-joint-absence-solve]')).toBeDisabled();
+  await expect(root.locator('[data-joint-assessment]')).toContainText('1 con especialista propuesto');
+  await expect(root.locator('[data-joint-coverage-details]')).toContainText('Apoyo PT');
+  await expect(root.locator('[data-joint-coverage-details]')).toContainText('PT-SUB');
+  await expect(root.locator('[data-joint-coverage-details]')).toContainText('Apoyo sin grupo único');
+  await expect(root.locator('[data-joint-absence-row="absence1"]')).toContainText('Pendiente');
+  await expect(root).not.toContainText('Nombre oculto');
+  await expect(root).not.toContainText('private-child');
+  const after=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    return JSON.stringify(await loadState());
+  });
+  expect(after).toBe(before);
 });

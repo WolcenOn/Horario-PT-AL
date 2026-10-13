@@ -1,6 +1,6 @@
 // Conservative joint daily absence request and read-only reconciliation.
-// The current GestorEscuela daily optimizer replaces CLASS activities only;
-// PT/AL is explicitly outside the solver's substitution coverage.
+// Both CLASS and PT/AL are needs in the integration solver. Older remote
+// backends can ignore PT/AL: any omitted support stays UNKNOWN, not covered.
 import {dateNumber,absencesOnDate,normalizeStaffAbsence} from './staff-absences.js';
 import {timeToMinutes} from './utils.js';
 
@@ -45,6 +45,10 @@ export function buildJointAbsenceRequest(state,adapter,date){
       classActivities:classActivities.map(row=>({
         id:row.id,slotId:row.slot_id,groupId:row.group_id
       })),
+      supportActivities:supportActivities.map(row=>({
+        id:row.id,slotId:row.slot_id,groupId:row.group_id||'',
+        kind:row.activity_type
+      })),
       supportCount:supportActivities.length,
       classCount:classActivities.length,
       recordedCount:affected.length
@@ -55,8 +59,10 @@ export function buildJointAbsenceRequest(state,adapter,date){
   if(day>=5)errors.push('El cálculo de sustituciones del motor solo cubre días lectivos de lunes a viernes.');
   if(source.length&&!requestsByTeacher.size)
     errors.push('No hay franjas disponibles que puedan enviarse al motor.');
-  if(source.length&&!allClassActivities.size)
-    errors.push('No hay clases ordinarias identificadas para sustitución; los apoyos PT/AL no se calculan como cobertura en este solver.');
+  const allSupportActivities=new Set(details.flatMap(row=>
+    row.supportActivities.map(x=>x.id)));
+  if(source.length&&!allClassActivities.size&&!allSupportActivities.size)
+    errors.push('No hay clases ni apoyos PT/AL identificados para sustituir en este día.');
   const missingSlots=details.filter(x=>x.slotCount===0).length;
   if(missingSlots)errors.push(missingSlots+' ausencia(s) no tienen franjas reconocibles en el cálculo.');
   const request={
@@ -65,7 +71,13 @@ export function buildJointAbsenceRequest(state,adapter,date){
     })).sort((a,b)=>a.teacher_id.localeCompare(b.teacher_id)),
     locked_substitutions:[]
   };
-  return {date,details,request,errors:[...new Set(errors)],
+  const teacherCapabilities=(adapter?.configuration?.teachers||[]).map(row=>({
+    id:row.id,
+    specialties:[...(row.specialties||[])],
+    canCoverGroups:[...(row.can_cover_groups||[])]
+  }));
+  return {date,details,request,teacherCapabilities,
+    errors:[...new Set(errors)],
     count:source.length,
     classCount:allClassActivities.size,
     supportCount:details.reduce((n,row)=>n+row.supportCount,0),
@@ -78,10 +90,16 @@ export function assessJointAbsenceResult(plan,result){
   if(!solution||!Array.isArray(solution.substitutions)||!Array.isArray(solution.uncovered))
     return {status:'unknown',message:'El motor no devolvió una solución verificable.',rows:[]};
   const expected=new Map(plan.details.flatMap(record=>
-    record.classActivities.map(activity=>[activity.id,{
-      ...activity,absenceId:record.absenceId,teacherId:record.teacherId
-    }])
+    [...record.classActivities.map(x=>({...x,kind:'CLASS'})),
+      ...(record.supportActivities||[])]
+      .map(activity=>[activity.id,{
+        ...activity,absenceId:record.absenceId,teacherId:record.teacherId
+      }])
   ));
+  const capabilities=new Map((plan.teacherCapabilities||[])
+    .map(row=>[row.id,row]));
+  const unavailable=new Set(plan.request.absences.flatMap(item=>
+    item.slot_ids.map(slot=>JSON.stringify([item.teacher_id,slot]))));
   const observed=new Map(),anomalies=[];
   for(const [kind,records] of [
     ['proposed',solution.substitutions],['uncovered',solution.uncovered]
@@ -93,37 +111,68 @@ export function assessJointAbsenceResult(plan,result){
         anomalies.push('Resultado con actividad o docente no reconocidos.');
         continue;
       }
+      if(kind==='proposed'&&wanted.kind!=='CLASS'){
+        const substitute=capabilities.get(item.substitute_teacher_id);
+        const eligible=Boolean(substitute&&
+          substitute.specialties.includes(wanted.kind)&&
+          (!wanted.groupId||substitute.canCoverGroups.includes(wanted.groupId))&&
+          !unavailable.has(JSON.stringify([item.substitute_teacher_id,item.slot_id])));
+        if(!eligible){
+          anomalies.push('La cobertura PT/AL no puede verificarse por especialidad, grupo o disponibilidad.');
+          continue;
+        }
+      }
       const current=observed.get(item.activity_id)||[];
       current.push({status:kind,substituteTeacherId:kind==='proposed'?item.substitute_teacher_id:''});
       observed.set(item.activity_id,current);
     }
   }
+  const annotate=item=>{
+    const findings=observed.get(item.id)||[];
+    const only=findings.length===1?findings[0]:null;
+    return {...item,status:only?.status||'unknown',
+      substituteTeacherId:only?.substituteTeacherId||''};
+  };
+  const total=(items,key)=>items.reduce((n,x)=>n+x[key],0);
   const rows=plan.details.map(record=>{
-    const classDetails=record.classActivities.map(item=>{
-      const findings=observed.get(item.id)||[];
-      const only=findings.length===1?findings[0]:null;
-      return {...item,status:only?.status||'unknown',
-        substituteTeacherId:only?.substituteTeacherId||''};
-    });
-    const classStatuses=classDetails.map(x=>x.status);
-    const proposed=classStatuses.filter(x=>x==='proposed').length;
-    const uncovered=classStatuses.filter(x=>x==='uncovered').length;
-    const unknown=classStatuses.filter(x=>x==='unknown').length;
+    const classDetails=record.classActivities.map(item=>annotate({...item,kind:'CLASS'}));
+    const supportDetails=(record.supportActivities||[]).map(annotate);
+    const all=[...classDetails,...supportDetails];
+    const count=(items,status)=>items.filter(x=>x.status===status).length;
+    const proposed=count(all,'proposed');
+    const uncovered=count(all,'uncovered');
+    const unknown=count(all,'unknown');
+    const supportProposed=count(supportDetails,'proposed');
+    const supportUncovered=count(supportDetails,'uncovered');
+    const supportUnknown=count(supportDetails,'unknown');
     return {
       absenceId:record.absenceId,professionalId:record.professionalId,
-      total:classStatuses.length,proposed,uncovered,unknown,classDetails,
-      supportPending:record.supportCount,
-      status:unknown?'unknown':!classStatuses.length?'not-assessed':
+      total:all.length,proposed,uncovered,unknown,classDetails,supportDetails,
+      classProposed:count(classDetails,'proposed'),
+      classUncovered:count(classDetails,'uncovered'),
+      classUnknown:count(classDetails,'unknown'),
+      supportProposed,supportUncovered,supportUnknown,
+      supportPending:supportUncovered+supportUnknown,
+      status:unknown?'unknown':!all.length?'not-assessed':
         uncovered?proposed?'partial':'uncovered':'proposed'
     };
   });
-  const proposed=rows.reduce((n,x)=>n+x.proposed,0);
-  const uncovered=rows.reduce((n,x)=>n+x.uncovered,0);
-  const unknown=rows.reduce((n,x)=>n+x.unknown,0);
+  const proposed=total(rows,'proposed');
+  const uncovered=total(rows,'uncovered');
+  const unknown=total(rows,'unknown');
+  const supportProposed=total(rows,'supportProposed');
+  const supportUncovered=total(rows,'supportUncovered');
+  const supportUnknown=total(rows,'supportUnknown');
+  const classProposed=total(rows,'classProposed');
+  const classUncovered=total(rows,'classUncovered');
+  const classUnknown=total(rows,'classUnknown');
   return {
     rows,proposed,uncovered,unknown,anomalies,
+    supportProposed,supportUncovered,supportUnknown,
+    classProposed,classUncovered,classUnknown,
     status:anomalies.length||unknown?'unknown':uncovered?'partial':'proposed',
     message:'Cobertura propuesta, nunca aplicada ni confirmada.',
-    hasPendingSupports:plan.supportCount>0
+    hasSupportNeeds:plan.supportCount>0,
+    hasPendingSupports:supportUncovered+supportUnknown>0
   };
 }

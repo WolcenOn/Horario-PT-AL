@@ -96,7 +96,9 @@ async function solveJointAbsences(snapshot){
     if(!latest.ready)throw Error(latest.errors.join(' '));
     if(!snapshot||!snapshot.ready||
        JSON.stringify(latest.request)!==JSON.stringify(snapshot.request)||
-       JSON.stringify(latest.details)!==JSON.stringify(snapshot.details))
+       JSON.stringify(latest.details)!==JSON.stringify(snapshot.details)||
+       JSON.stringify(latest.teacherCapabilities)!==
+         JSON.stringify(snapshot.teacherCapabilities))
       throw Error('Las ausencias o el horario han cambiado. Revisa de nuevo la fecha antes de calcular.');
     if(!confirm('¿Calcular conjuntamente estas ausencias? Esta acción sincroniza la '+
       'configuración académica con GestorEscuela y guarda un BORRADOR del plan diario '+
@@ -114,7 +116,8 @@ async function solveJointAbsences(snapshot){
     jointResult=result;
     jointAssessment=assessJointAbsenceResult(latest,result);
     jointStatus={kind:'ok',message:'Borrador conjunto calculado. '+
-      'Revisa las clases sin cubrir y los apoyos PT/AL pendientes.'};
+      'Revisa sustituciones de clases y PT/AL; los apoyos omitidos por '+
+      'un motor antiguo figuran sin verificar. Nada se ha aplicado.'};
     showToast('Propuesta conjunta disponible para revisión, sin aplicar.');
   }catch(error){
     console.error(error);

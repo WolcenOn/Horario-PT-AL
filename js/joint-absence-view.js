@@ -4,11 +4,11 @@ import {escapeHtml as esc} from './utils.js';
 const caption=date=>date.slice(8,10)+'/'+date.slice(5,7)+'/'+date.slice(0,4);
 function statusText(status){
   return ({
-    proposed:'Propuesta de cobertura para todas las clases',
+    proposed:'Propuesta de cobertura para las sesiones identificadas',
     partial:'Cobertura parcial propuesta',
-    uncovered:'Clases sin cubrir',
+    uncovered:'Sesiones sin cubrir',
     unknown:'Revisión incompleta',
-    'not-assessed':'Sin clases ordinarias evaluadas'
+    'not-assessed':'Sin sesiones evaluadas'
   })[status]||'Pendiente de comprobar';
 }
 
@@ -22,7 +22,8 @@ export function renderJointAbsencePanel({
   const slots=new Map((adapter?.report?.slots||[]).map(x=>[x.id,x.label||x.id]));
   const substituted=new Map(Object.entries(adapter?.report?.mappings?.teachers||{})
     .map(([local,backend])=>[backend,professors.get(local)||local]));
-  const classDetails=(assessment?.rows||[]).flatMap(row=>row.classDetails||[]);
+  const coverageDetails=(assessment?.rows||[]).flatMap(row=>[
+    ...(row.classDetails||[]),...(row.supportDetails||[])]);
   const calculate=Boolean(plan?.ready&&connected&&adapterReady);
   return '<section class="card operations-joint" data-joint-absence-panel>'+
     '<div class="card-header"><div><h2>Ausencias simultáneas del calendario</h2>'+
@@ -44,7 +45,10 @@ export function renderJointAbsencePanel({
         return '<tr data-joint-absence-row="'+esc(row.absenceId)+'"><th scope="row">'+
           esc(professors.get(row.professionalId)||'Docente no registrado')+'</th>'+
           '<td>'+row.slotCount+'</td><td>'+row.classCount+'</td>'+
-          '<td>'+(row.supportCount?row.supportCount+' · pendiente de reorganizar':'0')+'</td>'+
+          '<td>'+(outcome?
+            (outcome.supportProposed+' propuestas, '+outcome.supportUncovered+
+              ' sin cubrir, '+outcome.supportUnknown+' sin verificar'):
+            (row.supportCount?row.supportCount+' · por comprobar':'0'))+'</td>'+
           '<td>'+(row.manualStatus==='resolved'?'Confirmada manualmente':'Pendiente')+'</td>'+
           '<td>'+(outcome?esc(statusText(outcome.status))+
             ' · '+outcome.proposed+' con sustituto propuesto, '+outcome.uncovered+
@@ -54,9 +58,11 @@ export function renderJointAbsencePanel({
       (plan.errors.length?'<div class="integration-issues is-error" data-joint-blockers>'+
         '<strong>No se puede calcular aún</strong>'+
         plan.errors.map(x=>'<span>• '+esc(x)+'</span>').join('')+'</div>':'')+
-      (plan.supportCount?'<p data-joint-support-warning><strong>Apoyos PT/AL pendientes:</strong> '+
-        'este solver no devuelve sustituciones verificadas de sesiones de apoyo. '+
-        'Aunque todas las clases tengan sustituto, los apoyos necesitan revisión separada.</p>':'')+
+      (plan.supportCount?'<p data-joint-support-warning><strong>Atención a PT/AL:</strong> '+
+        'el motor diario actualizado puede proponer sustitutos especialistas. '+
+        'Si la versión conectada es anterior, las sesiones omitidas quedan SIN VERIFICAR. '+
+        'Incluso con sustituto propuesto hace falta revisar asistencia individual, '+
+        'agrupamientos y aplicación real; ninguna ausencia se confirma automáticamente.</p>':'')+
       '<p class="integration-note">Al calcular, la configuración académica actual se '+
       'sincroniza con GestorEscuela, y el plan diario remoto queda actualizado con '+
       'la propuesta. Esto no escribe en IndexedDB ni confirma su aplicación. '+
@@ -70,13 +76,20 @@ export function renderJointAbsencePanel({
       esc(status.message||'')+'</div>':'')+
     (assessment?'<div data-joint-assessment><h3>Evaluación del borrador · '+
       esc(caption(date))+'</h3><p><strong>'+esc(statusText(assessment.status))+
-      '</strong>: '+assessment.proposed+' clase(s) con sustituto propuesto, '+
-      assessment.uncovered+' sin cubrir, '+assessment.unknown+' sin verificar.</p>'+
-      (assessment.hasPendingSupports?'<p>Esta evaluación NO certifica los apoyos PT/AL.</p>':'')+
-      (classDetails.length?'<div class="table-wrap"><table data-joint-coverage-details>'+
-      '<thead><tr><th>Franja</th><th>Clase</th><th>Estado propuesto</th><th>Sustituto</th></tr></thead><tbody>'+
-      classDetails.map(item=>'<tr><td>'+esc(slots.get(item.slotId)||item.slotId)+'</td>'+
-        '<td>'+esc(groups.get(item.groupId)||item.groupId)+'</td>'+
+      '</strong>: '+assessment.classProposed+' clase(s) con sustituto propuesto, '+
+      assessment.classUncovered+' sin cubrir, '+assessment.classUnknown+
+      ' sin verificar; PT/AL: '+assessment.supportProposed+' con especialista propuesto, '+
+      assessment.supportUncovered+' sin cubrir, '+assessment.supportUnknown+
+      ' sin verificar.</p>'+
+      (assessment.hasSupportNeeds?'<p>Esta evaluación NO certifica los apoyos PT/AL '+
+        'como aplicados, ni comprueba cobertura individual de todos sus participantes.</p>':'')+
+      (coverageDetails.length?'<div class="table-wrap"><table data-joint-coverage-details>'+
+      '<thead><tr><th>Tipo</th><th>Franja</th><th>Clase / agrupamiento</th><th>Estado propuesto</th><th>Sustituto</th></tr></thead><tbody>'+
+      coverageDetails.map(item=>'<tr>'+
+        '<td>'+esc(item.kind==='CLASS'?'Materia':item.kind==='PT'?'Apoyo PT':'Apoyo AL')+'</td>'+
+        '<td>'+esc(slots.get(item.slotId)||item.slotId)+'</td>'+
+        '<td>'+esc(item.groupId?(groups.get(item.groupId)||item.groupId):
+          'Apoyo sin grupo único')+'</td>'+
         '<td>'+esc(item.status==='proposed'?'Con sustituto propuesto':
           item.status==='uncovered'?'Sin cubrir':'Sin verificar')+'</td>'+
         '<td>'+esc(substituted.get(item.substituteTeacherId)||

@@ -19,7 +19,7 @@
 | 3 | Aprobación y aplicación controlada | **Pendiente** | Versiones, comprobación previa, confirmación, auditoría y recuperación |
 | 4 | Pruebas de centros completos | **Parcial** | Centros ficticios realistas y E2E de extremo a extremo |
 | 5 | Optimización y preparación de producción | **Pendiente** | Medición, equidad, recursos, seguridad y despliegue expresamente autorizado |
-| Transversal | Ausencias simultáneas y ranking | **Cálculo conjunto diario de clases en borrador; ranking pendiente** | Simulaciones temporales verificadas, varias alternativas comparables y clasificación explicable |
+| Transversal | Ausencias simultáneas y ranking | **Solver PT/AL y clases ampliado en integración; ranking pendiente** | Verificar sesiones y alumnado, despliegue backend autorizado y ranking de alternativas reales |
 
 ## Fase 1 — Consolidación de validación y corrección
 
@@ -118,12 +118,15 @@ sesiones vigentes. No duplicar sin más el calendario existente.
    `infeasible` y `unknown` más ricos y acciones de corrección.
 5. **Alternativas y recálculo**: probar/deshacer una propuesta visual,
    corregir restricciones y recalcular sin cambiar el horario existente.
-6. **Contingencias y clasificación de alternativas — registro inicial implementado**:
-   existe calendario mensual con ausencias fechadas para varios docentes,
-   estados de cobertura declarados manualmente y copia local; lo siguiente es
-   cálculo global de sustitutos, verificación por franja y un ranking
-   de escenarios *completos* con restricciones duras primero y preferencias
-   explicables después. No usar el ranking para encubrir demanda descubierta.
+6. **Contingencias y clasificación de alternativas — apoyo PT/AL en integración**:
+   registro global de ausencias, cálculo conjunto por fecha y comparador de
+   clases y apoyos. El backend en `integracion-horario-pt-al` ya exige
+   especialidad PT/AL para cubrir un apoyo, incluso si es mixto y no tiene
+   grupo-clase único. **Este backend no se ha desplegado**: el frontend
+   marca los apoyos omitidos por una versión anterior como «sin verificar».
+   Una sustitución propuesta no certifica atención individual, desplazamientos,
+   aforos ni aplicación. Sigue pendiente obtener múltiples escenarios y su
+   ranking explicable sin compensar restricciones obligatorias.
    Diseño y pruebas previstas en
    [ausencias simultáneas y ranking](MULTI_TEACHER_ABSENCES_AND_RANKED_ALTERNATIVES.md).
 
@@ -193,15 +196,16 @@ No subir límites sin pruebas de rendimiento y memoria.
 conflictos/cobertura y su recalculado no destructivo. Conservar y comparar
 la propuesta semanal actual antes de permitir aplicación alguna.
 
-**Siguiente bloque transversal:** el calendario global permite seleccionar
-una fecha y preparar el cálculo conjunto de todos los docentes ausentes,
-incluidos los marcados manualmente «resueltos» (siguen estando ausentes).
-GestorEscuela ya admite múltiples ausencias y genera un borrador de cobertura
-de **clases ordinarias** con desglose de sustituciones propuestas, sin cubrir
-y no verificables. La sincronización académica y el plan diario se actualizan
-en el backend solo con confirmación expresa; no se aplica ninguna propuesta,
-ni se modifica la cobertura manual. Queda pendiente cubrir también PT/AL,
-comparar alternativas auténticas y construir su ranking.
+**Siguiente bloque transversal:** la rama de integración de GestorEscuela
+ya calcula conjuntamente **clases ordinarias y PT/AL**; incluye apoyos
+mixtos sin grupo-clase único, obligación de especialidad y rechazo de dobles
+asignaciones. En el frontend, cada franja de clase y apoyo se clasifica como
+propuesta, sin cubrir o sin verificar (también frente a servidores antiguos).
+**No se ha desplegado el nuevo backend** ni se aplica ninguna sustitución.
+Los planes remotos se calculan solo tras confirmación y quedan como borrador;
+las ausencias siguen pendientes hasta decisión humana. Próximos pasos:
+verificación de cobertura individual PT/AL, ensayos de centro completo,
+diversificación y ranking explicable.
 
 **En paralelo:** verificar el primer anexo autonómico curricular e incluirlo
 sin inventar cargas horarias.
