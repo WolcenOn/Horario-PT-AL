@@ -4,11 +4,12 @@ import { normalizeSchoolSettings, validateSchoolSettings } from './education.js'
 import { normalizeAutomationSettings } from './automation-core.js';
 import { normalizeCenterPlanningSettings, PROFESSIONAL_TYPES } from './center-planning.js';
 import { timeToMinutes } from './utils.js';
+import { validateAbsenceCollection } from './staff-absences.js';
 
 const FORMAT = 'horario-pt-al';
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 const REQUIRED_KEYS = ['students', 'professionals', 'groups', 'sessions'];
-const ARRAY_SHARE_KEYS = [...REQUIRED_KEYS, 'classSchedules'];
+const ARRAY_SHARE_KEYS = [...REQUIRED_KEYS, 'classSchedules', 'staffAbsences'];
 
 export function createSharePackage(state) {
   return {
@@ -82,6 +83,8 @@ export function validateSharePackage(payload) {
     groups: source.groups,
     sessions: source.sessions,
     classSchedules: Array.isArray(source.classSchedules) ? source.classSchedules : [],
+    staffAbsences: source.staffAbsences===undefined?[]:
+      validateAbsenceCollection(source.staffAbsences,{professionals:source.professionals}),
     schoolSettings: validateSchoolSettings(source.schoolSettings || normalizeSchoolSettings()),
     automationSettings: normalizeAutomationSettings(source.automationSettings),
     centerPlanningSettings: normalizeCenterPlanningSettings(source.centerPlanningSettings)
@@ -150,7 +153,8 @@ function shareCounts(data) {
     professionals:data.professionals.length,
     groups:data.groups.length,
     sessions:data.sessions.length,
-    classSchedules:data.classSchedules.length
+    classSchedules:data.classSchedules.length,
+    staffAbsences:data.staffAbsences.length
   };
 }
 

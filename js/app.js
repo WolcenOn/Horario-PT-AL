@@ -279,7 +279,7 @@ function bindGlobalEvents() {
   });
 
   document.querySelector('#clearAllDataBtn').addEventListener('click', async () => {
-    const accepted = confirm('Se eliminarán TODOS los alumnos, profesionales, grupos, sesiones, horarios de aula, recreos, planificación global y reglas automáticas de este navegador. Esta acción no se puede deshacer. Si quieres conservar una copia, cancela y usa “Exportar / compartir”. ¿Vaciar ahora?');
+    const accepted = confirm('Se eliminarán TODOS los alumnos, profesionales, grupos, sesiones, horarios de aula, ausencias de profesorado, recreos, planificación global y reglas automáticas de este navegador. Esta acción no se puede deshacer. Si quieres conservar una copia, cancela y usa “Exportar / compartir”. ¿Vaciar ahora?');
     if (!accepted) return;
     await resetDatabase();
     localStorage.setItem('horario-user-cleared', 'true');

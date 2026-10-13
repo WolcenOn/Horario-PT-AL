@@ -19,7 +19,7 @@
 | 3 | Aprobación y aplicación controlada | **Pendiente** | Versiones, comprobación previa, confirmación, auditoría y recuperación |
 | 4 | Pruebas de centros completos | **Parcial** | Centros ficticios realistas y E2E de extremo a extremo |
 | 5 | Optimización y preparación de producción | **Pendiente** | Medición, equidad, recursos, seguridad y despliegue expresamente autorizado |
-| Transversal | Ausencias simultáneas y ranking | **Diseño definido; implementación pendiente** | Simulaciones temporales verificadas, varias alternativas comparables y clasificación explicable |
+| Transversal | Ausencias simultáneas y ranking | **Calendario local inicial; cálculo y ranking pendientes** | Simulaciones temporales verificadas, varias alternativas comparables y clasificación explicable |
 
 ## Fase 1 — Consolidación de validación y corrección
 
@@ -118,8 +118,10 @@ sesiones vigentes. No duplicar sin más el calendario existente.
    `infeasible` y `unknown` más ricos y acciones de corrección.
 5. **Alternativas y recálculo**: probar/deshacer una propuesta visual,
    corregir restricciones y recalcular sin cambiar el horario existente.
-6. **Contingencias y clasificación de alternativas — diseño aprobado**:
-   introducir ausencias temporales de varios docentes en paralelo y un ranking
+6. **Contingencias y clasificación de alternativas — registro inicial implementado**:
+   existe calendario mensual con ausencias fechadas para varios docentes,
+   estados de cobertura declarados manualmente y copia local; lo siguiente es
+   cálculo global de sustitutos, verificación por franja y un ranking
    de escenarios *completos* con restricciones duras primero y preferencias
    explicables después. No usar el ranking para encubrir demanda descubierta.
    Diseño y pruebas previstas en
@@ -191,11 +193,12 @@ No subir límites sin pruebas de rendimiento y memoria.
 conflictos/cobertura y su recalculado no destructivo. Conservar y comparar
 la propuesta semanal actual antes de permitir aplicación alguna.
 
-**Siguiente bloque transversal:** implementar primero el modelo local,
-validación y simulación de **múltiples ausencias en fechas concretas** sin
-cambiar la disponibilidad semanal permanente. Después generar alternativas
-auténticas y ordenarlas con puntuación explicable. El backend actual devuelve
-una única solución por petición: el ranking no está habilitado todavía.
+**Siguiente bloque transversal:** ya existe el calendario global y registro
+local de ausencias de varios docentes por fechas y horas, compatible con
+copias JSON. La marca «resuelta» exige confirmación humana: no indica cobertura
+verificada por el solver. A continuación: escenarios conjuntos de sustitución,
+cobertura parcial/total por franja y alternativas reales para ranking. La
+Operativa diaria actual solo acepta un docente por solicitud.
 
 **En paralelo:** verificar el primer anexo autonómico curricular e incluirlo
 sin inventar cargas horarias.

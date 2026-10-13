@@ -1,6 +1,6 @@
 const DB_NAME = 'HorarioPTAL';
-const DB_VERSION = 2;
-export const STORES = ['students', 'professionals', 'groups', 'sessions', 'classSchedules', 'settings'];
+const DB_VERSION = 3;
+export const STORES = ['students', 'professionals', 'groups', 'sessions', 'classSchedules', 'staffAbsences', 'settings'];
 
 let dbPromise;
 
@@ -16,7 +16,10 @@ function openDatabase() {
         }
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error);
   });
   return dbPromise;
@@ -115,12 +118,12 @@ export async function replaceClassSubjectData(grupoClase, materia, values) {
   });
 }
 
-export async function replaceCoreData({ students, professionals, groups, sessions, classSchedules = [] }) {
+export async function replaceCoreData({ students, professionals, groups, sessions, classSchedules = [], staffAbsences = [] }) {
   const db = await openDatabase();
-  const storeNames = ['students', 'professionals', 'groups', 'sessions', 'classSchedules'];
+  const storeNames = ['students', 'professionals', 'groups', 'sessions', 'classSchedules', 'staffAbsences'];
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeNames, 'readwrite');
-    const valuesByStore = { students, professionals, groups, sessions, classSchedules };
+    const valuesByStore = { students, professionals, groups, sessions, classSchedules, staffAbsences };
 
     for (const storeName of storeNames) {
       const store = tx.objectStore(storeName);

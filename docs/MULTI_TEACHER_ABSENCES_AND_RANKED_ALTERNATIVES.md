@@ -1,6 +1,6 @@
 # Ausencias simultáneas de profesorado y ranking de alternativas
 
-**Estado:** diseño técnico y criterios de aceptación. **No implementado.**  
+**Estado:** registro local y calendario mensual de ausencias múltiples implementados; simulación conjunta, ranking de alternativas y aplicación pendientes.  
 **Fecha:** 13 de octubre de 2026.  
 **Ramas objetivo:** Horario-PT-AL/`integracion-gestor-escuela` y
 GestorEscuela/`integracion-horario-pt-al`, sin tocar `main`.
@@ -35,13 +35,14 @@ que los datos no permitan demostrar.
 
 ## 3. Modelo de ausencias separado del horario base
 
-Crear una colección local de `staffAbsences` o equivalente con campos
+Se utiliza una colección local `staffAbsences` con esquema aditivo de IndexedDB v3 y respaldo JSON v6. La colección tiene campos
 validables y mínimos (nombres aquí ilustrativos, no contrato ya activo):
 
 - `id` local e identificador de docente referenciado;
-- `fromDate`, `toDate` (fechas locales, inclusive), con opción de
-  franjas parciales por día: `weekday`, `start`, `end`;
-- estado provisional/confirmado, creado/actualizado;
+- `fromDate`, `toDate` (fechas locales, inclusive), con franja opcional
+  `startTime` y `endTime` para todos los días afectados;
+- `status` pendiente/resuelta y `resolvedAt` solo tras confirmación humana,
+  **sin que el solver dé por buena esa cobertura**;
 - *sin* diagnóstico médico, causa sensible ni nota clínica.
 
 Una ausencia prevalece sobre la disponibilidad semanal para los días
@@ -158,12 +159,15 @@ ya generada ni una regla legal universal.
 
 ### Paso A — Registro local de ausencias (frontend)
 
-- [ ] Modelo con intervalos fechados, varios docentes y duraciones
-      parciales, con normalización y migración sin alterar datos existentes.
-- [ ] Pantalla de simulación de ausencias separada de `disponibilidad`.
-- [ ] Resumen de clases/apoyos afectados y profesores realmente disponibles.
-- [ ] Pruebas de años bisiestos, fechas invertidas, solapes, semanas
-      cruzadas, ausencias simultáneas y zona horaria de Madrid.
+- [x] Modelo local fechado y validado; altas simultáneas para varios docentes,
+      bloques de jornada completa o parcial y migración aditiva de IndexedDB.
+- [x] Calendario mensual global con filtros pendiente/resuelta, vista por día,
+      confirmación manual, reapertura, eliminación y respaldo JSON de ausencias.
+- [x] Pruebas de fechas imposibles, bisiestos, solapes, simultaneidad y límites.
+- [ ] Simulación de cobertura **conjunta** para todas las ausencias activas,
+      sin cambiar la disponibilidad semanal; capacidad de sustitución real.
+- [ ] Mostrar cobertura parcial y confirmación verificable por cada franja.
+- [ ] Probar escenarios de más semanas, vacaciones y zona horaria en E2E.
 
 ### Paso B — Escenarios temporales sobre instantáneas
 
@@ -208,6 +212,8 @@ Trabajar en ramas de integración; nunca desplegar cambios del backend sin
 autorización. Cada paso requiere pruebas unitarias y navegador, privacidad,
 CI verde y comprobación de que `main` permanece intacta.
 
-**Orden recomendado desde el estado actual:** cerrar correcciones guiadas de
-Fase 2; preparar el **Paso A** de ausencias; después escenarios y
-soluciones múltiples; finalmente ranking y aprobación.
+**Orden recomendado desde el estado actual:** utilizar el calendario global
+(Paso A inicial), conectar el cálculo conjunto real de sustituciones y el
+estado por franja (Paso B); después generar alternativas múltiples,
+construir el ranking y abordar la aprobación segura. Nunca marcar como
+resuelta automáticamente una ausencia a partir de una simple propuesta.

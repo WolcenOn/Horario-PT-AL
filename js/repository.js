@@ -2,14 +2,16 @@ import { get, getAll, put, remove, replaceClassSubjectData, replaceStoreData } f
 import { normalizeSchoolSettings } from './education.js';
 import { normalizeAutomationSettings } from './automation-core.js';
 import { normalizeCenterPlanningSettings } from './center-planning.js';
+import { normalizeStaffAbsence } from './staff-absences.js';
 
 export async function loadState() {
-  const [students, professionals, groups, sessions, classSchedules, schoolSettings, automationSettings, centerPlanningSettings] = await Promise.all([
+  const [students, professionals, groups, sessions, classSchedules, staffAbsences, schoolSettings, automationSettings, centerPlanningSettings] = await Promise.all([
     getAll('students'),
     getAll('professionals'),
     getAll('groups'),
     getAll('sessions'),
     getAll('classSchedules'),
+    getAll('staffAbsences'),
     get('settings', 'school'),
     get('settings', 'automation'),
     get('settings', 'centerPlanning')
@@ -20,6 +22,7 @@ export async function loadState() {
     groups,
     sessions,
     classSchedules,
+    staffAbsences,
     schoolSettings: normalizeSchoolSettings(schoolSettings),
     automationSettings: normalizeAutomationSettings(automationSettings),
     centerPlanningSettings: normalizeCenterPlanningSettings(centerPlanningSettings)
@@ -27,6 +30,8 @@ export async function loadState() {
 }
 
 export const saveStudent = student => put('students', student);
+export const saveStaffAbsence = absence => put('staffAbsences', normalizeStaffAbsence(absence));
+export const deleteStaffAbsence = id => remove('staffAbsences', id);
 export const saveProfessional = professional => put('professionals', professional);
 export const saveGroup = group => put('groups', group);
 export const saveSession = session => put('sessions', session);

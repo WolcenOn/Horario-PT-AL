@@ -13,6 +13,7 @@ export function renderOperationsView(root, { state, settings, adapter, status, r
         <p class="eyebrow">Operativa diaria</p>
         <h2>Ausencias y sustituciones</h2>
         <p>Selecciona un docente y las franjas de ausencia. Al calcular, se sincroniza primero la configuración académica actual y GestorEscuela resuelve la cobertura global del día.</p>
+        <p><button type="button" class="button" data-view="staffAbsences">Abrir calendario global de ausencias</button> · La operativa diaria todavía calcula un docente por petición; el registro permite varios.</p>
       </div>
       <span class="integration-mode ${configured ? 'is-hybrid' : 'is-offline'}">${configured ? 'Backend conectado' : 'Requiere conexión'}</span>
     </section>
