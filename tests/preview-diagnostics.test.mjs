@@ -15,6 +15,7 @@ function state() {
       generation:{start:'09:00',end:'14:00',lessonMinutes:45},
       curriculum:{'1º':{Matemáticas:90},'2º':{Lengua:90}}
     },
+    students:[{id:'p1',activo:true,grupoClase:'1ºA',curso:'1º',horasPTObjetivoMin:45}],
     professionals:[{
       id:'t1',activo:true,
       teachingAssignments:[
@@ -69,7 +70,7 @@ test('falta de material obligatorio lleva al inventario de salas',()=>{
   data.centerPlanningSettings.generation.supportRoomRequirements={
     PT:['mesa_regulable'],AL:[]
   };
-  data.groups=[{id:'g1',tipo:'PT',professionalId:'t1',studentIds:[]}];
+  data.groups=[{id:'g1',tipo:'PT',professionalId:'t1',studentIds:['p1']}];
   let issues=analyzeWeeklyReadiness(data);
   assert.ok(issues.some(item=>item.severity==='error'
     && item.action.focusId==='roomResources'));
@@ -119,7 +120,7 @@ test('sala obligatoria sin inventariar remite a la configuración precisa',()=>{
     {roomId:'OTRA',capacity:2,features:['mesa_regulable'],windows:[]}
   ];
   data.groups=[{
-    id:'g1',tipo:'PT',professionalId:'t1',roomId:'SALA-SIN-FICHA',studentIds:[]
+    id:'g1',tipo:'PT',professionalId:'t1',roomId:'SALA-SIN-FICHA',studentIds:['p1']
   }];
   const issues=analyzeWeeklyReadiness(data);
   const actual=issues.find(item=>item.message.includes('SALA-SIN-FICHA'));
@@ -138,7 +139,7 @@ test('sala fija incompatible con equipamiento requerido impide la vista previa',
     {roomId:'ACCESIBLE',capacity:3,features:['acceso_sin_escalones'],windows:[]}
   ];
   data.groups=[{
-    id:'g1',tipo:'PT',professionalId:'t1',roomId:'SALA',studentIds:[]
+    id:'g1',tipo:'PT',professionalId:'t1',roomId:'SALA',studentIds:['p1']
   }];
   const issues=analyzeWeeklyReadiness(data);
   assert.ok(issues.some(item=>
@@ -150,10 +151,54 @@ test('sala fija incompatible con equipamiento requerido impide la vista previa',
 test('aviso de sala PT/AL ausente enlaza al inventario del centro',()=>{
   const data=state();
   data.centerPlanningSettings.generation.travelMinutes=15;
-  data.groups=[{id:'g1',tipo:'PT',professionalId:'t1',studentIds:[]}];
+  data.groups=[{id:'g1',tipo:'PT',professionalId:'t1',studentIds:['p1']}];
   const issues=analyzeWeeklyReadiness(data);
   assert.ok(issues.some(item=>
-    item.severity==='warning'&&item.message.includes('ubicación PT/AL')
-    &&item.action.focusId==='roomResources'
+    item.severity==='warning'&&item.message.includes('sin ubicación conocida')
+    &&item.action.focusId==='supportRoomId'
   ));
+});
+
+test('un requisito de equipo PT sin apoyo activo no bloquea el horario ordinario',()=>{
+  const data=state();
+  data.groups=[];
+  data.centerPlanningSettings.generation.supportRoomRequirements={
+    PT:['mesa_regulable'],AL:[]
+  };
+  assert.ok(!analyzeWeeklyReadiness(data).some(item=>
+    item.severity==='error'&&item.message.includes('equipamiento')
+  ));
+});
+
+test('las salas candidatas automáticas evitan avisos de ubicación ausente',()=>{
+  const data=state();
+  data.groups=[{id:'pt',tipo:'PT',professionalId:'t1',studentIds:['p1']}];
+  data.centerPlanningSettings.generation.travelMinutes=15;
+  data.centerPlanningSettings.generation.autoAssignSupportRooms=true;
+  data.centerPlanningSettings.generation.roomResources=[
+    {roomId:'APOYO-1',capacity:2,windows:[]}
+  ];
+  assert.ok(!analyzeWeeklyReadiness(data).some(item=>
+    item.message.includes('sin ubicación conocida')
+  ));
+  data.centerPlanningSettings.generation.roomResources=[];
+  assert.ok(analyzeWeeklyReadiness(data).some(item=>
+    item.message.includes('sin ubicación conocida')
+    && item.action.focusId==='supportRoomId'
+  ));
+});
+
+test('las rutas dirigidas necesitan ubicación y enlazan al campo preciso',()=>{
+  const data=state();
+  data.groups=[{id:'pt',tipo:'PT',professionalId:'t1',studentIds:['p1']}];
+  data.centerPlanningSettings.generation.travelRules=[
+    {fromLocationId:'class:1ºA',toLocationId:'room:APOYO',minutes:15}
+  ];
+  assert.ok(analyzeWeeklyReadiness(data).some(item=>
+    item.message.includes('sin ubicación conocida')
+    && item.action.focusId==='supportRoomId'
+  ));
+  assert.equal(correctionForMessage(
+    'Desplazamientos PT/AL: hay apoyos sin ubicación conocida; indica una sala.'
+  ).focusId,'supportRoomId');
 });

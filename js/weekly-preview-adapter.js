@@ -109,17 +109,22 @@ export function buildWeeklyPreviewRequest(state, rawSettings = state.centerPlann
     for (const day of DAYS) appendUnavailability(busy, teacher, day, begin, finish);
   }
 
+  const supportNeeds=[...support.supports,...support.groupSupports];
+  const missingSupportLocation=supportNeeds.some(need=>
+    !need.room_id&&!need.location_id&&!(need.room_candidates||[]).length
+  );
+  const usesGeneralRoom=supportNeeds.some(need=>need.room_id===generation.supportRoomId);
   const warnings = [
-    'Vista previa parcial PT/AL: no optimiza actividades móviles sin hora fija, rutas reales ni asignaciones automáticas de salas.',
-    ...((generation.travelMinutes || generation.travelRules.length) && !generation.supportRoomId
-      ? ['Desplazamientos PT/AL: no se conoce la sala de apoyos; solo se aplica traslado entre las aulas de clase configuradas.']
+    'Vista previa parcial PT/AL: no optimiza actividades móviles sin hora fija ni rutas reales entre edificios.',
+    ...((generation.travelMinutes || generation.travelRules.length) && missingSupportLocation
+      ? ['Desplazamientos PT/AL: hay apoyos sin ubicación conocida; indica una sala para poder verificar los traslados.']
       : []),
-    ...(generation.supportRoomId && !generation.roomResources.some(
+    ...(generation.supportRoomId && usesGeneralRoom && !generation.roomResources.some(
       room=>room.roomId===generation.supportRoomId
     )
       ? ['La sala general PT/AL conserva ocupación exclusiva porque no tiene aforo configurado.']
       : []),
-    ...(generation.roomResources.length
+    ...(generation.roomResources.length && supportNeeds.length
       ? ['Las salas con aforo definido se verifican por asistentes reales y respetan los días y horas configurados.']
       : []),
     'Los horarios existentes no se sustituyen ni se envían a la base de datos como propuesta confirmada.',

@@ -351,7 +351,8 @@ function navigateToCorrection(action) {
     globalStart:'#globalStart',
     curriculum:'.curriculum-course-list',
     roomResources:'#roomResources',
-    travelRules:'#travelRules'
+    travelRules:'#travelRules',
+    supportRoomId:'#supportRoomId'
   };
   const selector=selectors[action.focusId];
   if(!selector)return;

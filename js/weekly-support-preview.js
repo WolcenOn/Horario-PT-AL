@@ -320,7 +320,7 @@ export function buildAnonymousSupportPreview(
       }
     }
   }
-  if(candidates.length)warnings.push(
+  if([...supports,...groupSupports].some(need=>need.room_candidates?.length))warnings.push(
     'El motor elegirá una sala entre las configuradas para cada apoyo sin aula fija; el resultado indica la sala elegida.'
   );
   if(omitted)warnings.push(`${omitted} necesidad(es) PT/AL pendientes no se han incluido: falta un grupo inequívoco, clase configurada o duración compatible.`);

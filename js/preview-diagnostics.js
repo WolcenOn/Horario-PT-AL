@@ -14,6 +14,7 @@ const destinations={
   patterns:{label:'Revisar patrones temporales',view:'temporalPatterns'},
   rooms:{label:'Configurar salas',view:'centerPlanning',focusId:'roomResources'},
   travel:{label:'Revisar desplazamientos',view:'centerPlanning',focusId:'travelRules'},
+  supportLocation:{label:'Indicar sala PT/AL',view:'centerPlanning',focusId:'supportRoomId'},
   groups:{label:'Revisar grupos PT/AL',view:'groups'},
   sessions:{label:'Revisar sesiones PT/AL',view:'sessions'},
   activities:{label:'Revisar actividades',view:'centerActivities'},
@@ -30,6 +31,8 @@ export function correctionForMessage(message) {
   const text=normalize(message);
   // Specific diagnoses before more general class/professional hints.
   if (/^.+\s\/\s.+:\srequiere\s\d+\smin/.test(text))return route('curriculum');
+  if (/desplazamientos pt\/al: hay apoyos sin ubicaci[oó]n conocida/.test(text))
+    return route('supportLocation');
   if (/sala|room|aforo|equipamiento|accesib|espacio compartido/.test(text))return route('rooms');
   if (/desplazamiento|trayecto|ruta entre|ubicacion|ubicación/.test(text))return route('travel');
   if (/patr[oó]n|duraci[oó]n|d[ií]as permitidos|franja permitida|extracci[oó]n|asignaturas bloqueadas/.test(text))
@@ -93,7 +96,21 @@ export function analyzeWeeklyReadiness(state) {
   const activeGroups=(state.groups||[]).filter(group=>
     group.activo!==false&&(group.tipo==='PT'||group.tipo==='AL')
   );
+  const students=new Map((state.students||[])
+    .filter(student=>student.activo!==false).map(student=>[student.id,student]));
+  // Optional service requirements must not block a center with no active demand.
+  const groupsWithNeeds=service=>activeGroups.filter(group=>
+    group.tipo===service&&(group.studentIds||[]).some(id=>{
+      const student=students.get(id);
+      return student && Number(
+        service==='PT'?student.horasPTObjetivoMin:student.horasALObjetivoMin
+      )>0;
+    })
+  );
+  const activeNeeds=['PT','AL'].flatMap(groupsWithNeeds);
   for(const service of ['PT','AL']){
+    const serviceGroups=groupsWithNeeds(service);
+    if(!serviceGroups.length)continue;
     const required=generation.supportRoomRequirements?.[service]||[];
     if(!required.length)continue;
     const eligible=[...roomById.values()].filter(room=>
@@ -105,7 +122,7 @@ export function analyzeWeeklyReadiness(state) {
         'error','rooms'
       ));
     }
-    for(const group of activeGroups.filter(item=>item.tipo===service)){
+    for(const group of serviceGroups){
       const professional=professionals.get(group.professionalId);
       const fixed=group.roomId||professional?.supportRoomId
         ||(!generation.autoAssignSupportRooms?generation.supportRoomId:'');
@@ -124,23 +141,27 @@ export function analyzeWeeklyReadiness(state) {
       }
     }
   }
-  if(generation.autoAssignSupportRooms&&!generation.roomResources.length){
+  const needsRoomChoice=activeNeeds.some(group=>
+    !group.roomId&&!professionals.get(group.professionalId)?.supportRoomId
+  );
+  if(generation.autoAssignSupportRooms&&activeNeeds.length&&!generation.roomResources.length){
     issues.push(issue(
       'La asignación automática de salas está activa pero no hay salas con aforo configurado.',
       'warning','rooms'
     ));
   }
-  if(generation.autoAssignSupportRooms&&generation.roomResources.length>8){
+  if(generation.autoAssignSupportRooms&&needsRoomChoice&&generation.roomResources.length>8){
     issues.push(issue(
-      'El motor solo recibe hasta ocho salas candidatas por apoyo; revisa la lista de salas y sus características para priorizar las adecuadas.',
+      'El motor utiliza como máximo ocho salas candidatas por apoyo, filtradas por equipamiento obligatorio; revisa si hay otras salas adecuadas que deban priorizarse.',
       'warning','rooms'
     ));
   }
-  if(generation.travelMinutes>0&&!generation.supportRoomId
-    &&!activeGroups.some(group=>group.roomId||professionals.get(group.professionalId)?.supportRoomId)){
+  if((generation.travelMinutes>0||generation.travelRules.length>0)
+    && !generation.supportRoomId && needsRoomChoice
+    && !(generation.autoAssignSupportRooms&&generation.roomResources.length)){
     issues.push(issue(
-      'Hay tiempo de desplazamiento configurado, pero ninguna ubicación PT/AL conocida. Indica la sala del centro, grupo o profesional para comprobar los traslados.',
-      'warning','rooms'
+      'Hay desplazamientos configurados, pero apoyos PT/AL sin ubicación conocida. Indica una sala del centro, grupo o profesional para comprobar los traslados.',
+      'warning','supportLocation'
     ));
   }
   return issues.slice(0,40);

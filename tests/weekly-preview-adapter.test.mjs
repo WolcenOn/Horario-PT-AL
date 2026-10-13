@@ -277,3 +277,48 @@ test('si un alumno ya completó su objetivo no se le incorpora a apoyo grupal ex
   assert.equal(payload.group_supports[0].session_minutes,45);
   assert.equal(payload.busy.some(item=>item.teacher_id==='pt'&&item.start_time==='09:00'),true);
 });
+
+test('sin apoyos pendientes no anuncia salas automáticas ni ubicaciones faltantes',()=>{
+  const state=makeState();
+  state.groups=[];
+  state.sessions=[];
+  state.centerPlanningSettings.generation.travelMinutes=15;
+  state.centerPlanningSettings.generation.autoAssignSupportRooms=true;
+  state.centerPlanningSettings.generation.roomResources=[
+    {roomId:'AULA-PT',capacity:2,windows:[]}
+  ];
+  const {warnings}=buildWeeklyPreviewRequest(state);
+  assert.ok(!warnings.some(message=>message.includes('sin ubicación conocida')));
+  assert.ok(!warnings.some(message=>message.includes('elegirá una sala')));
+  assert.ok(!warnings.some(message=>message.includes('no optimiza') &&
+    message.includes('asignaciones automáticas de salas')));
+});
+
+test('el aviso de trayecto depende de la ubicación realmente enviada al motor',()=>{
+  const state=makeState();
+  state.professionals.push({
+    id:'pt',tipo:'PT',activo:true,disponibilidad:availability
+  });
+  state.students[0].curso='1º';
+  state.students[0].grupoClase='1ºA';
+  state.students[0].horasPTObjetivoMin=45;
+  state.groups=[{
+    id:'pt-grupo',tipo:'PT',professionalId:'pt',studentIds:['alumno-sensible']
+  }];
+  state.sessions=[];
+  state.centerPlanningSettings.generation.travelMinutes=15;
+  state.centerPlanningSettings.generation.autoAssignSupportRooms=true;
+  state.centerPlanningSettings.generation.roomResources=[
+    {roomId:'AULA-PT',capacity:2,windows:[]}
+  ];
+  let {payload,warnings}=buildWeeklyPreviewRequest(state);
+  assert.deepEqual(payload.supports[0].room_candidates,['AULA-PT']);
+  assert.ok(warnings.some(message=>message.includes('elegirá una sala')));
+  assert.ok(!warnings.some(message=>message.includes('sin ubicación conocida')));
+  state.centerPlanningSettings.generation.autoAssignSupportRooms=false;
+  ({payload,warnings}=buildWeeklyPreviewRequest(state));
+  assert.equal(payload.supports[0].room_candidates,undefined);
+  assert.ok(warnings.some(message=>message.includes('sin ubicación conocida')));
+  assert.ok(!warnings.some(message=>message.includes('elegirá una sala')));
+  assert.equal(JSON.stringify(payload).includes('alumno-sensible'),false);
+});
