@@ -299,4 +299,3 @@ export function bindWeeklyPreviewCalendarFilters(container,projection){
     redraw();
   });
 }
-}
