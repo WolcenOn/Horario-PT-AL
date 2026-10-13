@@ -102,7 +102,9 @@ async function solveJointAbsences(snapshot){
        JSON.stringify(latest.supportSessions)!==
          JSON.stringify(snapshot.supportSessions)||
        JSON.stringify(latest.roomResources)!==
-         JSON.stringify(snapshot.roomResources))
+         JSON.stringify(snapshot.roomResources)||
+       JSON.stringify(latest.localAudit)!==
+         JSON.stringify(snapshot.localAudit))
       throw Error('Las ausencias o el horario han cambiado. Revisa de nuevo la fecha antes de calcular.');
     if(!confirm('¿Calcular conjuntamente estas ausencias? Esta acción sincroniza la '+
       'configuración académica con GestorEscuela y guarda un BORRADOR del plan diario '+

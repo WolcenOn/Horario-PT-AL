@@ -239,3 +239,91 @@ test('la sesión PT mixta y su aforo se revisan de principio a fin sin guardar c
   });
   expect(after).toBe(original);
 });
+
+
+test('escenario local comprueba extracción y trayecto sin mostrar identificadores de alumnado',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('horario-user-cleared','true'));
+  await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
+  const before=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    const previous=JSON.stringify(await loadState());
+    const {buildGestorEscuelaConfiguration}=await import('/js/gestor-adapter.js');
+    const {buildJointAbsenceRequest,assessJointAbsenceResult}
+      =await import('/js/joint-absence-coverage.js');
+    const {renderJointAbsencePanel}=await import('/js/joint-absence-view.js');
+    const weekdays=['lunes','martes','miercoles','jueves','viernes'];
+    const avail=Object.fromEntries(weekdays.map(day=>[day,[{inicio:'08:00',fin:'13:00'}]]));
+    const staff=(id,tipo)=>({
+      id,nombre:id,tipo,activo:true,disponibilidad:avail
+    });
+    const state={
+      professionals:[staff('pt','PT'),staff('subpt','PT'),staff('tutor','DOCENTE')],
+      students:[{id:'CHILD-SECRET-42',nombre:'Menor confidencial',curso:'1º',
+        grupoClase:'1ºA',activo:true}],
+      groups:[
+        {id:'support',tipo:'PT',professionalId:'pt',
+          studentIds:['CHILD-SECRET-42'],roomId:'R-PT',activo:true},
+        {id:'prior',tipo:'PT',professionalId:'subpt',studentIds:[],
+          roomId:'R-OTHER',activo:true}
+      ],
+      sessions:[
+        {id:'a',groupId:'support',professionalId:'pt',
+          dia:'lunes',inicio:'09:00',fin:'10:00'},
+        {id:'b',groupId:'prior',professionalId:'subpt',
+          dia:'lunes',inicio:'08:30',fin:'09:00'}
+      ],
+      classSchedules:[{id:'mat',grupoClase:'1ºA',materia:'MAT',
+        professionalId:'tutor',dia:'lunes',inicio:'09:00',fin:'10:00'}],
+      staffAbsences:[{
+        id:'abs1',professionalId:'pt',fromDate:'2026-10-12',
+        toDate:'2026-10-12',startTime:'',endTime:'',status:'pending',resolvedAt:''
+      }],
+      schoolSettings:{structure:{configured:false}},
+      automationSettings:{courseRules:{
+        '1º':{subjectPolicies:{MAT:{extraction:'blocked',preference:'avoid'}}}
+      }},
+      centerPlanningSettings:{generation:{
+        start:'08:00',end:'13:00',
+        roomResources:[
+          {roomId:'R-PT',capacity:2},
+          {roomId:'R-OTHER',capacity:2}
+        ],
+        travelRules:[{
+          fromLocationId:'room:R-OTHER',toLocationId:'room:R-PT',minutes:15
+        }]
+      }}
+    };
+    const adapter=buildGestorEscuelaConfiguration(state);
+    const plan=buildJointAbsenceRequest(state,adapter,'2026-10-12');
+    const session=plan.supportSessions.find(x=>x.id==='a');
+    const substitute=adapter.report.mappings.teachers.subpt;
+    const result={payload:{solution:{
+      substitutions:session.slots.map(slot=>({
+        activity_id:slot.activityId,slot_id:slot.slotId,
+        absent_teacher_id:session.teacherId,substitute_teacher_id:substitute
+      })),uncovered:[]
+    }}};
+    const assessment=assessJointAbsenceResult(plan,result);
+    const node=document.createElement('div');node.id='full-center-local-fixture';
+    node.innerHTML=renderJointAbsencePanel({
+      date:'2026-10-12',plan,assessment,state,adapter,
+      connected:false,adapterReady:true
+    });
+    document.body.append(node);
+    return previous;
+  });
+  const fixture=page.locator('#full-center-local-fixture');
+  await expect(fixture.locator('[data-joint-session-table]')).toContainText('prohíbe su extracción');
+  await expect(fixture.locator('[data-joint-session-table]')).toContainText('desplazamiento configurado');
+  await expect(fixture.locator('[data-joint-session-table]')).toContainText('Conflictos o restricciones');
+  await expect(fixture.locator('[data-joint-assessment]')).toContainText('Revisión incompleta');
+  await expect(fixture.locator('[data-joint-absence-solve]')).toBeDisabled();
+  await expect(fixture).not.toContainText('CHILD-SECRET-42');
+  await expect(fixture).not.toContainText('Menor confidencial');
+  const after=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    return JSON.stringify(await loadState());
+  });
+  expect(after).toEqual(before);
+});

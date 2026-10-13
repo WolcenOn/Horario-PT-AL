@@ -34,7 +34,7 @@ export function renderJointAbsencePanel({
   })[value]||'Revisión pendiente';
   const reviewStatus=value=>({
     structural:'Estructura comprobada; pendiente de aprobación',
-    needsReview:'Faltan datos para comprobar los recursos',
+    needsReview:'Faltan datos para comprobar todas las restricciones',
     conflict:'Conflictos o restricciones comprobadas'
   })[value]||'Sin evaluar';
   const calculate=Boolean(plan?.ready&&connected&&adapterReady);
@@ -106,7 +106,7 @@ export function renderJointAbsencePanel({
         sessionAudit.summary.unknown+'.</p>'+
       (sessions.length?'<div class="table-wrap"><table data-joint-session-table>'+
       '<thead><tr><th>Servicio y horario</th><th>Continuidad</th>'+
-      '<th>Recursos y agrupamiento</th><th>Revisión necesaria</th></tr></thead><tbody>'+
+      '<th>Recursos y agrupamiento</th><th>Extracción, trayectos y revisión</th></tr></thead><tbody>'+
       sessions.map(row=>'<tr data-joint-session-status="'+esc(row.status)+'">'+
         '<th scope="row">'+esc(row.kind)+' · '+esc(row.start)+'–'+esc(row.end)+
         ' · '+row.slotCount+' franja(s)</th>'+

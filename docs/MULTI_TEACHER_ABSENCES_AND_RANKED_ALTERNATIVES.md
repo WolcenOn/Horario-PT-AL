@@ -4,8 +4,10 @@
 integración; la ampliación backend **no está desplegada**. La respuesta de
 servidores anteriores sigue marcando como desconocidos los apoyos que no
 resuelven. Se audita también **cada sesión completa**, con continuidad
-del especialista y recursos locales configurados. Ranking, verificación
-por participante, desplazamientos y aprobación pendientes.  
+del especialista y recursos locales configurados. Ahora revisa además
+extracción configurada y desplazamientos explícitos (sin emitir identidades
+de alumnado), pero no certifica su atención ni inventa tiempos de viaje.
+Ranking, aplicación y comprobación individual real pendientes.  
 **Fecha:** 13 de octubre de 2026.  
 **Ramas objetivo:** Horario-PT-AL/`integracion-gestor-escuela` y
 GestorEscuela/`integracion-horario-pt-al`, sin tocar `main`.
@@ -188,8 +190,13 @@ ya generada ni una regla legal universal.
       equipamiento, horario y solapes de salas, donde los datos existen.
       Se usan conteos agregados, no identidades de alumnado; el vínculo
       local entre sesión y franjas no se envía al motor.
-- [ ] Comprobar la extracción individual, asistencia real, itinerarios
-      de especialistas y autorizaciones antes de declarar cobertura aplicada.
+- [x] Comprobación local y agregada por sesión de extracciones expresamente
+      prohibidas, doble participación simultánea, disponibilidad efectiva,
+      bloqueo externo y tiempos de viaje declarados entre salas; ausencia
+      de datos se indica como «sin verificar».
+- [ ] Comprobar la asistencia real por participante, permisos, itinerarios
+      entre edificios/centros no configurados y normativa antes de
+      declarar cobertura aplicada.
 - [ ] Confirmar/aplicar cada franja con control de versiones y trazabilidad
       diferenciada de la simple propuesta.
 - [ ] Probar escenarios de más semanas, vacaciones y zona horaria en E2E.
@@ -237,10 +244,11 @@ Trabajar en ramas de integración; nunca desplegar cambios del backend sin
 autorización. Cada paso requiere pruebas unitarias y navegador, privacidad,
 CI verde y comprobación de que `main` permanece intacta.
 
-**Orden recomendado desde el estado actual:** probar en centros ficticios
-varias ausencias simultáneas y PT/AL de grupos mixtos, aprovechando la
-auditoría ya implementada de sesiones completas y salas configuradas.
-Faltan controles por participante, extracción y desplazamientos.
-El backend ampliado solo se desplegará tras autorización expresa.
-Después: generar alternativas diferentes, ranking explicable y aprobación
-segura. Las propuestas no resuelven ausencias ni alteran el horario base.
+**Orden recomendado desde el estado actual:** consolidar los casos
+ficticios con tres ausencias simultáneas, grupos PT/AL mixtos, materias de
+extracción, indisponibilidades externas y traslados expresamente configurados.
+Estas comprobaciones son locales y agregadas, no sustituyen la
+certificación individual. El backend ampliado permanece sin desplegar hasta
+autorización expresa. Después: alternativas realmente distintas, ranking
+explicable y aprobación segura. Las propuestas no resuelven ausencias ni
+alteran el horario base.

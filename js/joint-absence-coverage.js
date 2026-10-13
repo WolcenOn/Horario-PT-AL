@@ -4,6 +4,7 @@
 import {dateNumber,absencesOnDate,normalizeStaffAbsence} from './staff-absences.js';
 import {timeToMinutes} from './utils.js';
 import {auditJointSupportSessions} from './joint-support-session-audit.js';
+import {buildJointLocalAuditContext} from './joint-absence-local-context.js';
 
 const types=new Set(['CLASS','PT','AL']);
 const overlaps=(slot,absence)=>{
@@ -81,8 +82,9 @@ export function buildJointAbsenceRequest(state,adapter,date){
     ? adapter.report.supportSessions : null;
   const roomResources=Array.isArray(state.centerPlanningSettings?.generation?.roomResources)
     ? state.centerPlanningSettings.generation.roomResources : [];
+  const localAudit=buildJointLocalAuditContext(state,adapter,date);
   return {date,details,request,teacherCapabilities,supportSessions,
-    roomResources,errors:[...new Set(errors)],
+    roomResources,localAudit,errors:[...new Set(errors)],
     count:source.length,
     classCount:allClassActivities.size,
     supportCount:details.reduce((n,row)=>n+row.supportCount,0),
@@ -182,6 +184,6 @@ export function assessJointAbsenceResult(plan,result){
       uncovered?'partial':'proposed',
     message:'Cobertura propuesta, nunca aplicada ni confirmada.',
     hasSupportNeeds:plan.supportCount>0,
-    hasPendingSupports:supportUncovered+supportUnknown>0
+    hasPendingSupports:supportUncovered+supportUnknown>0||unverifiedSessions
   };
 }

@@ -17,9 +17,9 @@
 | Transversal | Legislación y currículo | **Estructura técnica lista; datos oficiales pendientes** | Al menos un perfil de normativa contrastado, versionado y probado |
 | 2 | Vista previa integral y comparación | **En curso; calendario inicial** | Propuesta semanal remota y horario actual juntos, sin escribir datos |
 | 3 | Aprobación y aplicación controlada | **Pendiente** | Versiones, comprobación previa, confirmación, auditoría y recuperación |
-| 4 | Pruebas de centros completos | **Parcial** | Centros ficticios realistas y E2E de extremo a extremo |
+| 4 | Pruebas de centros completos | **Parcial; pruebas de escenario multi-ausencia** | Centros ficticios realistas y E2E de extremo a extremo |
 | 5 | Optimización y preparación de producción | **Pendiente** | Medición, equidad, recursos, seguridad y despliegue expresamente autorizado |
-| Transversal | Ausencias simultáneas y ranking | **Auditoría de sesiones PT/AL y solver ampliado en integración** | Cobertura individual y desplazamientos, backend sin desplegar, ranking y aprobación pendientes |
+| Transversal | Ausencias simultáneas y ranking | **Extracción y desplazamientos explícitos auditados localmente** | Cobertura aplicada, datos incompletos, backend sin desplegar y ranking pendientes |
 
 ## Fase 1 — Consolidación de validación y corrección
 
@@ -129,8 +129,13 @@ sesiones vigentes. No duplicar sin más el calendario existente.
    desde sus franjas atómicas, exige un mismo especialista durante toda la
    sesión y audita sala, aforo, ventanas y equipamiento con datos locales.
    Los datos faltantes se marcan «sin verificar», sin transmitir identidades
-   de alumnos a GestorEscuela. Siguen pendientes cobertura individual,
-   desplazamientos y ranking de alternativas auténticas.
+   de alumnos a GestorEscuela. La revisión local ahora señala también
+   políticas explícitas que prohíben extraer al participante de una
+   asignatura, solapes con otros apoyos, disponibilidad semanal/bloqueos
+   externos y falta de tiempo de traslado según reglas configuradas.
+   Cuando no existen reglas o datos, devuelve «sin verificar»; solo publica
+   recuentos agregados, no identidades. Sigue pendiente acreditar asistencia
+   individual, recorridos no configurados y alternativas auténticas.
    Diseño y pruebas previstas en
    [ausencias simultáneas y ranking](MULTI_TEACHER_ABSENCES_AND_RANKED_ALTERNATIVES.md).
 
@@ -209,10 +214,12 @@ propuesta, sin cubrir o sin verificar (también frente a servidores antiguos).
 Los planes remotos se calculan solo tras confirmación y quedan como borrador;
 las ausencias siguen pendientes hasta decisión humana. Además, la vista
 ahora detecta sesiones PT/AL fragmentadas entre especialistas y problemas
-comprobables de sala, aforo, horario o equipamiento; no presupone recursos
-desconocidos. Sigue pendiente comprobar atención individual y
-desplazamientos. Próximos pasos: centros ficticios de prueba, cobertura
-por participante, diversificación y ranking explicable.
+comprobables de sala, aforo, horario o equipamiento. Se añadieron pruebas
+de escenario ficticio con **tres ausencias simultáneas** y controles
+locales de extracción configurada, solapes de participantes, disponibilidad,
+bloqueos externos y trayectos entre salas con tiempos expresos. No se
+inventan rutas ni políticas autorizadas. Pendientes: pruebas E2E con backend
+autorizado, cobertura individual real, diversificación y ranking.
 
 **En paralelo:** verificar el primer anexo autonómico curricular e incluirlo
 sin inventar cargas horarias.

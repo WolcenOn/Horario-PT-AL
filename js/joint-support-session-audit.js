@@ -6,6 +6,10 @@ const overlap=(a,b)=>a.start<b.end&&b.start<a.end;
 const isSlot=item=>item&&typeof item.slotId==='string'&&item.slotId&&
   typeof item.activityId==='string'&&item.activityId;
 const issue=(kind,message,hard=false)=>({kind,message,hard});
+const timeMinutes=clock=>{
+  const match=/^([01]\d|2[0-3]):([0-5]\d)$/.exec(clock||'');
+  return match?Number(match[1])*60+Number(match[2]):NaN;
+};
 function withinRoomWindows(room,session){
   const windows=(room.windows||[]).filter(row=>row.weekday===session.weekday)
     .sort((a,b)=>a.startTime.localeCompare(b.startTime));
@@ -19,7 +23,7 @@ function withinRoomWindows(room,session){
   return false;
 }
 
-function assessOne(session,allSessions,coverage,roomSpecs,bookings){
+function assessOne(session,allSessions,coverage,roomSpecs,bookings,context){
   const issues=[];
   const slots=Array.isArray(session.slots)?session.slots:[];
   const expected=slots.map(slot=>coverage.get(slot.activityId));
@@ -81,6 +85,55 @@ function assessOne(session,allSessions,coverage,roomSpecs,bookings){
     [substituteId,slot.slotId]))||0)>1))
     issues.push(issue('substituteOverlap','El sustituto figura en más de una actividad durante la misma franja.',true));
 
+  // These counts are derived locally. No pupil identifier leaves the adapter.
+  const individual=context?.sessionChecks?.[session.id];
+  if(individual){
+    if(individual.extractionBlocked>0)
+      issues.push(issue('extractionBlocked',
+        individual.extractionBlocked+' participante(s) coinciden con una materia que prohíbe su extracción PT/AL.',true));
+    if(individual.extractionUnknown>0||!individual.participantsKnown)
+      issues.push(issue('extractionUnknown','Falta verificar la asignatura de origen o las reglas de extracción de algunos participantes.'));
+    if(individual.participantClashes>0)
+      issues.push(issue('participantOverlap',
+        individual.participantClashes+' participante(s) figuran simultáneamente en otro apoyo registrado.',true));
+  }
+
+  if(substituteId){
+    const availability=context?.teacherAvailability?.[substituteId];
+    if(availability){
+      const states=slots.map(slot=>availability[slot.slotId]||'unknown');
+      if(states.includes('blocked'))
+        issues.push(issue('substituteUnavailable','El especialista propuesto no está disponible en una o más franjas.',true));
+      else if(states.includes('unknown'))
+        issues.push(issue('availabilityUnknown','No está registrada la disponibilidad completa del sustituto.'));
+    }
+    for(const booking of context?.substituteBookings||[]){
+      if(booking.teacherId!==substituteId)continue;
+      if(overlap({start:session.start,end:session.end},booking)){
+        issues.push(issue('fixedActivityOverlap',
+          'El sustituto ya tiene una actividad fija durante la sesión.',true));
+        continue;
+      }
+      if(!roomId||!booking.roomId||roomId===booking.roomId)continue;
+      const earlier=booking.end<=session.start;
+      const later=booking.start>=session.end;
+      if(!earlier&&!later)continue;
+      const from=earlier?booking.roomId:roomId;
+      const to=earlier?roomId:booking.roomId;
+      const gap=earlier?
+        timeMinutes(session.start)-timeMinutes(booking.end):
+        timeMinutes(booking.start)-timeMinutes(session.end);
+      const rule=(context.travelRules||[]).find(item=>
+        item.fromLocationId==='room:'+from&&item.toLocationId==='room:'+to);
+      if(!rule){
+        issues.push(issue('travelUnknown','No hay regla de desplazamiento configurada entre dos salas diferentes.'));
+      }else if(Number.isFinite(gap)&&gap<rule.minutes){
+        issues.push(issue('travelTooShort',
+          'No hay minutos suficientes para el desplazamiento configurado del sustituto.',true));
+      }
+    }
+  }
+
   // A slot-level answer cannot establish individual extraction legality,
   // travel feasibility, or actual attendance. Never claim applied coverage.
   const hard=issues.some(row=>row.hard);
@@ -115,7 +168,7 @@ export function auditJointSupportSessions(plan,rows){
     }
   }
   const entries=relevant.map(session=>assessOne(
-    session,definitions,coverage,roomSpecs,bookings));
+    session,definitions,coverage,roomSpecs,bookings,plan.localAudit));
   const count=(key,value)=>entries.filter(row=>row[key]===value).length;
   return {
     available:true,entries,
@@ -129,6 +182,6 @@ export function auditJointSupportSessions(plan,rows){
       structural:count('reviewStatus','structural'),
       needsReview:count('reviewStatus','needsReview')
     },
-    note:'Auditoría estructural local y provisional; no certifica la atención individual, la extracción ni los desplazamientos.'
+    note:'Auditoría local provisional: comprueba reglas explícitas de extracción, disponibilidad y trayectos conocidos; sigue sin certificar asistencia individual ni cobertura aplicada.'
   };
 }
