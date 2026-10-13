@@ -89,7 +89,8 @@ test('genera y valida un archivo compartible con horarios, recreos, estructura y
   const state={...demo,classSchedules:[{id:'cl1',grupoClase:'4ºA',dia:'lunes',inicio:'09:00',fin:'09:45',materia:'Matemáticas'}],schoolSettings,automationSettings};
   const payload=createSharePackage(state);
   assert.equal(payload.format,'horario-pt-al');
-  assert.equal(payload.schemaVersion,5);
+  assert.equal(payload.schemaVersion,6);
+  assert.deepEqual(payload.data.staffAbsences,[]);
   const validated=validateSharePackage(payload);
   assert.equal(validated.students.length,20);
   assert.equal(validated.groups.length,8);
