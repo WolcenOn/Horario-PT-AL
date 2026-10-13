@@ -80,6 +80,12 @@ test('las horas manuales siguen siendo posibles sin horario previsto',()=>{
   assert.equal(entries[0].startTime,'10:15');
   assert.equal(entries[0].toDate,'2026-10-14');
 });
+test('horario manual incompleto no se convierte accidentalmente en jornada completa',()=>{
+  assert.throws(()=>create({
+    professionalIds:['a'],fromDate:'2026-10-12',toDate:'2026-10-12',
+    mode:'manual',startTime:'',endTime:''
+  }),/hora de inicio/);
+});
 test('rechaza intervalos manipulados, huecos sin seleccionar y fechas mezcladas',()=>{
   assert.throws(()=>create({...input,selectedSlots:{...input.selectedSlots,
     a:['class:a-unknown']}}),/horario previsto ha cambiado/);

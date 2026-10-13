@@ -59,6 +59,8 @@ export function createSelectedStaffAbsences(input,state,{
   if(!['full','schedule','manual'].includes(mode))throw Error('Tipo de ausencia no válido.');
   if(mode==='schedule'&&fromDate!==toDate)
     throw Error('Las franjas del horario previsto se seleccionan para un solo día. Para varios días, elige jornada completa u horas manuales.');
+  if(mode==='manual'&&(!startTime||!endTime))
+    throw Error('Introduce la hora de inicio y la de fin para la ausencia manual.');
   const known=new Set((state.professionals||[]).map(item=>item.id));
   const entries=[];
   for(const professionalId of professionalIds){
