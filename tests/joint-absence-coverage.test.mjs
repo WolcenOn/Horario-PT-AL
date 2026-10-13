@@ -88,7 +88,9 @@ test('una ausencia parcial afecta solo las franjas superpuestas y no otros días
   assert.deepEqual(buildJointAbsenceRequest(state,adapter,'2026-10-13').request.absences,[
     {teacher_id:'T-A',slot_ids:['TS01','TS02','TS03']}
   ]);
-  assert.equal(buildJointAbsenceRequest(state,adapter,'2026-10-13').classCount,0);
+  const tuesday=buildJointAbsenceRequest(state,adapter,'2026-10-13');
+  assert.equal(tuesday.classCount,1);
+  assert.deepEqual(tuesday.details[0].classActivities.map(x=>x.id),['other-day']);
   const monday=buildJointAbsenceRequest(state,adapter,'2026-10-12');
   assert.deepEqual(monday.details[1].classActivities.map(x=>x.id),['english-1']);
 });
