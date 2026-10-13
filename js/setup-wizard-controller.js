@@ -61,6 +61,14 @@ async function openSetupWizard() {
           saveSchoolSettings(preset.schoolSettings),
           saveCenterPlanningSettings(preset.centerPlanningSettings)
         ]);
+        // The wizard and the primary app have separate in-memory controllers.
+        // Keep the main view in sync with the values just persisted in IndexedDB.
+        document.dispatchEvent(new CustomEvent('horario:school-planning-saved', {
+          detail:{
+            schoolSettings:preset.schoolSettings,
+            centerPlanningSettings:preset.centerPlanningSettings
+          }
+        }));
         showToast(preset.structureChanged
           ? `Base creada para ${preset.territory}: ${preset.classCount} clases. Revisa ahora jornada, currículo y recreos.`
           : `Comunidad guardada: ${preset.territory}. La estructura de clases existente se ha conservado.`);

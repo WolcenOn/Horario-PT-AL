@@ -205,6 +205,18 @@ function renderCurrentView() {
 }
 
 function bindGlobalEvents() {
+  // SetupWizard stores independently; a navigation immediately after saving
+  // must use the newly persisted planning metadata, not the initial snapshot.
+  document.addEventListener('horario:school-planning-saved',event=>{
+    const latest=event.detail;
+    if(!latest?.schoolSettings||!latest?.centerPlanningSettings)return;
+    state={...state,schoolSettings:latest.schoolSettings,
+      centerPlanningSettings:latest.centerPlanningSettings};
+    globalProposal=null;
+    autoProposal=null;
+    renderSummary();
+    updateAutomationBadge();
+  });
   document.querySelectorAll('.nav-item').forEach(button => button.addEventListener('click', () => {
     currentView = button.dataset.view;
     renderCurrentView();

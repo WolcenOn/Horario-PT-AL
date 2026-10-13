@@ -64,6 +64,7 @@ test('la carga curricular importada se aplica a planificación y se conserva en 
   const quick=page.locator('[data-quick-start-form]');
   await quick.locator('select[name="territory"]').selectOption('Andalucía');
   await quick.getByRole('button',{name:'Crear base editable'}).click();
+  await expect(page.locator('[data-wizard-step="structure"]')).toContainText('9 clase(s) definidas');
   await page.locator('.nav-item[data-view="centerPlanning"]').click();
   await expect(page.locator('#territory')).toHaveValue('Andalucía');
   await expect(page.locator('[data-curriculum-course="1º"][data-curriculum-subject="Matemáticas"]')).toHaveValue('');
