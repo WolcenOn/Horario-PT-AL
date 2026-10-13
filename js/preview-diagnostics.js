@@ -90,6 +90,108 @@ export function issuesFromPreviewResult(result) {
   ];
 }
 
+// A conservative capacity check of the *anonymous* request, before network IO.
+// It deliberately ignores movable ordinary lessons, extraction preferences,
+// room choices and fragmented free windows: those remain for CP-SAT to decide.
+const clockMinutes=value=>{
+  if(typeof value!=='string'||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(value))return null;
+  const [hour,minute]=value.split(':').map(Number);
+  return hour*60+minute;
+};
+
+function freeMinutes(payload,kind,id,allowedDays) {
+  const start=clockMinutes(payload.start_time);
+  const end=clockMinutes(payload.end_time);
+  if(!id||start===null||end===null||end<=start||
+    !Array.isArray(allowedDays)||!allowedDays.length||
+    allowedDays.some(day=>!Number.isInteger(day)||day<0||day>4))return null;
+  const blocks=Array.isArray(payload.busy)?payload.busy:[];
+  let free=0;
+  for(const day of new Set(allowedDays)){
+    const occupied=[];
+    for(const block of blocks){
+      if(block?.[kind]!==id||block.weekday!==day)continue;
+      const from=clockMinutes(block.start_time);
+      const to=clockMinutes(block.end_time);
+      if(from===null||to===null||to<=from)return null;
+      const begin=Math.max(start,from);
+      const finish=Math.min(end,to);
+      if(begin<finish)occupied.push([begin,finish]);
+    }
+    occupied.sort((a,b)=>a[0]-b[0]);
+    let covered=0;
+    let boundary=start;
+    for(const [begin,finish] of occupied){
+      covered+=Math.max(0,finish-Math.max(begin,boundary));
+      boundary=Math.max(boundary,finish);
+    }
+    free+=end-start-covered;
+  }
+  return free;
+}
+
+export function analyzeWeeklyPayloadCapacity(payload) {
+  if(!payload||!Array.isArray(payload.busy))return [];
+  const issues=[];
+  const examine=(need,kind,index,required,token)=>{
+    if(!Number.isInteger(required)||required<=0)return;
+    const teacherFree=freeMinutes(payload,'teacher_id',need.teacher_id,need.allowed_days);
+    const prefix=`Apoyo ${need.service==='AL'?'AL':'PT'} ${kind} n.º ${index+1}`;
+    if(teacherFree!==null&&required>teacherFree){
+      issues.push({
+        ...issue(
+          `${prefix}: necesita ${required} min, pero el profesional tiene como máximo ${teacherFree} min libres en los días permitidos. Revisa su disponibilidad y las sesiones fijas.`,
+          'error','teachers'
+        ),
+        code:'SUPPORT_TEACHER_CAPACITY'
+      });
+    }
+    const pupilFree=freeMinutes(payload,'pupil_token',token,need.allowed_days);
+    if(pupilFree!==null&&required>pupilFree){
+      issues.push({
+        ...issue(
+          `${prefix}: un participante necesita ${required} min, pero dispone de como máximo ${pupilFree} min fuera de sus bloqueos fijos. Revisa las restricciones y sesiones existentes.`,
+          'error',null
+        ),
+        code:'SUPPORT_PUPIL_CAPACITY'
+      });
+    }
+  };
+  for(const [index,need] of (payload.supports||[]).entries()){
+    examine(need,'individual',index,need.weekly_minutes,need.pupil_token);
+  }
+  for(const [index,group] of (payload.group_supports||[]).entries()){
+    // A shared session uses the professional only once, however many pupils attend.
+    // Pupil checks remain individual and never reveal their request-scoped tokens.
+    const largest=Math.max(0,...(group.participants||[]).map(row=>row.weekly_minutes));
+    if(largest>0){
+      const teacherFree=freeMinutes(payload,'teacher_id',group.teacher_id,group.allowed_days);
+      if(teacherFree!==null&&largest>teacherFree){
+        issues.push({
+          ...issue(
+            `Apoyo ${group.service==='AL'?'AL':'PT'} grupal n.º ${index+1}: requiere al menos ${largest} min de profesional, pero solo tiene ${teacherFree} min libres en los días permitidos.`,
+            'error','teachers'
+          ),
+          code:'SUPPORT_TEACHER_CAPACITY'
+        });
+      }
+    }
+    for(const person of group.participants||[]){
+      const free=freeMinutes(payload,'pupil_token',person.pupil_token,group.allowed_days);
+      if(free!==null&&person.weekly_minutes>free){
+        issues.push({
+          ...issue(
+            `Apoyo ${group.service==='AL'?'AL':'PT'} grupal n.º ${index+1}: un participante necesita ${person.weekly_minutes} min, pero dispone de como máximo ${free} min fuera de sus bloqueos fijos. Revisa restricciones y sesiones.`,
+            'error',null
+          ),
+          code:'SUPPORT_PUPIL_CAPACITY'
+        });
+      }
+    }
+  }
+  return issues.slice(0,20);
+}
+
 export function analyzeWeeklyReadiness(state) {
   const settings=normalizeCenterPlanningSettings(state.centerPlanningSettings);
   const generation=settings.generation;

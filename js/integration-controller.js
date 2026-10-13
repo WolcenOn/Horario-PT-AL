@@ -258,9 +258,9 @@ async function openIntegration() {
           };
         }
         const current = loadBackendSettings();
-        let payload, result, warnings;
+        let payload, result, warnings, preflightIssues;
         try {
-          ({payload,result,warnings}=await requestWeeklyPreviewWithFallback(
+          ({payload,result,warnings,preflightIssues}=await requestWeeklyPreviewWithFallback(
             state,current,previewWeeklyTimetable
           ));
         } catch(error) {
@@ -268,6 +268,12 @@ async function openIntegration() {
           return {
             text:'No se ha enviado ni aplicado ningún horario.',
             issues:[...readiness,...issuesFromMessages([message],'error')]
+          };
+        }
+        if(preflightIssues?.length){
+          return {
+            text:'No se ha consultado GestorEscuela: los minutos solicitados superan una capacidad máxima demostrable. No se ha guardado ni sustituido ningún horario.',
+            issues:[...readiness,...preflightIssues]
           };
         }
         const titles = {
