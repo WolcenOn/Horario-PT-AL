@@ -99,9 +99,10 @@ test('60 minutos solo conservan continuidad si todas las franjas tienen el mismo
   const assessment=assessJointAbsenceResult(plan,response(plan,[substitute,substitute]));
   assert.equal(assessment.supportProposed,2);
   assert.equal(assessment.sessionAudit.summary.continuous,1);
-  assert.equal(assessment.sessionAudit.entries[0].reviewStatus,'structural');
+  assert.equal(assessment.sessionAudit.entries[0].reviewStatus,'needsReview');
+  assert.ok(assessment.sessionAudit.entries[0].issues.some(x=>x.kind==='extractionUnknown'));
   assert.equal(assessment.sessionAudit.entries[0].mixedClassCount,2);
-  assert.equal(assessment.status,'proposed');
+  assert.equal(assessment.status,'unknown');
 });
 test('dos especialistas diferentes en franjas de una misma sesión no equivalen a sesión cubierta',()=>{
   const {plan,adapter}=make(fixture());
@@ -201,7 +202,8 @@ test('las ventanas de sala contiguas cubren una sesión sin intervalo perdido',(
   const {plan,adapter}=make(state);
   const teacher=adapter.report.mappings.teachers['pt-available'];
   const audit=assessJointAbsenceResult(plan,response(plan,[teacher,teacher])).sessionAudit;
-  assert.equal(audit.entries[0].reviewStatus,'structural');
+  assert.equal(audit.entries[0].reviewStatus,'needsReview');
+  assert.ok(audit.entries[0].issues.some(x=>x.kind==='extractionUnknown'));
   assert.ok(!audit.entries[0].issues.some(x=>x.kind==='roomWindow'));
 });
 test('si las franjas no reconstruyen el intervalo original no se certifica continuidad',()=>{
