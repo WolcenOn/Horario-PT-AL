@@ -1,0 +1,213 @@
+# Ausencias simultáneas de profesorado y ranking de alternativas
+
+**Estado:** diseño técnico y criterios de aceptación. **No implementado.**  
+**Fecha:** 13 de octubre de 2026.  
+**Ramas objetivo:** Horario-PT-AL/`integracion-gestor-escuela` y
+GestorEscuela/`integracion-horario-pt-al`, sin tocar `main`.
+
+## 1. Problema que resuelve
+
+Un centro debe reaccionar al mismo tiempo a ausencias de varios docentes:
+tutoría, especialistas, PT, AL y personal compartido/itinerante.
+Una sustitución aislada puede consumir al único docente que permitía
+resolver otra ausencia. Todas las decisiones deben evaluarse juntas.
+
+El sistema **no decidirá ni publicará una sustitución automáticamente**.
+Mostrará escenarios temporales sobre una copia de la planificación y
+permitirá al equipo responsable comparar la cobertura conseguida, las
+restricciones incumplibles y el coste pedagógico u organizativo.
+
+El **ranking es de propuestas de organización**, no una calificación del
+profesorado ni del alumnado.
+
+## 2. Base existente y limitaciones verificadas
+
+| Elemento | Estado hoy | Implicación |
+|---|---|---|
+| Disponibilidad semanal del personal | Existe `disponibilidad`, `bloqueosExternos` y `professionalCanWork` | Reutilizar para el control de disponibilidad permanente, no representar ahí una baja de fechas concretas |
+| Generador semanal | `buildWeeklyPreviewRequest` deriva materias y apoyo PT/AL de asignaciones y metas | Extender mediante una capa temporal validada, manteniendo la plantilla base |
+| GestorEscuela | La API semanal devuelve una respuesta `feasible`/`infeasible`/`unknown`, con una propuesta si la encuentra | No ofrece aún un conjunto de soluciones alternativas ni puntaje comparativo |
+| Comparación y auditoría | Existen calendarios, filtros y diferencias de minutos, salas y docentes en modo vista previa | Reutilizar la revisión para mostrar cada escenario con idénticos criterios |
+| Aplicación de escenarios | La aplicación conjunta de un resultado del solver sigue pendiente de Fase 3 | No confundir el ranking con una aprobación |
+
+Este documento no afirma disponibilidad de sustitutos ni cobertura oficial
+que los datos no permitan demostrar.
+
+## 3. Modelo de ausencias separado del horario base
+
+Crear una colección local de `staffAbsences` o equivalente con campos
+validables y mínimos (nombres aquí ilustrativos, no contrato ya activo):
+
+- `id` local e identificador de docente referenciado;
+- `fromDate`, `toDate` (fechas locales, inclusive), con opción de
+  franjas parciales por día: `weekday`, `start`, `end`;
+- estado provisional/confirmado, creado/actualizado;
+- *sin* diagnóstico médico, causa sensible ni nota clínica.
+
+Una ausencia prevalece sobre la disponibilidad semanal para los días
+afectados: **estar habitualmente disponible no habilita trabajar durante
+una ausencia**. Dos ausencias solapadas no se sobrescriben entre sí.
+El centro conserva una única agenda de recursos para sustitutos,
+titulares, especialistas, actividades y apoyos PT/AL.
+
+**Delimitación temporal:** GestorEscuela calcula actualmente sobre
+lunes-viernes sin fecha específica. Para períodos de más de una semana,
+crear instancias por semana y fecha, no representar una ausencia del martes
+15 de forma permanente todos los martes del curso. Al vencer el período,
+el horario base permanece intacto.
+
+**Privacidad:** solo identificadores profesionales y ventanas relevantes
+para la resolución de conflictos; nunca el motivo médico. Los datos
+individuales del alumnado siguen anonimizados o se quedan en local.
+
+## 4. Gestión conjunta de varias ausencias
+
+1. Elegir una semana/período y registrar *todas* las ausencias activas.
+2. Extraer sobre una instantánea los bloques perjudicados: clase, materia,
+   docente, PT/AL, sala, restricciones, recreos, actividades y desplazamientos.
+3. Construir la lista de reemplazos *elegibles*: presencia efectiva,
+   habilitación para materia/etapa, compatibilidad PT/AL, límites
+   laborales y de carga cuando estén configurados, no coincidencia de
+   sesiones y tiempo de traslado cuando esté definido.
+4. Generar **varias alternativas globales**, no resolver a una persona de
+   forma aislada y dar por concluida la semana.
+5. Si la cobertura total es imposible, mostrar las sesiones desatendidas y
+   sus causas sin crear profesorado, disponibilidad o permisos ficticios.
+6. Poder comparar, descartar y volver a calcular sin cambiar el horario.
+7. La aprobación y aplicación temporal será otro incremento, con control
+   de concurrencia, auditoría, reversión y vigencia explícita.
+
+Distinguir ausencia de **reemplazo** y ausencia de **reorganización**:
+no siempre habrá un profesional de sustitución. El motor podrá proponer
+movimientos o intercambios viables sin perder las sesiones obligatorias.
+
+## 5. Ranking transparente de resultados
+
+**Primero un filtro de validez; solo después una valoración.** Un escenario
+que infringe restricciones duras se marca como `no elegible`, aunque
+parezca conveniente desde otros puntos de vista.
+
+### Restricciones duras (no se intercambian por puntos)
+
+- No asignar una persona ausente ni un sustituto fuera de su disponibilidad
+  real, especialidad/competencia autorizada o carga máxima obligatoria.
+- No permitir dobles ocupaciones, solapes, salas imposibles ni saltarse
+  desplazamientos configurados.
+- Respetar bloqueos y protecciones de extracción PT/AL, seguridad,
+  normativa y minutos que hayan sido clasificados como obligatorios.
+- No atribuir cobertura individual de grupos PT/AL cuando la respuesta no
+  la permite verificar: marcar `desconocido`, no `cumplido`.
+
+### Criterios de calidad (entre candidatos válidos)
+
+Priorizar en orden *lexicográfico*, antes de preferencias ajustables:
+
+1. **Cobertura demostrable** de las sesiones/servicios exigidos.
+   Separar alternativas completas de parciales; las parciales se
+   etiquetan como `cobertura incompleta`.
+2. **Continuidad pedagógica:** minimizar clases sin docente,
+   pérdida de PT/AL y materias relevantes, con prioridades definidas
+   por el centro (no arbitrarias ni inventadas).
+3. **Menor impacto**: traslados o cambios de aula, sesiones desplazadas
+   y sustituciones innecesarias.
+4. **Distribución de carga:** evitar concentrar sustituciones y
+   desplazamientos en una sola persona.
+5. **Preferencias blandas**: horarios preferidos, estabilidad y
+   criterios configurables, sin invalidar la seguridad.
+
+Dentro de cada nivel se pueden usar **pesos configurables y visibles**
+para comparar escenarios equivalentes en requisitos duros. Una
+calificación 0–100 puede ayudar a leer el resultado, pero **no** debe
+presentarse como probabilidad de éxito ni permitir ganar a una propuesta
+que rompe restricciones. Guardar versión de fórmula/pesos para hacer
+reproducible la clasificación; desempatar de forma determinista.
+
+Cada alternativa incluirá:
+
+- Identificador de escenario e instantánea de datos de referencia;
+- estado (`apta`, `incompleta`, `no elegible` o `indeterminada`);
+- desglose de cobertura, minutos, cambios, conflictos, carga y
+  preferencias;
+- razones de su posición: «menos clases sin cubrir»,
+  «mantiene más apoyos PT», «reorganiza menos sesiones»;
+- advertencias verificables y condiciones que requieran confirmación.
+
+**Nunca declarar varias alternativas** si la API solo ha devuelto una:
+primero crear un contrato de `n` candidatos diferentes o de exploración
+iterativa controlada, con presupuesto de tiempo, semilla/diversificación
+y deduplicación. El frontend ordenará únicamente respuestas realmente
+calculadas y verificadas.
+
+## 6. Ejemplo de decisión conjunta (ficticio)
+
+El mismo martes faltan tutora de 3.º A, especialista de Inglés y docente
+PT. Un sustituto disponible para Inglés también cubre 3.º A.
+
+- **Opción A:** ocupa la sustitución de 3.º A, mantiene Inglés sin cubrir
+  y deja apoyo PT pendiente.
+- **Opción B:** cubre Inglés con el profesional habilitado, reorganiza
+  3.º A con otro docente disponible y conserva el apoyo PT existente.
+- **Opción C:** parece tener menos cambios, pero asigna dos sesiones
+  simultáneas al mismo profesor: **no elegible**, por mucho que sume puntos.
+
+La clasificación real dependerá de los horarios, competencias y
+restricciones **registrados**; este ejemplo no representa una solución
+ya generada ni una regla legal universal.
+
+## 7. Orden de implementación y criterios de aceptación
+
+### Paso A — Registro local de ausencias (frontend)
+
+- [ ] Modelo con intervalos fechados, varios docentes y duraciones
+      parciales, con normalización y migración sin alterar datos existentes.
+- [ ] Pantalla de simulación de ausencias separada de `disponibilidad`.
+- [ ] Resumen de clases/apoyos afectados y profesores realmente disponibles.
+- [ ] Pruebas de años bisiestos, fechas invertidas, solapes, semanas
+      cruzadas, ausencias simultáneas y zona horaria de Madrid.
+
+### Paso B — Escenarios temporales sobre instantáneas
+
+- [ ] Derivar demanda afectada y restricciones conjuntas sin modificar
+      horarios actuales, indisponibilidad permanente ni sesiones PT/AL.
+- [ ] Manejar falta de sustituto y prioridades incompletas sin inventar
+      asignaciones; mostrar demandas que no pueden cubrirse.
+- [ ] Comparación *actual vs. contingencia* con fechas explícitas,
+      no solo días recurrentes de la semana.
+
+### Paso C — Generación de alternativas en el motor
+
+- [ ] Ampliar contrato con múltiples candidatos, su origen y estado de
+      verificación, sin introducir identificadores de menores.
+- [ ] Garantizar diversidad real, deduplicación y resultados estables
+      frente a versiones y límites del solver.
+- [ ] Asegurar que `unknown` por tiempo agotado no sea `infeasible`.
+- [ ] Ensayar dos, tres o más ausencias solapadas en distintos servicios.
+
+### Paso D — Ranking y comparación explicables
+
+- [ ] Modelo de score independiente de frontend y backend, con
+      restricciones duras no compensables y desempate estable.
+- [ ] Visualización comparativa de hasta varias alternativas, con desglose
+      y una tarjeta destacada por recomendación *solo si está verificada*.
+- [ ] Pesos de centro editables sin cambiar normativa ni límites obligatorios.
+- [ ] Pruebas de escenarios dominados, empates, datos incompletos,
+      privacidad y variación de preferencias.
+
+### Paso E — Aplicación segura (Fase 3)
+
+- [ ] Confirmación humana, vigencia temporal, copia y reversión.
+- [ ] Comprobar que las ausencias o el horario base no cambiaron desde
+      la instantánea evaluada; rechazar aplicación desactualizada.
+- [ ] Auditoría de quién aprobó la sustitución y cuándo, sin almacenar
+      razones sensibles para la ausencia.
+- [ ] Nunca aplicar por defecto la opción `#1`.
+
+## 8. Reglas de entrega
+
+Trabajar en ramas de integración; nunca desplegar cambios del backend sin
+autorización. Cada paso requiere pruebas unitarias y navegador, privacidad,
+CI verde y comprobación de que `main` permanece intacta.
+
+**Orden recomendado desde el estado actual:** cerrar correcciones guiadas de
+Fase 2; preparar el **Paso A** de ausencias; después escenarios y
+soluciones múltiples; finalmente ranking y aprobación.

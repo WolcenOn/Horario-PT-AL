@@ -19,6 +19,7 @@
 | 3 | Aprobación y aplicación controlada | **Pendiente** | Versiones, comprobación previa, confirmación, auditoría y recuperación |
 | 4 | Pruebas de centros completos | **Parcial** | Centros ficticios realistas y E2E de extremo a extremo |
 | 5 | Optimización y preparación de producción | **Pendiente** | Medición, equidad, recursos, seguridad y despliegue expresamente autorizado |
+| Transversal | Ausencias simultáneas y ranking | **Diseño definido; implementación pendiente** | Simulaciones temporales verificadas, varias alternativas comparables y clasificación explicable |
 
 ## Fase 1 — Consolidación de validación y corrección
 
@@ -117,6 +118,12 @@ sesiones vigentes. No duplicar sin más el calendario existente.
    `infeasible` y `unknown` más ricos y acciones de corrección.
 5. **Alternativas y recálculo**: probar/deshacer una propuesta visual,
    corregir restricciones y recalcular sin cambiar el horario existente.
+6. **Contingencias y clasificación de alternativas — diseño aprobado**:
+   introducir ausencias temporales de varios docentes en paralelo y un ranking
+   de escenarios *completos* con restricciones duras primero y preferencias
+   explicables después. No usar el ranking para encubrir demanda descubierta.
+   Diseño y pruebas previstas en
+   [ausencias simultáneas y ranking](MULTI_TEACHER_ABSENCES_AND_RANKED_ALTERNATIVES.md).
 
 ### Criterios para cerrar
 
@@ -141,6 +148,8 @@ la aplicación segura del resultado semanal conjunto de GestorEscuela.
 - [ ] Protección de concurrencia, conflictos `409` y aplicación atómica.
 - [ ] Copia previa, auditoría y recuperación/deshacer ensayados.
 - [ ] Pruebas de que cancelar, fallar o perder conectividad conserva todo.
+- [ ] Aplicar solo el escenario de contingencia seleccionado, con vigencia
+  temporal explícita y sin sobrescribir el horario base indefinidamente.
 - [ ] **No publicar ni desplegar aplicación definitiva de horarios reales
   sin autorización expresa.**
 
@@ -155,12 +164,17 @@ representativos de centros completos:
 - [ ] Recreos, biblioteca, coordinaciones, actividades y salas/aforos.
 - [ ] Configurar → calcular → avisar → corregir → recalcular → comparar.
 - [ ] Desconexión, fallo API, tiempo agotado, restricciones incompatibles.
+- [ ] Ausencias solapadas de dos, tres o más docentes, varios días y jornadas
+  parciales; todos los sustitutos se comprueban de manera conjunta.
+- [ ] Ranking estable de alternativas factibles, cobertura parcial bien
+  señalada, restricciones legales y pedagógicas no ponderables.
 - [ ] Verificar privacidad y cero alteraciones del horario hasta aprobar.
 
 ## Fase 5 — Optimización, permisos y preparación de producción
 
 - [ ] Medir rendimiento/memoria/soluciones del solver con casos realistas.
-- [ ] Comparar alternativas y mejorar equidad de carga y calidad semanal.
+- [ ] Comparar alternativas y mejorar equidad de carga y calidad semanal;
+  disponer de ranking explicable y pruebas de dominancia, empates y pesos.
 - [ ] Especialistas compartidos, recursos especiales y desplazamientos
   con restricciones físicas declaradas; no inferir distancias.
 - [ ] Auditoría de cambios, aislamiento multi-centro y permisos efectivos.
@@ -171,15 +185,20 @@ representativos de centros completos:
 calculables, hasta 500 ocupaciones y ocho salas candidatas por necesidad.
 No subir límites sin pruebas de rendimiento y memoria.
 
-## Decisión de siguiente incremento
+## Decisión de siguientes incrementos
 
-**Prioridad inmediata:** primera porción de Fase 2: **representar en
-calendario de solo lectura una propuesta semanal de GestorEscuela**, reutilizando
-vistas existentes y sin activar ningún flujo de aplicación.
+**Fase 2 actual:** completar correcciones guiadas de la revisión global de
+conflictos/cobertura y su recalculado no destructivo. Conservar y comparar
+la propuesta semanal actual antes de permitir aplicación alguna.
 
-**En paralelo:** seleccionar una primera comunidad y legislación para incluir
-un anexo curricular auténtico. Es independiente del desarrollo del calendario;
-el catálogo no se completará con cifras inventadas.
+**Siguiente bloque transversal:** implementar primero el modelo local,
+validación y simulación de **múltiples ausencias en fechas concretas** sin
+cambiar la disponibilidad semanal permanente. Después generar alternativas
+auténticas y ordenarlas con puntuación explicable. El backend actual devuelve
+una única solución por petición: el ranking no está habilitado todavía.
+
+**En paralelo:** verificar el primer anexo autonómico curricular e incluirlo
+sin inventar cargas horarias.
 
 ## Reglas no negociables
 
@@ -195,6 +214,7 @@ el catálogo no se completará con cifras inventadas.
 ## Referencias técnicas
 
 - [Diseño de tramos flexibles y especialistas](FLEXIBLE_LESSON_LENGTHS_AND_SPECIALISTS_ROADMAP.md)
+- [Diseño de ausencias simultáneas y alternativas ordenadas](MULTI_TEACHER_ABSENCES_AND_RANKED_ALTERNATIVES.md)
 - [Seguridad, multiusuario y sincronización](INTEGRATION_SECURITY_ROADMAP.md)
 - [Mantenimiento del catálogo normativo](../curriculum-regulations/README.md)
 - [Frontend publicado](https://wolcenon.github.io/Horario-PT-AL/)
