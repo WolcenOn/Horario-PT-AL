@@ -5,6 +5,9 @@ import {
 } from './account-auth-service.js';
 import { backendConfigured, normalizeBackendSettings } from './backend-service.js';
 import { buildGestorEscuelaConfiguration } from './gestor-adapter.js';
+import {
+  analyzeWeeklyReadiness, correctionForMessage, issuesFromMessages
+} from './preview-diagnostics.js';
 import { escapeHtml } from './utils.js';
 
 export function renderIntegrationView(root, {
@@ -28,7 +31,8 @@ export function renderIntegrationView(root, {
   onSaveScenarioSnapshot,
   onRestoreScenarioSnapshot,
   onSync,
-  onPreviewWeekly
+  onPreviewWeekly,
+  onNavigateCorrection=()=>{}
 }) {
   const normalized = normalizeBackendSettings(settings);
   const adapter = buildGestorEscuelaConfiguration(state);
@@ -80,9 +84,11 @@ export function renderIntegrationView(root, {
         </div>
         <div class="help-note">
           <strong>Vista previa semanal con duraciones por materia</strong>
-          <p>Calcula en GestorEscuela una propuesta provisional usando las cargas semanales, patrones temporales y docentes del navegador. Envía IDs de grupos y docentes, nunca identidades ni notas de alumnos. Esta primera fase reserva las sesiones PT/AL ya programadas, pero todavía no genera nuevos apoyos ni modela todos los recursos y conflictos individuales.</p>
+          <p>Calcula una propuesta provisional de materias y apoyos PT/AL, respetando las restricciones configuradas de profesionales, alumnado y salas. No transmite nombres ni informes de menores, y nunca aplica la propuesta.</p>
+          ${renderIssues('Antes de consultar el motor: datos por corregir',analyzeWeeklyReadiness(state).filter(item=>item.severity==='error'),'error')}
+          ${renderIssues('Recomendaciones para revisar',analyzeWeeklyReadiness(state).filter(item=>item.severity==='warning'),'warning')}
           <button class="button" type="button" data-preview-weekly ${configured ? '' : 'disabled'}>Comprobar horario semanal en el motor</button>
-          <pre data-weekly-preview-result role="status" aria-live="polite" style="white-space:pre-wrap;max-height:18rem;overflow:auto;"></pre>
+          <div data-weekly-preview-result role="status" aria-live="polite" style="max-height:24rem;overflow:auto;"></div>
         </div>
       </div>
     </section>
@@ -107,16 +113,20 @@ export function renderIntegrationView(root, {
   });
   root.querySelector('[data-test-backend]')?.addEventListener('click', async () => onTest(readSettings(form, normalized)));
   root.querySelector('[data-sync-backend]')?.addEventListener('click', async () => onSync(normalized, adapter));
+  bindCorrectionLinks(root,onNavigateCorrection);
   root.querySelector('[data-preview-weekly]')?.addEventListener('click', async () => {
     const node = root.querySelector('[data-weekly-preview-result]');
     const button = root.querySelector('[data-preview-weekly]');
     button.disabled = true;
-    if (node) node.textContent = 'Calculando vista previa (no se modifica ningún horario)…';
+    if (node) node.textContent = 'Comprobando datos y calculando vista previa…';
     try {
       const report = await onPreviewWeekly();
-      if (node) node.textContent = report;
+      renderWeeklyPreviewResult(node,report,onNavigateCorrection);
     } catch (error) {
-      if (node) node.textContent = error?.message || 'No se pudo calcular la vista previa.';
+      renderWeeklyPreviewResult(node,{
+        text:'La vista previa no ha modificado ningún horario.',
+        issues:issuesFromMessages([error?.message || 'No se pudo calcular la vista previa.'],'error')
+      },onNavigateCorrection);
     } finally {
       button.disabled = false;
     }
@@ -492,7 +502,34 @@ function renderAuthStatus(status) {
 
 function renderIssues(title, items, kind) {
   if (!items?.length) return '';
-  return `<div class="integration-issues is-${kind}"><strong>${escapeHtml(title)}</strong>${items.slice(0, 12).map(item => `<span>• ${escapeHtml(item)}</span>`).join('')}${items.length > 12 ? `<span>… y ${items.length - 12} más</span>` : ''}</div>`;
+  const rows=items.slice(0,20).map(value=>{
+    const item=typeof value==='string'
+      ? {message:value,action:correctionForMessage(value)}
+      : value;
+    const action=item.action;
+    const button=action
+      ? ` <button class="button" type="button" data-fix-view="${escapeHtml(action.view)}" data-fix-focus="${escapeHtml(action.focusId||'')}">${escapeHtml(action.label)} →</button>`
+      : '';
+    return `<div class="integration-issue-row"><span>• ${escapeHtml(item.message)}</span>${button}</div>`;
+  }).join('');
+  return `<div class="integration-issues is-${kind}"><strong>${escapeHtml(title)}</strong>${rows}${items.length > 20 ? `<span>… y ${items.length - 20} más</span>` : ''}</div>`;
+}
+
+function bindCorrectionLinks(container,onNavigateCorrection) {
+  container?.querySelectorAll('[data-fix-view]').forEach(button=>{
+    button.addEventListener('click',()=>onNavigateCorrection({
+      view:button.dataset.fixView,focusId:button.dataset.fixFocus
+    }));
+  });
+}
+
+function renderWeeklyPreviewResult(node,report,onNavigateCorrection) {
+  if(!node)return;
+  const text=typeof report==='string'?report:String(report?.text||'');
+  node.innerHTML=`<pre class="weekly-preview-summary" style="white-space:pre-wrap;overflow-wrap:anywhere;">${escapeHtml(text)}</pre>`
+    +renderIssues('Errores que debes corregir',report?.issues?.filter(item=>item.severity==='error'),'error')
+    +renderIssues('Avisos y posibles ajustes',report?.issues?.filter(item=>item.severity!=='error'),'warning');
+  bindCorrectionLinks(node,onNavigateCorrection);
 }
 
 function scenarioStatusLabel(value) {
