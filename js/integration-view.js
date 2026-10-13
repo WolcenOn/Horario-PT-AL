@@ -9,6 +9,7 @@ import {
   analyzeWeeklyReadiness, correctionForMessage, issuesFromMessages
 } from './preview-diagnostics.js';
 import { escapeHtml } from './utils.js';
+import { renderWeeklyPreviewCalendar } from './weekly-preview-calendar.js';
 
 export function renderIntegrationView(root, {
   state,
@@ -88,7 +89,7 @@ export function renderIntegrationView(root, {
           ${renderIssues('Antes de consultar el motor: datos por corregir',analyzeWeeklyReadiness(state).filter(item=>item.severity==='error'),'error')}
           ${renderIssues('Recomendaciones para revisar',analyzeWeeklyReadiness(state).filter(item=>item.severity==='warning'),'warning')}
           <button class="button" type="button" data-preview-weekly ${configured ? '' : 'disabled'}>Comprobar horario semanal en el motor</button>
-          <div data-weekly-preview-result role="status" aria-live="polite" style="max-height:24rem;overflow:auto;"></div>
+          <div data-weekly-preview-result role="status" aria-live="polite"></div>
         </div>
       </div>
     </section>
@@ -527,6 +528,7 @@ function renderWeeklyPreviewResult(node,report,onNavigateCorrection) {
   if(!node)return;
   const text=typeof report==='string'?report:String(report?.text||'');
   node.innerHTML=`<pre class="weekly-preview-summary" style="white-space:pre-wrap;overflow-wrap:anywhere;">${escapeHtml(text)}</pre>`
+    +renderWeeklyPreviewCalendar(report?.calendar)
     +renderIssues('Errores que debes corregir',report?.issues?.filter(item=>item.severity==='error'),'error')
     +renderIssues('Avisos y posibles ajustes',report?.issues?.filter(item=>item.severity!=='error'),'warning');
   bindCorrectionLinks(node,onNavigateCorrection);

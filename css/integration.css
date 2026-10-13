@@ -6,3 +6,27 @@
 .integration-issue-row>span{flex:1 1 280px;min-width:0}
 .integration-issue-row>.button{flex:0 0 auto;font-size:.79rem;padding:6px 10px;max-width:100%;white-space:normal}
 .weekly-preview-summary{max-height:14rem;overflow:auto;font-size:.82rem;line-height:1.55;margin:10px 0}
+
+/* Phase 2: non-destructive, anonymized weekly preview beside stored timetable. */
+.weekly-review{display:grid;gap:12px;margin:14px 0;padding:14px;border:1px solid var(--line);border-radius:14px;background:#fff}
+.weekly-review header h3{margin:0;font-size:1.12rem}
+.weekly-review header p,.weekly-review-footnote{font-size:.84rem;color:var(--muted);line-height:1.45;margin:5px 0 0}
+.weekly-review-metrics{display:flex;flex-wrap:wrap;gap:6px}
+.weekly-review-metrics span{border-radius:8px;background:#f2f4f7;padding:7px 9px;font-size:.78rem}
+.weekly-review-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.75rem;color:var(--muted)}
+.weekly-review-days{display:grid;gap:12px}
+.weekly-review-day{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.weekly-review-day>h4{margin:0;padding:9px 12px;background:#f8fafc;font-size:.92rem}
+.weekly-review-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+.weekly-review-column{padding:10px;min-width:0;display:grid;align-content:start;gap:7px}
+.weekly-review-column+.weekly-review-column{border-left:1px solid var(--line)}
+.weekly-review-column>h5{margin:0 0 3px;font-size:.8rem;color:var(--muted)}
+.weekly-review-block{display:grid;gap:3px;padding:9px;border-left:4px solid #667085;border-radius:8px;background:#f2f4f7;overflow-wrap:anywhere}
+.weekly-review-block.is-pt{border-color:#175cd3;background:#eff8ff}
+.weekly-review-block.is-al{border-color:#7a5af8;background:#f4f3ff}
+.weekly-review-block[data-weekly-review-source="fija"]{outline:1px dashed #98a2b3;outline-offset:-2px}
+.weekly-review-block-top{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:.78rem}
+.weekly-review-block strong{font-size:.84rem}
+.weekly-review-block small,.weekly-review-empty{font-size:.77rem;color:#475467}
+.weekly-review-empty{margin:5px 0}
+@media(max-width:540px){.weekly-review-columns{grid-template-columns:1fr}.weekly-review-column+.weekly-review-column{border:0;border-top:1px solid var(--line)}}

@@ -62,3 +62,42 @@ test('las advertencias generales no contienen enlaces externos improvisados',asy
   expect(links.length).toBeGreaterThan(0);
   expect(links.every(link=>allowed.has(link.view)&&link.href===null)).toBe(true);
 });
+
+
+test('la comparación semanal es solo lectura, anónima y no altera IndexedDB',async({page})=>{
+  await page.goto('/');
+  const result=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    const {buildWeeklyPreviewCalendar,renderWeeklyPreviewCalendar}=
+      await import('/js/weekly-preview-calendar.js');
+    const state=await loadState();
+    const before=JSON.stringify(state);
+    const sample={...state,
+      students:[{id:'private-id',nombre:'Nombre protegido'}],
+      groups:[{id:'group-pt',tipo:'PT',studentIds:['private-id']}],
+      classSchedules:[{grupoClase:'1ºA',materia:'Matemáticas',
+        dia:'lunes',inicio:'09:00',fin:'10:00'}],
+      sessions:[{groupId:'group-pt',dia:'lunes',inicio:'10:00',fin:'10:30'}]
+    };
+    const preview={status:'feasible',preview_only:true,
+      lessons:[{group_id:'1ºA',subject_id:'Lengua Castellana y Literatura',
+        weekday:1,start_time:'09:00',end_time:'10:00'}],
+      supports:[{service:'AL',pupil_token:'secret-token',weekday:1,
+        start_time:'10:00',end_time:'10:30',room_id:'AL-1'}],
+      group_supports:[]};
+    const projection=buildWeeklyPreviewCalendar(sample,preview);
+    const container=document.createElement('div');
+    container.id='preview-review-specimen';
+    container.innerHTML=renderWeeklyPreviewCalendar(projection);
+    document.body.append(container);
+    const after=JSON.stringify(await loadState());
+    return {before,after};
+  });
+  await expect(page.locator('[data-weekly-preview-calendar]')).toBeVisible();
+  await expect(page.locator('[data-weekly-review-day]')).toHaveCount(5);
+  await expect(page.locator('[data-weekly-review-source="fija"]')).toHaveCount(2);
+  await expect(page.locator('[data-weekly-review-source="propuesta"]')).toHaveCount(2);
+  await expect(page.locator('[data-weekly-preview-calendar]')).not.toContainText('secret-token');
+  await expect(page.locator('[data-weekly-preview-calendar]')).not.toContainText('Nombre protegido');
+  expect(result.after).toBe(result.before);
+});

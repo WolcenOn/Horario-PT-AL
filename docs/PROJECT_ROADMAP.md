@@ -15,7 +15,7 @@
 |---|---|---|---|
 | 1 | Diagnósticos y correcciones | **Muy avanzada; no cerrada** | Correcciones precisas, sin falsos positivos, privacidad y regresiones E2E |
 | Transversal | Legislación y currículo | **Estructura técnica lista; datos oficiales pendientes** | Al menos un perfil de normativa contrastado, versionado y probado |
-| 2 | Vista previa integral y comparación | **Parcial; siguiente prioridad** | Propuesta semanal remota y horario actual juntos, sin escribir datos |
+| 2 | Vista previa integral y comparación | **En curso; calendario inicial** | Propuesta semanal remota y horario actual juntos, sin escribir datos |
 | 3 | Aprobación y aplicación controlada | **Pendiente** | Versiones, comprobación previa, confirmación, auditoría y recuperación |
 | 4 | Pruebas de centros completos | **Parcial** | Centros ficticios realistas y E2E de extremo a extremo |
 | 5 | Optimización y preparación de producción | **Pendiente** | Medición, equidad, recursos, seguridad y despliegue expresamente autorizado |
@@ -84,9 +84,11 @@ sesiones vigentes. No duplicar sin más el calendario existente.
 
 ### Próxima secuencia de incrementos
 
-1. **Calendario de propuesta de solo lectura**: franjas semanales
-   diferenciadas para materia ordinaria, apoyo PT, apoyo AL, sala y
-   estado; consumir el resultado sin persistirlo.
+1. **Calendario de propuesta de solo lectura — primer incremento implementado**:
+   franjas semanales diferenciadas para materias, apoyo PT, apoyo AL y salas
+   conocidas; dos columnas por día con horario guardado y simulación del
+   motor. Los apoyos existentes fijos se muestran también en la propuesta.
+   No persistir resultados ni revelar identidades del alumnado.
 2. **Comparación con horario actual**: altas, cambios, coincidencias,
    clases afectadas y minutos obligatorios, conservando ambas versiones.
 3. **Filtros y vistas**: clase, docente, especialista, recursos y

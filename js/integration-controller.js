@@ -23,6 +23,7 @@ import {
 import { renderIntegrationView } from './integration-view.js';
 import { toJsonCompatible } from './gestor-serialization.js';
 import { requestWeeklyPreviewWithFallback } from './weekly-preview-client.js';
+import { buildWeeklyPreviewCalendar } from './weekly-preview-calendar.js';
 import {
   analyzeWeeklyReadiness, issuesFromMessages, issuesFromPreviewResult
 } from './preview-diagnostics.js';
@@ -290,24 +291,11 @@ async function openIntegration() {
           'Los errores y avisos para revisar aparecen a continuación con acceso a su configuración.'
         ];
         if (result.status === 'feasible') {
-          const dayNames = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes'];
-          for (const entry of (result.lessons || []).slice(0, 40)) {
-            lines.push(`${dayNames[entry.weekday]} · ${entry.start_time}–${entry.end_time} · ${entry.group_id} · ${entry.subject_id}`);
-          }
-          if (result.lessons.length > 40) lines.push(`Y ${result.lessons.length - 40} sesiones más.`);
-          for (const entry of (result.supports || []).slice(0, 30)) {
-            lines.push(`${dayNames[entry.weekday]} · ${entry.start_time}–${entry.end_time} · Apoyo ${entry.service}${entry.room_id ? ` · sala ${entry.room_id}` : ''} (sin identificar al alumno)`);
-          }
-          if ((result.supports || []).length > 30) lines.push(`Y ${result.supports.length - 30} apoyos más.`);
-          for (const entry of (result.group_supports || []).slice(0, 30)) {
-            lines.push(`${dayNames[entry.weekday]} · ${entry.start_time}–${entry.end_time} · Apoyo ${entry.service} grupal, ${entry.participant_count} participante(s)${entry.room_id ? ` · sala ${entry.room_id}` : ''} (identidad protegida)`);
-          }
-          if ((result.group_supports || []).length > 30) {
-            lines.push(`Y ${result.group_supports.length - 30} sesiones grupales más.`);
-          }
+          lines.push('Calendario semanal comparado a continuación. Las sesiones PT/AL fijas se conservan y los apoyos calculados son adicionales.');
         }
         return {
           text:lines.join('\n'),
+          calendar:buildWeeklyPreviewCalendar(state,result),
           issues:[
             ...readiness,
             ...issuesFromPreviewResult(result),
