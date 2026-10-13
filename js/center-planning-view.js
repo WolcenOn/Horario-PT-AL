@@ -143,14 +143,15 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
       ?String(matching.length)+' versión(es) disponibles. Se cargarán para revisión sin guardarlas.'
       :'No hay perfiles normativos verificados para esta comunidad. Puedes importar tu JSON.';
   };
-  root.querySelector('[data-curriculum-import]')?.addEventListener('toggle',async event=>{
-    if(!event.currentTarget.open)return;
-    try{
-      publishedProfiles=await listCurriculumRegulations();
-      if(event.currentTarget.isConnected)updateCatalogOptions();
-    }catch(error){
+  // The catalog is a tiny local manifest: read it when the view mounts.
+  // Some browsers coalesce details/toggle events after rapid navigation.
+  // Never depend on the expansion event to make versions discoverable.
+  void listCurriculumRegulations().then(entries=>{
+    publishedProfiles=entries;
+    if(catalogSelect.isConnected)updateCatalogOptions();
+  }).catch(error=>{
+    if(catalogStatus.isConnected)
       catalogStatus.textContent=error.message||'No se ha podido leer el catálogo local.';
-    }
   });
   root.querySelector('#territory')?.addEventListener('input',()=>{
     if(publishedProfiles.length)updateCatalogOptions();
