@@ -94,7 +94,7 @@ export function issuesFromPreviewResult(result) {
 // It deliberately ignores movable ordinary lessons, extraction preferences,
 // room choices and fragmented free windows: those remain for CP-SAT to decide.
 const clockMinutes=value=>{
-  if(typeof value!=='string'||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(value))return null;
+  if(typeof value!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(value))return null;
   const [hour,minute]=value.split(':').map(Number);
   return hour*60+minute;
 };
