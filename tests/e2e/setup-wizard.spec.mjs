@@ -107,3 +107,57 @@ test('un perfil territorial distinto no se aplica ni modifica la configuración 
   await expect(page.locator('[data-curriculum-import-error]')).toContainText('no coincide');
   await expect(page.locator('[data-curriculum-course="2º"][data-curriculum-subject="Matemáticas"]')).toHaveValue('');
 });
+
+
+test('un perfil versionado del catálogo solo se aplica tras revisión y las adaptaciones quedan marcadas',async({page})=>{
+  const entry={
+    profileId:'es-example-primaria',version:'2026.1',territory:'Andalucía',
+    legalReference:'Norma de prueba - anexo simulado',academicYear:'2026/27'
+  };
+  const pack={...entry,profileName:'Perfil ficticio de pruebas',
+    effectiveFrom:'2026-09-01',sourceUrl:'https://example.org/norma',
+    weeklyHours:{'1º':{Matemáticas:4.5}}
+  };
+  await page.route('**/curriculum-regulations/catalog.json',route=>route.fulfill({
+    status:200,contentType:'application/json',
+    body:JSON.stringify({schemaVersion:1,profiles:[entry]})
+  }));
+  await page.route('**/curriculum-regulations/profiles/es-example-primaria/2026.1.json',route=>route.fulfill({
+    status:200,contentType:'application/json',body:JSON.stringify(pack)
+  }));
+  await page.goto('/');
+  await page.evaluate(async()=>{
+    const {resetDatabase}=await import('/js/db.js');
+    await resetDatabase();
+    localStorage.setItem('horario-user-cleared','true');
+  });
+  await page.reload();
+  await page.locator('.nav-item[data-view="centerPlanning"]').click();
+  await page.locator('#territory').fill('Andalucía');
+  await page.locator('[data-curriculum-import] summary').click();
+  await expect(page.locator('#curriculumCatalogSelect')).toContainText('v2026.1');
+  await page.locator('#curriculumCatalogSelect').selectOption('es-example-primaria@2026.1');
+  await page.locator('[data-prepare-regulation]').click();
+  await expect(page.locator('[data-regulation-catalog-status]')).toContainText('preparada');
+  await expect(page.locator('[data-curriculum-course="1º"][data-curriculum-subject="Matemáticas"]')).toHaveValue('');
+  page.once('dialog',dialog=>dialog.accept());
+  await page.locator('[data-apply-curriculum-profile]').click();
+  await expect(page.locator('[data-curriculum-course="1º"][data-curriculum-subject="Matemáticas"]')).toHaveValue('4.5');
+  let saved=await page.evaluate(async()=>{
+    const {get}=await import('/js/db.js');
+    return get('settings','centerPlanning');
+  });
+  expect(saved.curriculumSource.profileId).toBe('es-example-primaria');
+  expect(saved.curriculumSource.version).toBe('2026.1');
+  expect(saved.curriculumSource.modified).toBe(false);
+  await page.locator('[data-curriculum-course="1º"][data-curriculum-subject="Matemáticas"]').fill('4.75');
+  await page.getByRole('button',{name:'Guardar configuración global'}).click();
+  await expect(page.getByText(/PERSONALIZADO/)).toBeVisible();
+  saved=await page.evaluate(async()=>{
+    const {get}=await import('/js/db.js');
+    return get('settings','centerPlanning');
+  });
+  expect(saved.curriculum['1º'].Matemáticas).toBe(285);
+  expect(saved.curriculumSource.version).toBe('2026.1');
+  expect(saved.curriculumSource.modified).toBe(true);
+});

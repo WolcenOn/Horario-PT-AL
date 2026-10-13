@@ -4,6 +4,7 @@ import { buildGlobalReadiness } from './global-scheduler.js';
 import { correctionForMessage } from './preview-diagnostics.js';
 import { saveCenterPlanningSettings } from './repository.js';
 import { applyCurriculumProfile, parseCurriculumProfile } from './curriculum-profile-import.js';
+import { listCurriculumRegulations,loadCurriculumRegulation,regulationKey } from './curriculum-regulations.js';
 import {
   formatRoomResources, parseRoomResources, parseTravelRules, ROOM_FEATURES
 } from './weekly-location-rules.js';
@@ -44,20 +45,26 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
           <details data-curriculum-import>
             <summary>Importar y aplicar carga curricular de una norma</summary>
             <div class="form-field">
+              <label for="curriculumCatalogSelect">Catálogo de normativa versionada</label>
+              <select id="curriculumCatalogSelect"><option value="">Consultar las versiones disponibles…</option></select>
+              <button type="button" class="button" data-prepare-regulation>Preparar versión para revisión</button>
+              <small class="field-hint" data-regulation-catalog-status>Solo perfiles contrastados; ningún cambio se aplica automáticamente.</small>
+            </div>
+            <div class="form-field">
               <label for="curriculumProfileFile">Seleccionar archivo JSON (opcional)</label>
               <input id="curriculumProfileFile" type="file" accept=".json,application/json">
             </div>
             <div class="form-field">
               <label for="curriculumProfileJson">Perfil JSON: territorio, norma, cursos y horas</label>
               <textarea id="curriculumProfileJson" rows="7" spellcheck="false" placeholder='{"territory":"Andalucía","legalReference":"Indica aquí la norma y anexo consultados","weeklyHours":{"1º":{"Matemáticas":1}}}'></textarea>
-              <small class="field-hint">El ejemplo solo muestra el formato; no son horas oficiales. Admite profileName, academicYear y sourceUrl (HTTPS). Usa exactamente los nombres de materias del formulario. Solo se guarda localmente tras pulsar «Aplicar».</small>
+              <small class="field-hint">El ejemplo solo muestra el formato; no son horas oficiales. Admite profileName, academicYear y sourceUrl (HTTPS); los perfiles versionados añaden profileId, version y effectiveFrom. Solo se guarda localmente tras pulsar «Aplicar».</small>
             </div>
             <div class="button-row">
               <button type="button" class="button button-primary" data-apply-curriculum-profile>Validar y aplicar perfil</button>
             </div>
             <p data-curriculum-import-error role="alert" aria-live="polite"></p>
           </details>
-          ${settings.curriculumSource?.kind==='imported'? `<small class="field-hint">Perfil importado: ${escapeHtml(settings.curriculumSource.territory)} · ${escapeHtml(settings.curriculumSource.legalReference)}. Puedes editar las horas manualmente; la normativa debe verificarse con su texto oficial.</small>` : ''}
+          ${settings.curriculumSource?.kind==='imported'? `<small class="field-hint">Perfil importado: ${escapeHtml(settings.curriculumSource.territory)} · ${escapeHtml(settings.curriculumSource.legalReference)}${settings.curriculumSource.version ? " · v"+escapeHtml(settings.curriculumSource.version) : ""}${settings.curriculumSource.modified ? " · PERSONALIZADO" : ""}. Puedes editar las horas manualmente; la normativa debe verificarse con su texto oficial.</small>` : ''}
         </div>
       </div>
     </section>
@@ -122,6 +129,50 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
     <div class="center-planning-actions"><button class="button button-primary" type="submit">Guardar configuración global</button></div>
   </form>`;
 
+  let publishedProfiles=[];
+  const catalogSelect=root.querySelector('#curriculumCatalogSelect');
+  const catalogStatus=root.querySelector('[data-regulation-catalog-status]');
+  const updateCatalogOptions=()=>{
+    const territory=root.querySelector('#territory').value.trim();
+    const matching=publishedProfiles.filter(item=>!territory||item.territory===territory);
+    catalogSelect.innerHTML='<option value="">Seleccionar versión…</option>'+
+      matching.map(item=>'<option value="'+escapeHtml(regulationKey(item))+'">'+
+        escapeHtml(item.territory)+' · '+escapeHtml(item.legalReference)+
+        ' · v'+escapeHtml(item.version)+'</option>').join('');
+    catalogStatus.textContent=matching.length
+      ?String(matching.length)+' versión(es) disponibles. Se cargarán para revisión sin guardarlas.'
+      :'No hay perfiles normativos verificados para esta comunidad. Puedes importar tu JSON.';
+  };
+  root.querySelector('[data-curriculum-import]')?.addEventListener('toggle',async event=>{
+    if(!event.currentTarget.open)return;
+    try{
+      publishedProfiles=await listCurriculumRegulations();
+      if(event.currentTarget.isConnected)updateCatalogOptions();
+    }catch(error){
+      catalogStatus.textContent=error.message||'No se ha podido leer el catálogo local.';
+    }
+  });
+  root.querySelector('#territory')?.addEventListener('input',()=>{
+    if(publishedProfiles.length)updateCatalogOptions();
+  });
+  root.querySelector('[data-prepare-regulation]')?.addEventListener('click',async()=>{
+    const error=root.querySelector('[data-curriculum-import-error]');
+    error.textContent='';
+    const selected=publishedProfiles.find(item=>regulationKey(item)===catalogSelect.value);
+    if(!selected){
+      error.textContent='Selecciona primero una versión de la comunidad.';
+      return;
+    }
+    try{
+      const {raw,profile}=await loadCurriculumRegulation(selected);
+      const territory=root.querySelector('#territory').value.trim();
+      if(territory&&profile.territory!==territory)
+        throw new Error('La comunidad del perfil no coincide con la del centro.');
+      root.querySelector('#curriculumProfileJson').value=raw;
+      catalogStatus.textContent='Versión '+profile.version+
+        ' preparada. Revisa las horas y la fuente; pulsa «Validar y aplicar perfil» para guardarla.';
+    }catch(cause){error.textContent=cause.message||'No se pudo cargar esta versión.';}
+  });
   root.querySelector('#curriculumProfileFile')?.addEventListener('change', async event => {
     const file=event.currentTarget.files?.[0];
     if(!file)return;
@@ -287,7 +338,7 @@ function summarizeGenerated(entries) {
 
 function readSettings(form, settings) {
   const data = new FormData(form);
-  return normalizeCenterPlanningSettings({
+  const next=normalizeCenterPlanningSettings({
     ...settings,
     mode:data.get('mode'),
     profileName:data.get('profileName'),
@@ -321,6 +372,13 @@ function readSettings(form, settings) {
     },
     curriculum:readCurriculumInputs(form)
   });
+  // Keep the version's provenance but flag local changes; updating catalog.json
+  // can never update the minutes of a previously saved school.
+  if(next.curriculumSource?.kind==='imported'&&(
+    JSON.stringify(next.curriculum)!==JSON.stringify(settings.curriculum)||
+    next.territory!==settings.territory||next.legalReference!==settings.legalReference
+  ))next.curriculumSource={...next.curriculumSource,modified:true};
+  return next;
 }
 
 function readCurriculumInputs(form) {
