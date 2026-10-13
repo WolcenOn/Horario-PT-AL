@@ -168,6 +168,12 @@ ya generada ni una regla legal universal.
 
 - [x] Modelo local fechado y validado; altas simultáneas para varios docentes,
       bloques de jornada completa o parcial y migración aditiva de IndexedDB.
+- [x] Flujo único calendario → fecha → docentes → jornada o sesiones del
+      horario previsto por profesional → guardar / guardar y calcular con
+      confirmación remota. Sesiones contiguas se agrupan; los huecos se
+      conservan como ausencias distintas. Multi-día: jornada o intervalo
+      manual; el cálculo inicial corresponde a la primera fecha. Se retira
+      la segunda pantalla de registro individual de la navegación.
 - [x] Calendario mensual global con filtros pendiente/resuelta, vista por día,
       confirmación manual, reapertura, eliminación y respaldo JSON de ausencias.
 - [x] Pruebas de fechas imposibles, bisiestos, solapes, simultaneidad y límites.

@@ -54,3 +54,16 @@
 .operations-joint [data-joint-assessment]{border:1px solid var(--line,#dde2e8);padding:.9rem;border-radius:.7rem;background:#f8fafc}
 .operations-joint [data-joint-assessment] p{font-size:.83rem;line-height:1.5}
 .operations-joint table{min-width:660px}
+
+/* Calendar-first absence workflow; shared for one or many teachers. */
+.absence-mode-options{display:flex;gap:1rem;flex-wrap:wrap}
+.absence-mode-options label{display:inline-flex;align-items:center;gap:.4rem;font-size:.84rem}
+.absence-mode-options input{accent-color:var(--primary,#245b7a)}
+.absence-planned-group{border:1px solid var(--line,#dde2e8);border-radius:.7rem;padding:.8rem;min-width:0;background:#f8fafc}
+.absence-planned-group legend{font-weight:750;font-size:.85rem}
+.absence-planned-group label{display:flex;align-items:flex-start;gap:.6rem;padding:.4rem .35rem;font-size:.8rem}
+.absence-planned-group label+label{border-top:1px solid #e2e8f0}
+.absence-planned-group label input{flex:none;margin-top:.2rem}
+[data-absence-planned-slots]:not([hidden]){display:grid;gap:.75rem}
+.staff-absences-view [hidden]{display:none!important}
+.staff-absences-view #staffAbsenceForm .button-row{display:flex;gap:.55rem;flex-wrap:wrap}

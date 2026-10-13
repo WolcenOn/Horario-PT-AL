@@ -80,6 +80,7 @@ test('calendario rechaza fechas o solapes y no modifica el horario base',async({
   await form.locator('input[value="test-prof"]').check();
   await form.locator('[name="fromDate"]').fill(month+'-10');
   await form.locator('[name="toDate"]').fill(month+'-10');
+  await form.locator('[name="absenceMode"][value="manual"]').check();
   await form.locator('[name="startTime"]').fill('09:00');
   await form.locator('[name="endTime"]').fill('11:00');
   await form.getByRole('button',{name:'Guardar ausencias'}).click();
@@ -100,4 +101,81 @@ test('calendario rechaza fechas o solapes y no modifica el horario base',async({
   expect(data.absent).toHaveLength(1);
   expect(data.professionals).toHaveLength(1);
   expect(data.lessons).toHaveLength(0);
+});
+
+
+test('calendario primero, dos docentes y franjas individuales: guardar y calcular conserva el registro offline',async({page})=>{
+  const requests=[];
+  page.on('request',r=>{
+    if(r.method()!=='GET'&&r.url().includes('/schools/'))requests.push(r.url());
+  });
+  await page.addInitScript(()=>localStorage.setItem('horario-user-cleared','true'));
+  await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
+  const monday=await page.evaluate(async()=>{
+    const {put}=await import('/js/db.js');
+    await put('professionals',{id:'t1',nombre:'Tutora',tipo:'DOCENTE',activo:true});
+    await put('professionals',{id:'t2',nombre:'Especialista PT',tipo:'PT',activo:true});
+    await put('classSchedules',{id:'mat',professionalId:'t1',dia:'lunes',
+      inicio:'09:00',fin:'10:00',grupoClase:'1A',materia:'MAT'});
+    await put('classSchedules',{id:'art',professionalId:'t1',dia:'lunes',
+      inicio:'11:00',fin:'11:45',grupoClase:'1A',materia:'ART'});
+    await put('groups',{id:'gpt',tipo:'PT',professionalId:'t2',
+      studentIds:[],activo:true});
+    await put('sessions',{id:'support',groupId:'gpt',dia:'lunes',
+      inicio:'09:30',fin:'10:15'});
+    const now=new Date(),first=new Date(now.getFullYear(),now.getMonth(),1);
+    const day=new Date(first.getFullYear(),first.getMonth(),1+(8-first.getDay())%7);
+    return String(day.getFullYear())+'-'+String(day.getMonth()+1).padStart(2,'0')+
+      '-'+String(day.getDate()).padStart(2,'0');
+  });
+  await page.reload();
+  await page.locator('[data-view="staffAbsences"]').click();
+  const calendar=page.locator('[data-absence-calendar]');
+  const form=page.locator('#staffAbsenceForm');
+  const before=await calendar.evaluate((el,a)=>{
+    return el.compareDocumentPosition(document.querySelector(a));
+  },'#staffAbsenceForm');
+  // DOCUMENT_POSITION_FOLLOWING confirms calendar comes before the form.
+  expect(before&4).toBe(4);
+  await page.locator('[data-absence-day="'+monday+'"]').click();
+  await expect(form.locator('[name="fromDate"]')).toHaveValue(monday);
+  await expect(form.locator('[name="toDate"]')).toHaveValue(monday);
+  await form.locator('input[value="t1"]').check();
+  await form.locator('input[value="t2"]').check();
+  await form.locator('[name="absenceMode"][value="schedule"]').check();
+  await expect(form.locator('[data-planned-group="t1"] [data-planned-slot]')).toHaveCount(2);
+  await expect(form.locator('[data-planned-group="t2"]')).toContainText('Apoyo PT');
+  await form.locator('[data-planned-group="t1"] [data-planned-slot][value="class:mat"]').uncheck();
+  await form.getByRole('button',{name:'Guardar y calcular cobertura'}).click();
+  await expect(page.locator('[data-absence-entry]')).toHaveCount(2);
+  await expect(page.locator('[data-joint-status]')).toContainText('Las ausencias están guardadas');
+  const state=await page.evaluate(async()=>{
+    const {getAll}=await import('/js/db.js');
+    return {
+      absences:await getAll('staffAbsences'),
+      classSchedules:await getAll('classSchedules'),
+      sessions:await getAll('sessions')
+    };
+  });
+  expect(state.absences.map(x=>[x.professionalId,x.startTime,x.endTime]).sort())
+    .toEqual([['t1','11:00','11:45'],['t2','09:30','10:15']]);
+  expect(state.classSchedules).toHaveLength(2);
+  expect(state.sessions).toHaveLength(1);
+  expect(requests).toHaveLength(0);
+  await page.reload();
+  await page.locator('[data-view="staffAbsences"]').click();
+  await expect(page.locator('[data-absence-summary]')).toContainText('Sin resolver: 2');
+});
+
+test('una sola entrada de navegación abre calendario y no expone un segundo formulario',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('horario-user-cleared','true'));
+  await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
+  await expect(page.locator('.nav-item[data-view="operations"]')).toHaveCount(0);
+  await expect(page.locator('.nav-item[data-view="staffAbsences"]')).toHaveCount(1);
+  await page.locator('[data-view="staffAbsences"]').click();
+  await expect(page.locator('#staffAbsenceForm')).toHaveCount(1);
+  await expect(page.locator('#absenceSolveForm')).toHaveCount(0);
+  await expect(page.locator('[data-absence-calendar]')).toBeVisible();
 });

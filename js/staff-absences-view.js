@@ -1,5 +1,7 @@
 // Local calendar: coverage is declared manually, never certified by the solver.
 import {buildAbsenceCalendar} from './staff-absences.js';
+import {scheduledAbsenceBlocks} from './absence-flow.js';
+import {renderJointAbsencePanel,bindJointAbsencePanel} from './joint-absence-view.js';
 import {escapeHtml as esc} from './utils.js';
 
 const caption=date=>date.slice(8,10)+'/'+date.slice(5,7)+'/'+date.slice(0,4);
@@ -43,7 +45,7 @@ function absenceMarkup(row,days){
 }
 
 export function renderStaffAbsences(root,{
-  state,month,filter='all',selectedDay='',onMonth,onFilter,onDay,onSave,onStatus,onDelete,onJoint=()=>{}
+  state,month,filter='all',selectedDay='',onMonth,onFilter,onDay,onSave,onStatus,onDelete,onJoint=()=>{},joint=null,onCalculate=()=>{}
 }){
   const overview=buildAbsenceCalendar(month,state.staffAbsences||[],state);
   const calendar=buildAbsenceCalendar(month,state.staffAbsences||[],state,{filter,selectedDay});
@@ -63,26 +65,8 @@ export function renderStaffAbsences(root,{
     '<span>Resueltas manualmente: <strong>'+overview.summary.resolved+'</strong></span>'+
     '<span>Docentes afectados: <strong>'+overview.summary.professionals+'</strong></span>'+
     '</div></div></section>'+
-    '<section class="card"><div class="card-header"><div><h2>Registrar ausencias simultáneas</h2>'+
-    '<small>Selecciona varios docentes. Cada registro se puede revisar independientemente.</small></div></div>'+
-    '<form id="staffAbsenceForm" class="card-body absence-form">'+
-    '<fieldset class="absence-staff-fieldset"><legend>Docentes ausentes</legend>'+
-    '<div class="absence-staff-list">'+professionals.map(row=>'<label>'+
-      '<input type="checkbox" name="professionalIds" value="'+esc(row.id)+'">'+
-      '<span>'+esc(row.nombre||row.id)+' · '+esc(row.tipo||'Docente')+'</span></label>'
-    ).join('')+'</div>'+
-    (professionals.length?'':'<p>Registra primero algún docente.</p>')+'</fieldset>'+
-    '<div class="absence-form-dates">'+
-    '<label>Desde <input type="date" name="fromDate" value="'+initial+'" required></label>'+
-    '<label>Hasta <input type="date" name="toDate" value="'+initial+'" required></label>'+
-    '<label>Hora inicio (opcional) <input type="time" name="startTime" step="900"></label>'+
-    '<label>Hora fin (opcional) <input type="time" name="endTime" step="900"></label>'+
-    '</div><p class="absence-guidance">Deja las horas vacías para jornada completa. No se repite semanalmente.</p>'+
-    '<div class="button-row"><button class="button button-primary" type="submit"'+
-    (professionals.length?'':' disabled')+'>Guardar ausencias</button></div>'+
-    '</form></section>'+
-    '<section class="card"><div class="card-header"><div><h2>Vista mensual y estado de cobertura</h2>'+
-    '<small>Selecciona un día para ver sus ausencias o filtra las pendientes.</small></div></div>'+
+    '<section class="card"><div class="card-header"><div><h2>1. Elige la fecha en el calendario</h2>'+
+    '<small>Selecciona primero un día. Después elige los docentes y las franjas afectadas.</small></div></div>'+
     '<div class="card-body"><div class="absence-calendar-toolbar">'+
     '<button type="button" class="button" data-absence-prev>← Anterior</button>'+
     '<h3 data-absence-month>'+esc(calendar.monthLabel)+'</h3>'+
@@ -96,6 +80,39 @@ export function renderStaffAbsences(root,{
     ['L','M','X','J','V','S','D'].map(x=>'<span>'+x+'</span>').join('')+'</div>'+
     '<div class="absence-month-grid" data-absence-calendar>'+
     calendar.days.map(day=>dayMarkup(day,calendar.selectedDay)).join('')+'</div>'+
+    '</div></section>'+
+    '<section class="card"><div class="card-header"><div><h2>2. Docentes y franjas del horario previsto</h2>'+
+    '<small>Puedes seleccionar uno o varios docentes. Al elegir franjas, cada docente muestra su propio horario previsto.</small></div></div>'+
+    '<form id="staffAbsenceForm" class="card-body absence-form">'+
+    '<fieldset class="absence-staff-fieldset"><legend>Docentes ausentes</legend>'+
+    '<div class="absence-staff-list">'+professionals.map(row=>'<label>'+
+      '<input type="checkbox" name="professionalIds" value="'+esc(row.id)+'">'+
+      '<span>'+esc(row.nombre||row.id)+' · '+esc(row.tipo||'Docente')+'</span></label>'
+    ).join('')+'</div>'+
+    (professionals.length?'':'<p>Registra primero algún docente.</p>')+'</fieldset>'+
+    '<div class="absence-form-dates">'+
+    '<label>Desde <input type="date" name="fromDate" value="'+initial+'" required></label>'+
+    '<label>Hasta <input type="date" name="toDate" value="'+initial+'" required></label>'+
+    '</div><div class="absence-form-dates" data-absence-manual-hours hidden>'+
+    '<label>Hora inicio <input type="time" name="startTime" step="900"></label>'+
+    '<label>Hora fin <input type="time" name="endTime" step="900"></label>'+
+    '</div>'+
+    '<fieldset class="absence-staff-fieldset"><legend>Tipo de ausencia</legend>'+
+    '<div class="absence-mode-options">'+
+    '<label><input type="radio" name="absenceMode" value="full" checked> Jornada completa</label>'+
+    '<label><input type="radio" name="absenceMode" value="schedule"> Elegir sesiones del horario previsto</label>'+
+    '<label><input type="radio" name="absenceMode" value="manual"> Horario manual</label>'+
+    '</div></fieldset>'+
+    '<div data-absence-planned-slots hidden></div>'+
+    '<p class="absence-guidance">Para elegir sesiones concretas, selecciona una sola fecha. '+
+    'En períodos de varios días puedes elegir jornada completa u horas manuales para todos los días.</p>'+
+    '<div class="button-row">'+
+    '<button class="button button-primary" type="submit" name="saveAction" value="calculate"'+
+    (professionals.length?'':' disabled')+'>Guardar y calcular cobertura</button>'+
+    '<button class="button" type="submit" name="saveAction" value="save"'+
+    (professionals.length?'':' disabled')+'>Guardar ausencias</button></div>'+
+    '</form></section>'+
+    '<section class="card"><div class="card-body">'+
     '<div class="absence-list-header"><h3>'+
     (calendar.selectedDay?'Ausencias del '+caption(calendar.selectedDay):'Registros del mes')+'</h3>'+
     (calendar.selectedDay?'<button type="button" class="button" data-absence-clear-day>Ver todo el mes</button>':'')+
@@ -104,25 +121,81 @@ export function renderStaffAbsences(root,{
       '<div class="empty-state">No hay ausencias para esta selección.</div>')+
     '</div>'+
     (calendar.selectedDay&&entries.length?
-      '<div class="absence-joint-action"><p>Estas ausencias se evaluarán juntas. Los apoyos PT/AL necesitan revisión separada.</p>'+
-      '<button type="button" class="button button-primary" data-absence-prepare-joint>'+
-      'Revisar cobertura conjunta de este día</button></div>':'')+
+      '<div class="absence-joint-action"><p>Las ausencias de este día se evalúan juntas, '+
+      'incluidos los apoyos PT/AL que el motor conectado pueda resolver.</p>'+
+      '<button type="button" class="button" data-absence-prepare-joint>'+
+      'Ver evaluación conjunta de este día</button></div>':'')+
     '</div></section>'+
-    '<section class="card"><div class="card-body"><h3>Simulación conjunta sin aplicación</h3>'+
-    '<p>El calendario permite preparar un cálculo conjunto de ausencias de la fecha. La Operativa diaria calcula solo sustituciones de clases ordinarias; el resultado no se aplica ni marca las ausencias como resueltas automáticamente.</p>'+
+    (joint?.plan&&calendar.selectedDay?
+      renderJointAbsencePanel({
+        date:calendar.selectedDay,plan:joint.plan,assessment:joint.assessment,
+        status:joint.status,result:joint.result,state,adapter:joint.adapter,
+        connected:joint.connected,adapterReady:joint.adapterReady,
+        embedded:true
+      }):'')+
+    '<section class="card"><div class="card-body"><h3>Cobertura provisional y sin aplicación</h3>'+
+    '<p>Al guardar y calcular se pide confirmación antes de sincronizar el centro y crear un borrador remoto. Solo se calcula el primer día seleccionado, aunque se registren varios días. Las propuestas nunca se aplican ni marcan ausencias como resueltas.</p>'+
     '</div></section></div>';
 
-  root.querySelector('#staffAbsenceForm')?.addEventListener('submit',async event=>{
+  const form=root.querySelector('#staffAbsenceForm');
+  const planned=form?.querySelector('[data-absence-planned-slots]');
+  const updateMode=()=>{
+    const mode=form.querySelector('[name="absenceMode"]:checked')?.value||'full';
+    const from=form.querySelector('[name="fromDate"]').value;
+    const to=form.querySelector('[name="toDate"]').value;
+    const selected=form.querySelectorAll('[name="professionalIds"]:checked');
+    const saved=new Map([...form.querySelectorAll('[data-planned-slot]')]
+      .map(node=>[node.dataset.plannedFor+'\u0000'+node.value,node.checked]));
+    form.querySelector('[data-absence-manual-hours]').hidden=mode!=='manual';
+    planned.hidden=mode!=='schedule';
+    if(mode!=='schedule')return;
+    if(from!==to){
+      planned.innerHTML='<p class="absence-guidance">Para seleccionar sesiones concretas, '+
+        'elige el mismo día en «Desde» y «Hasta».</p>';
+      return;
+    }
+    planned.innerHTML=selected.length?[...selected].map(node=>{
+      const person=professionals.find(p=>p.id===node.value);
+      const blocks=scheduledAbsenceBlocks(state,node.value,from);
+      return '<fieldset class="absence-planned-group" data-planned-group="'+esc(node.value)+'">'+
+        '<legend>'+esc(person?.nombre||node.value)+'</legend>'+
+        (blocks.length?blocks.map(block=>{
+          const token=node.value+'\u0000'+block.key;
+          const checked=saved.has(token)?saved.get(token):true;
+          return '<label><input type="checkbox" data-planned-slot data-planned-for="'+
+            esc(node.value)+'" value="'+esc(block.key)+'"'+(checked?' checked':'')+'>'+
+            '<span><strong>'+esc(block.start)+'–'+esc(block.end)+'</strong> · '+
+            esc(block.label)+'</span></label>';
+        }).join(''):'<p class="absence-guidance">No hay sesiones previstas para este '+
+          'docente en la fecha elegida. Escoge jornada completa u horas manuales.</p>')+
+        '</fieldset>';
+    }).join(''):'<p class="absence-guidance">Selecciona primero algún docente.</p>';
+  };
+  form?.querySelectorAll('[name="professionalIds"],[name="absenceMode"],'+
+    '[name="fromDate"],[name="toDate"]').forEach(node=>
+    node.addEventListener('change',updateMode));
+  form?.addEventListener('submit',async event=>{
     event.preventDefault();
     const data=new FormData(event.currentTarget);
+    const selectedSlots={};
+    for(const node of form.querySelectorAll('[data-planned-slot]:checked')){
+      (selectedSlots[node.dataset.plannedFor]||=[]).push(node.value);
+    }
     await onSave({
       professionalIds:data.getAll('professionalIds').map(String),
-      fromDate:String(data.get('fromDate')||''),toDate:String(data.get('toDate')||''),
-      startTime:String(data.get('startTime')||''),endTime:String(data.get('endTime')||'')
+      fromDate:String(data.get('fromDate')||''),
+      toDate:String(data.get('toDate')||''),
+      startTime:String(data.get('startTime')||''),
+      endTime:String(data.get('endTime')||''),
+      mode:String(data.get('absenceMode')||'full'),
+      selectedSlots,
+      calculate:event.submitter?.value==='calculate'
     });
   });
+  bindJointAbsencePanel(root,{onDate:onDay,onSolve:onCalculate});
   root.querySelector('[data-absence-prepare-joint]')?.addEventListener('click',()=>{
     onJoint(calendar.selectedDay);
+    root.querySelector('[data-joint-absence-panel]')?.scrollIntoView({behavior:'smooth',block:'start'});
   });
   root.querySelector('[data-absence-prev]')?.addEventListener('click',()=>onMonth(-1));
   root.querySelector('[data-absence-next]')?.addEventListener('click',()=>onMonth(1));

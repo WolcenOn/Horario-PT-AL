@@ -34,7 +34,8 @@ test('del calendario se prepara un cálculo conjunto sin llamar al backend ni al
   await expect(page.locator('[data-absence-entry]')).toHaveCount(2);
   await page.locator('[data-absence-prepare-joint]').click();
   await expect(page.locator('[data-joint-absence-panel]')).toBeVisible();
-  await expect(page.locator('#pageTitle')).toHaveText('Operativa diaria');
+  await expect(page.locator('#pageTitle')).toHaveText('Calendario y cobertura de ausencias');
+  await expect(page.locator('#absenceSolveForm')).toHaveCount(0);
   await expect(page.locator('[data-joint-absence-count]')).toContainText('Ausencias en la fecha: 2');
   await expect(page.locator('[data-joint-absence-table] tbody tr')).toHaveCount(2);
   await expect(page.locator('[data-joint-absence-solve]')).toBeDisabled();

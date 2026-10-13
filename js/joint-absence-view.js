@@ -14,7 +14,7 @@ function statusText(status){
 
 export function renderJointAbsencePanel({
   date='',plan=null,assessment=null,result=null,status=null,state,adapter=null,
-  connected=false,adapterReady=false
+  connected=false,adapterReady=false,embedded=false
 }){
   const professors=new Map((state?.professionals||[]).map(x=>[x.id,x.nombre||x.id]));
   const records=plan?.details||[];
@@ -39,14 +39,14 @@ export function renderJointAbsencePanel({
   })[value]||'Sin evaluar';
   const calculate=Boolean(plan?.ready&&connected&&adapterReady);
   return '<section class="card operations-joint" data-joint-absence-panel>'+
-    '<div class="card-header"><div><h2>Ausencias simultáneas del calendario</h2>'+
+    '<div class="card-header"><div><h2>3. Revisar y calcular la cobertura conjunta</h2>'+
     '<small>GestorEscuela las evaluará juntas para no duplicar sustitutos. '+
     'La operación genera un borrador remoto, nunca aplica sustituciones.</small></div></div>'+
     '<div class="card-body">'+
-    '<form data-joint-absence-date class="operations-joint-date">'+
+    (embedded?'':'<form data-joint-absence-date class="operations-joint-date">'+
     '<label>Fecha <input type="date" name="jointDate" value="'+esc(date)+'" required></label>'+
     '<button class="button" type="submit">Ver ausencias registradas</button>'+
-    '</form>'+
+    '</form>')+
     (plan?'<p data-joint-absence-count>Ausencias en la fecha: <strong>'+
       records.length+'</strong> · Clases ordinarias identificadas: <strong>'+
       plan.classCount+'</strong> · Franjas PT/AL: <strong>'+plan.supportCount+'</strong></p>'+

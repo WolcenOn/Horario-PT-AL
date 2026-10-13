@@ -199,6 +199,22 @@ representativos de centros completos:
 calculables, hasta 500 ocupaciones y ocho salas candidatas por necesidad.
 No subir límites sin pruebas de rendimiento y memoria.
 
+## UX unificada del calendario de ausencias
+
+- Fecha en calendario mensual antes de seleccionar profesorado.
+- Uno o varios docentes; jornada completa, franja manual o selección
+  de **sesiones previstas por docente** (aula/PT/AL). Se conservan
+  bloques discontinuos como ausencias separadas, sin borrar el horario fijo.
+- «Guardar ausencias» permanece local. «Guardar y calcular cobertura»
+  guarda primero y solicita confirmación previa a sincronizar
+  la configuración académica y crear un borrador remoto del día elegido.
+- La navegación ofrece **una sola interfaz**; la entrada «Operativa diaria»
+  y su formulario individual antiguo dejan de mostrarse. El cálculo no
+  publica sustituciones ni cambia el estado de cobertura.
+- Rangos de varios días admiten jornada completa u horas manuales.
+  Tras guardar, el cálculo cubre solo la primera fecha; las restantes
+  requieren revisión diaria.
+
 ## Decisión de siguientes incrementos
 
 **Fase 2 actual:** completar correcciones guiadas de la revisión global de
