@@ -1,6 +1,7 @@
 import { COURSE_OPTIONS, configuredClassGroups, schoolStructureConfigured } from './education.js';
 import { curriculumCoverage, curriculumForCourse, curriculumSubjectsForCourse, normalizeCenterPlanningSettings, normalizeProfessionalProfile, PLANNING_MODES, RESPONSIBILITY_TYPES } from './center-planning.js';
 import { buildGlobalReadiness } from './global-scheduler.js';
+import { correctionForMessage } from './preview-diagnostics.js';
 import { saveCenterPlanningSettings } from './repository.js';
 import {
   formatRoomResources, parseRoomResources, parseTravelRules, ROOM_FEATURES
@@ -102,7 +103,9 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
   root.querySelectorAll('input[name="mode"]').forEach(input => input.addEventListener('change', () => {
     root.querySelectorAll('.center-mode-option').forEach(label => label.classList.toggle('is-selected', label.querySelector('input')?.checked));
   }));
-  root.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click', () => onNavigate(button.dataset.go)));
+  root.querySelectorAll('[data-go]').forEach(button => button.addEventListener(
+    'click', () => onNavigate(button.dataset.go,button.dataset.focusId||'')
+  ));
   root.querySelector('[data-generate-global]')?.addEventListener('click', async event => {
     if (event.currentTarget.disabled) return;
     try {
@@ -179,14 +182,31 @@ function renderCoverageCard(item) {
 }
 
 function renderReadinessItem(item) {
-  return `<div class="global-readiness-item ${item.ok ? 'is-ready' : 'is-pending'}"><span class="global-readiness-icon">${item.ok ? '✓' : '!'}</span><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.message)}</small></div></div>`;
+  const targets={
+    mode:{view:'centerPlanning',focusId:'mode',label:'Activar centro completo'},
+    structure:{view:'classSchedules',label:'Configurar clases'},
+    generation:{view:'centerPlanning',focusId:'globalStart',label:'Revisar jornada'},
+    curriculum:{view:'centerPlanning',focusId:'curriculum',label:'Revisar currículo'},
+    activities:{view:'centerActivities',label:'Revisar actividades'},
+    grid:{view:'temporalPatterns',label:'Revisar duración'},
+    patterns:{view:'temporalPatterns',label:'Revisar patrones'},
+    teachers:{view:'professionals',label:'Revisar profesorado'},
+    availability:{view:'professionals',label:'Revisar disponibilidad'},
+    workload:{view:'professionals',label:'Revisar carga docente'},
+    capacity:{view:'centerPlanning',focusId:'globalStart',label:'Revisar jornada'}
+  };
+  const action=item.ok?null:targets[item.id];
+  const button=action
+    ? `<button class="button" type="button" data-go="${action.view}" data-focus-id="${action.focusId||''}">${action.label} →</button>`
+    : '';
+  return `<div class="global-readiness-item ${item.ok ? 'is-ready' : 'is-pending'}"><span class="global-readiness-icon">${item.ok ? '✓' : '!'}</span><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.message)}</small>${button}</div></div>`;
 }
 
 function renderGlobalProposal(proposal) {
   if (!proposal) return '<div class="global-proposal-empty">Todavía no se ha calculado ninguna propuesta global.</div>';
   if (!proposal.ok) {
     const unresolved = proposal.unresolved || [];
-    return `<div class="global-proposal-result is-error"><strong>No se ha encontrado una propuesta completa</strong><span>${unresolved.length ? `${unresolved.length} elemento(s) no han podido colocarse.` : 'Revisa los requisitos pendientes antes de generar.'}</span>${unresolved.length ? `<div class="global-unresolved-list">${unresolved.slice(0,12).map(item => `<span>${escapeHtml(item.task ? `${taskLabel(item.task)} (${item.task.duration} min): ${item.reason}` : item.reason || item.conflict?.message || 'Sin hueco')}</span>`).join('')}${unresolved.length > 12 ? `<span>… y ${unresolved.length - 12} más</span>` : ''}</div>` : ''}<div class="button-row"><button class="button" type="button" data-discard-global>Descartar resultado</button></div></div>`;
+    return `<div class="global-proposal-result is-error"><strong>No se ha encontrado una propuesta completa</strong><span>${unresolved.length ? `${unresolved.length} elemento(s) no han podido colocarse.` : 'Revisa los requisitos pendientes antes de generar.'}</span>${unresolved.length ? `<div class="global-unresolved-list">${unresolved.slice(0,12).map(item => `<span>${escapeHtml(item.task ? `${taskLabel(item.task)} (${item.task.duration} min): ${item.reason}` : item.reason || item.conflict?.message || 'Sin hueco')}${(item.reason||item.conflict?.message) && correctionForMessage(item.reason||item.conflict?.message)? ` <button type="button" class="button" data-go="${correctionForMessage(item.reason||item.conflict?.message).view}" data-focus-id="${correctionForMessage(item.reason||item.conflict?.message).focusId||''}">${escapeHtml(correctionForMessage(item.reason||item.conflict?.message).label)} →</button>`:''}</span>`).join('')}${unresolved.length > 12 ? `<span>… y ${unresolved.length - 12} más</span>` : ''}</div>` : ''}<div class="button-row"><button class="button" type="button" data-discard-global>Descartar resultado</button></div></div>`;
   }
 
   const summary = summarizeGenerated(proposal.classSchedules || []);
