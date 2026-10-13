@@ -23,6 +23,9 @@ import {
 import { renderIntegrationView } from './integration-view.js';
 import { toJsonCompatible } from './gestor-serialization.js';
 import { requestWeeklyPreviewWithFallback } from './weekly-preview-client.js';
+import {
+  analyzeWeeklyReadiness, issuesFromMessages
+} from './preview-diagnostics.js';
 import { loadState } from './repository.js';
 import { applySharePackage, createSharePackage } from './sharing.js';
 import { showToast } from './ui.js';
@@ -245,11 +248,28 @@ async function openIntegration() {
         }
         await openIntegration();
       },
+      onNavigateCorrection:navigateToCorrection,
       onPreviewWeekly:async () => {
+        const readiness=analyzeWeeklyReadiness(state);
+        if(readiness.some(item=>item.severity==='error')) {
+          return {
+            text:'Corrige los errores de configuración indicados antes de consultar el motor. No se ha enviado ni aplicado ningún horario.',
+            issues:readiness
+          };
+        }
         const current = loadBackendSettings();
-        const {payload,result,warnings}=await requestWeeklyPreviewWithFallback(
-          state,current,previewWeeklyTimetable
-        );
+        let payload, result, warnings;
+        try {
+          ({payload,result,warnings}=await requestWeeklyPreviewWithFallback(
+            state,current,previewWeeklyTimetable
+          ));
+        } catch(error) {
+          const message=error?.message||'No se pudo calcular la vista previa.';
+          return {
+            text:'No se ha enviado ni aplicado ningún horario.',
+            issues:[...readiness,...issuesFromMessages([message],'error')]
+          };
+        }
         const titles = {
           feasible:'Se ha encontrado una propuesta válida para las materias incluidas.',
           infeasible:'Restricciones incompatibles: no existe una propuesta para estos datos.',
@@ -261,8 +281,7 @@ async function openIntegration() {
           `Necesidades PT/AL individuales: ${payload.supports?.length || 0}; sesiones adicionales colocadas: ${result.supports?.length || 0}.`,
           `Grupos PT/AL compartidos: ${payload.group_supports?.length || 0}; sesiones grupales colocadas: ${result.group_supports?.length || 0}.`,
           'No se ha aplicado ni sustituido ningún horario.',
-          ...((result.reasons || []).map(message => `• ${message}`)),
-          ...warnings.map(message => `Aviso: ${message}`)
+          'Los errores y avisos para revisar aparecen a continuación con acceso a su configuración.'
         ];
         if (result.status === 'feasible') {
           const dayNames = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes'];
@@ -281,7 +300,14 @@ async function openIntegration() {
             lines.push(`Y ${result.group_supports.length - 30} sesiones grupales más.`);
           }
         }
-        return lines.join('\n');
+        return {
+          text:lines.join('\n'),
+          issues:[
+            ...readiness,
+            ...issuesFromMessages(result.reasons || [],result.status==='infeasible'?'error':'warning'),
+            ...issuesFromMessages(warnings,'warning')
+          ]
+        };
       },
       onSync:async (_value, adapter) => {
         const current = loadBackendSettings();
@@ -306,6 +332,34 @@ async function openIntegration() {
     console.error(error);
     viewRoot.innerHTML = `<section class="card"><div class="empty-state"><strong>No se pudo abrir la sincronización</strong>${escapeText(error.message || 'Error inesperado.')}</div></section>`;
   }
+}
+
+// Only links to existing first-party sections from the hard-coded
+// diagnostics catalog. Never interpret arbitrary backend text as a URL.
+function navigateToCorrection(action) {
+  const allowed=new Set([
+    'centerPlanning','professionals','classSchedules','groups','sessions',
+    'temporalPatterns','centerActivities','automation'
+  ]);
+  if(!action || !allowed.has(action.view))return;
+  const button=document.querySelector(`.nav-item[data-view="${action.view}"]`);
+  if(!button)return;
+  button.click();
+  if(action.view!=='centerPlanning'||!action.focusId)return;
+  const selectors={
+    mode:'input[name="mode"]',
+    globalStart:'#globalStart',
+    curriculum:'.curriculum-course-list',
+    roomResources:'#roomResources',
+    travelRules:'#travelRules'
+  };
+  const selector=selectors[action.focusId];
+  if(!selector)return;
+  requestAnimationFrame(()=>{
+    const field=viewRoot.querySelector(selector);
+    field?.scrollIntoView({behavior:'smooth',block:'center'});
+    if(field?.matches('input,textarea,select'))field.focus({preventScroll:true});
+  });
 }
 
 async function resolveAuthContext(settings) {
