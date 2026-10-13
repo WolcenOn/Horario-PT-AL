@@ -89,8 +89,12 @@ sesiones vigentes. No duplicar sin más el calendario existente.
    conocidas; dos columnas por día con horario guardado y simulación del
    motor. Los apoyos existentes fijos se muestran también en la propuesta.
    No persistir resultados ni revelar identidades del alumnado.
-2. **Comparación con horario actual**: altas, cambios, coincidencias,
-   clases afectadas y minutos obligatorios, conservando ambas versiones.
+2. **Comparación con horario actual — segundo incremento implementado**:
+   franjas coincidentes, reprogramaciones inequívocas, altas y bajas;
+   escenarios ambiguos se presentan sin emparejamientos supuestos.
+   Incluye minutos de sesiones por clase y de PT/AL (fijos y adicionales),
+   sin confundir minutos del profesional con minutos por alumno.
+   No equivale todavía a verificar la cobertura curricular exigida.
 3. **Filtros y vistas**: clase, docente, especialista, recursos y
    alumnado anonimizado (nunca identificación personal en datos remotos).
 4. **Revisión accionable**: conflictos, ocupación de salas, cobertura,

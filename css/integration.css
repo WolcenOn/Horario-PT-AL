@@ -30,3 +30,21 @@
 .weekly-review-block small,.weekly-review-empty{font-size:.77rem;color:#475467}
 .weekly-review-empty{margin:5px 0}
 @media(max-width:540px){.weekly-review-columns{grid-template-columns:1fr}.weekly-review-column+.weekly-review-column{border:0;border-top:1px solid var(--line)}}
+
+/* Phase 2, increment 2: conservative, read-only weekly change summary. */
+.weekly-review-comparison{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:11px;background:#fafbfc}
+.weekly-review-comparison h4{margin:4px 0 1px;font-size:.9rem}
+.weekly-review-diff-metrics{display:flex;flex-wrap:wrap;gap:8px}
+.weekly-review-diff-metrics>span{padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:#fff;font-size:.78rem}
+.weekly-review-table-wrap{max-width:100%;overflow-x:auto}
+.weekly-review-table{width:100%;border-collapse:collapse;font-size:.79rem;text-align:left}
+.weekly-review-table th,.weekly-review-table td{padding:8px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+.weekly-review-table thead th{font-size:.73rem;color:var(--muted);font-weight:750}
+.weekly-review-table tbody th{font-weight:750}
+.weekly-review-uncertain{margin:0;padding:10px;border-left:3px solid #f79009;background:#fffaeb;color:#874000;font-size:.8rem}
+.weekly-review-change-label{font-size:.71rem!important;font-weight:750;letter-spacing:.02em}
+.weekly-review-block.is-change-same .weekly-review-change-label{color:#067647}
+.weekly-review-block.is-change-changed .weekly-review-change-label{color:#b54708}
+.weekly-review-block.is-change-new .weekly-review-change-label{color:#175cd3}
+.weekly-review-block.is-change-removed .weekly-review-change-label{color:#b42318}
+.weekly-review-block.is-change-fixed .weekly-review-change-label{color:#475467}

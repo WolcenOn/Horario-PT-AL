@@ -91,3 +91,52 @@ test('genera solo información derivada sin mutar el estado de planificación',(
   buildWeeklyPreviewCalendar(state,response);
   assert.equal(JSON.stringify({state,response}),before);
 });
+
+
+test('etiqueta diferencias y compara minutos semanales sin redondeo',()=>{
+  const c=current();
+  c.classSchedules.push({
+    grupoClase:'1ºA',materia:'Lengua Castellana y Literatura',
+    dia:'miercoles',inicio:'11:00',fin:'11:45'
+  });
+  const p=preview();
+  const projection=buildWeeklyPreviewCalendar(c,p);
+  assert.deepEqual(projection.comparison.changes,{
+    same:0,changed:1,added:1,removed:1,ambiguous:0
+  });
+  assert.deepEqual(projection.comparison.classes,[
+    {group:'1ºA',currentMinutes:105,proposedMinutes:105,
+      differenceMinutes:0,currentSessions:2,proposedSessions:2}
+  ]);
+  assert.deepEqual(projection.comparison.supports,[
+    {service:'PT',fixedMinutes:45,additionalMinutes:45,totalMinutes:90,
+      fixedSessions:1,additionalSessions:1},
+    {service:'AL',fixedMinutes:0,additionalMinutes:30,totalMinutes:30,
+      fixedSessions:0,additionalSessions:1}
+  ]);
+  const html=renderWeeklyPreviewCalendar(projection);
+  assert.match(html,/Minutos semanales por clase/);
+  assert.match(html,/Minutos de sesiones PT\/AL/);
+  assert.match(html,/data-weekly-review-change="changed"/);
+  assert.match(html,/data-weekly-review-change="removed"/);
+  assert.match(html,/data-weekly-review-change="new"/);
+  assert.match(html,/90 min/);
+});
+
+test('un apoyo fijo cuenta una sola vez al calcular totales',()=>{
+  const projection=buildWeeklyPreviewCalendar(current(),preview());
+  assert.equal(projection.comparison.supports[0].fixedMinutes,45);
+  assert.equal(projection.comparison.supports[0].totalMinutes,90);
+});
+
+test('los textos de comparación con material no fiable se escapan en HTML',()=>{
+  const c=current();
+  c.classSchedules.push({
+    grupoClase:'<script>alert(1)</script>',materia:'MAT',
+    dia:'lunes',inicio:'11:00',fin:'11:45'
+  });
+  const projection=buildWeeklyPreviewCalendar(c,preview());
+  const html=renderWeeklyPreviewCalendar(projection);
+  assert.ok(!html.includes('<script>'));
+  assert.ok(html.includes('&lt;script&gt;'));
+});

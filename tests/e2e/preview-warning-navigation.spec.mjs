@@ -101,3 +101,44 @@ test('la comparación semanal es solo lectura, anónima y no altera IndexedDB',a
   await expect(page.locator('[data-weekly-preview-calendar]')).not.toContainText('Nombre protegido');
   expect(result.after).toBe(result.before);
 });
+
+
+test('muestra diferencias y minutos sin modificar los horarios guardados',async({page})=>{
+  await page.goto('/');
+  const result=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    const {buildWeeklyPreviewCalendar,renderWeeklyPreviewCalendar}=
+      await import('/js/weekly-preview-calendar.js');
+    const state=await loadState();
+    const before=JSON.stringify(state);
+    const local={...state,students:[{id:'pupil-secret',nombre:'Private pupil'}],
+      classSchedules:[
+        {grupoClase:'1ºA',materia:'Matemáticas',dia:'lunes',inicio:'09:00',fin:'10:00'},
+        {grupoClase:'1ºA',materia:'Lengua Castellana y Literatura',dia:'martes',
+          inicio:'09:00',fin:'09:45'}
+      ],groups:[],sessions:[]};
+    const output={status:'feasible',preview_only:true,
+      lessons:[
+        {group_id:'1ºA',subject_id:'Matemáticas',weekday:0,
+          start_time:'09:00',end_time:'10:00'},
+        {group_id:'1ºA',subject_id:'Inglés',weekday:1,
+          start_time:'10:00',end_time:'10:45'}
+      ],
+      supports:[{service:'PT',weekday:2,start_time:'10:00',
+        end_time:'10:30',pupil_token:'private-token'}],group_supports:[]};
+    const view=document.createElement('div');
+    view.id='diff-review-fixture';
+    view.innerHTML=renderWeeklyPreviewCalendar(buildWeeklyPreviewCalendar(local,output));
+    document.body.append(view);
+    return {before,after:JSON.stringify(await loadState())};
+  });
+  const view=page.locator('#diff-review-fixture');
+  await expect(view.locator('[data-weekly-review-change="same"]')).toHaveCount(2);
+  await expect(view.locator('[data-weekly-review-change="removed"]')).toHaveCount(1);
+  await expect(view.locator('[data-weekly-review-change="new"]')).toHaveCount(2);
+  await expect(view.locator('[data-weekly-review-classes]')).toContainText('105 min');
+  await expect(view.locator('[data-weekly-review-supports]')).toContainText('30 min');
+  await expect(view).not.toContainText('Private pupil');
+  await expect(view).not.toContainText('private-token');
+  expect(result.after).toBe(result.before);
+});
