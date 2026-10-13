@@ -9,7 +9,7 @@ test('la optimización separa extracción, preferencias y excepciones de la jorn
   await expect(page.locator('#viewRoot > *').first()).toBeVisible();
   await page.evaluate(async () => {
     const db = await new Promise((resolve, reject) => {
-      const request = indexedDB.open('HorarioPTAL', 2);
+      const request = indexedDB.open('HorarioPTAL');
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
