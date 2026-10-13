@@ -163,3 +163,79 @@ test('la vista PT/AL solo presenta propuesta especializada sin marcar ausencia r
   });
   expect(after).toBe(before);
 });
+
+
+test('la sesión PT mixta y su aforo se revisan de principio a fin sin guardar cambios',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('horario-user-cleared','true'));
+  await page.goto('/');
+  await expect(page.locator('#viewRoot > *').first()).toBeVisible();
+  const original=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    const before=JSON.stringify(await loadState());
+    const {buildGestorEscuelaConfiguration}=await import('/js/gestor-adapter.js');
+    const {buildJointAbsenceRequest,assessJointAbsenceResult}
+      =await import('/js/joint-absence-coverage.js');
+    const {renderJointAbsencePanel}=await import('/js/joint-absence-view.js');
+    const availability=Object.fromEntries(
+      ['lunes','martes','miercoles','jueves','viernes'].map(day=>
+        [day,[{inicio:'09:00',fin:'13:00'}]]));
+    const state={
+      professionals:[
+        {id:'abs',nombre:'Profesional PT',tipo:'PT',activo:true,
+          disponibilidad:availability},
+        {id:'sub',nombre:'Especialista disponible',tipo:'PT',activo:true,
+          disponibilidad:availability},
+        {id:'ordinary',nombre:'Tutor',tipo:'DOCENTE',activo:true,
+          disponibilidad:availability}
+      ],
+      students:[
+        {id:'secret-A',nombre:'Pupil Secret A',grupoClase:'1ºA',activo:true},
+        {id:'secret-B',nombre:'Pupil Secret B',grupoClase:'2ºA',activo:true}
+      ],
+      groups:[{id:'ptg',nombre:'Grupo de apoyo',tipo:'PT',activo:true,
+        professionalId:'abs',studentIds:['secret-A','secret-B'],roomId:'SALA-1'}],
+      sessions:[{id:'sespt',groupId:'ptg',professionalId:'abs',dia:'lunes',
+        inicio:'09:00',fin:'10:00'}],
+      classSchedules:[{id:'cls',grupoClase:'1ºA',materia:'Matemáticas',
+        professionalId:'ordinary',dia:'lunes',inicio:'09:30',fin:'10:00'}],
+      staffAbsences:[{id:'abs1',professionalId:'abs',fromDate:'2026-10-12',
+        toDate:'2026-10-12',startTime:'',endTime:'',status:'pending',resolvedAt:''}],
+      schoolSettings:{structure:{configured:false}},
+      centerPlanningSettings:{generation:{start:'09:00',end:'13:00',
+        roomResources:[{roomId:'SALA-1',capacity:1,
+          windows:[{weekday:0,startTime:'09:00',endTime:'13:00'}]}]}}
+    };
+    const adapter=buildGestorEscuelaConfiguration(state);
+    const plan=buildJointAbsenceRequest(state,adapter,'2026-10-12');
+    const substitute=adapter.report.mappings.teachers.sub;
+    const session=plan.supportSessions[0];
+    const result={payload:{solution:{
+      substitutions:session.slots.map(slot=>({
+        activity_id:slot.activityId,slot_id:slot.slotId,
+        absent_teacher_id:session.teacherId,substitute_teacher_id:substitute
+      })),uncovered:[]
+    }}};
+    const assessment=assessJointAbsenceResult(plan,result);
+    const holder=document.createElement('div');holder.id='full-session-fixture';
+    holder.innerHTML=renderJointAbsencePanel({
+      date:'2026-10-12',plan,assessment,state,adapter,connected:false
+    });
+    document.body.append(holder);
+    return before;
+  });
+  const node=page.locator('#full-session-fixture');
+  await expect(node.locator('[data-joint-absence-solve]')).toBeDisabled();
+  await expect(node.locator('[data-joint-session-table] tbody tr')).toHaveCount(1);
+  await expect(node.locator('[data-joint-session-table]')).toContainText('09:00–10:00');
+  await expect(node.locator('[data-joint-session-table]')).toContainText('2 asistente(s)');
+  await expect(node.locator('[data-joint-session-table]')).toContainText('2 clases de origen');
+  await expect(node.locator('[data-joint-session-table]')).toContainText('supera el aforo');
+  await expect(node.locator('[data-joint-assessment]')).toContainText('Revisión incompleta');
+  await expect(node).not.toContainText('Pupil Secret');
+  await expect(node).not.toContainText('secret-A');
+  const after=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    return JSON.stringify(await loadState());
+  });
+  expect(after).toBe(original);
+});

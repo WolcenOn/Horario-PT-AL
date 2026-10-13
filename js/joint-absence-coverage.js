@@ -3,6 +3,7 @@
 // backends can ignore PT/AL: any omitted support stays UNKNOWN, not covered.
 import {dateNumber,absencesOnDate,normalizeStaffAbsence} from './staff-absences.js';
 import {timeToMinutes} from './utils.js';
+import {auditJointSupportSessions} from './joint-support-session-audit.js';
 
 const types=new Set(['CLASS','PT','AL']);
 const overlaps=(slot,absence)=>{
@@ -76,8 +77,12 @@ export function buildJointAbsenceRequest(state,adapter,date){
     specialties:[...(row.specialties||[])],
     canCoverGroups:[...(row.can_cover_groups||[])]
   }));
-  return {date,details,request,teacherCapabilities,
-    errors:[...new Set(errors)],
+  const supportSessions=Array.isArray(adapter?.report?.supportSessions)
+    ? adapter.report.supportSessions : null;
+  const roomResources=Array.isArray(state.centerPlanningSettings?.generation?.roomResources)
+    ? state.centerPlanningSettings.generation.roomResources : [];
+  return {date,details,request,teacherCapabilities,supportSessions,
+    roomResources,errors:[...new Set(errors)],
     count:source.length,
     classCount:allClassActivities.size,
     supportCount:details.reduce((n,row)=>n+row.supportCount,0),
@@ -166,11 +171,15 @@ export function assessJointAbsenceResult(plan,result){
   const classProposed=total(rows,'classProposed');
   const classUncovered=total(rows,'classUncovered');
   const classUnknown=total(rows,'classUnknown');
+  const sessionAudit=auditJointSupportSessions(plan,rows);
+  const unverifiedSessions=sessionAudit.available&&sessionAudit.entries.some(row=>
+    row.status!=='continuous'||row.reviewStatus!=='structural');
   return {
-    rows,proposed,uncovered,unknown,anomalies,
+    rows,proposed,uncovered,unknown,anomalies,sessionAudit,
     supportProposed,supportUncovered,supportUnknown,
     classProposed,classUncovered,classUnknown,
-    status:anomalies.length||unknown?'unknown':uncovered?'partial':'proposed',
+    status:anomalies.length||unknown||unverifiedSessions?'unknown':
+      uncovered?'partial':'proposed',
     message:'Cobertura propuesta, nunca aplicada ni confirmada.',
     hasSupportNeeds:plan.supportCount>0,
     hasPendingSupports:supportUncovered+supportUnknown>0

@@ -24,6 +24,19 @@ export function renderJointAbsencePanel({
     .map(([local,backend])=>[backend,professors.get(local)||local]));
   const coverageDetails=(assessment?.rows||[]).flatMap(row=>[
     ...(row.classDetails||[]),...(row.supportDetails||[])]);
+  const sessionAudit=assessment?.sessionAudit;
+  const sessions=sessionAudit?.entries||[];
+  const sessionStatus=value=>({
+    continuous:'Un mismo especialista propuesto',
+    fragmented:'Sesión fragmentada',
+    uncovered:'Sesión con minutos sin cubrir',
+    unknown:'Sin cobertura completa verificable'
+  })[value]||'Revisión pendiente';
+  const reviewStatus=value=>({
+    structural:'Estructura comprobada; pendiente de aprobación',
+    needsReview:'Faltan datos para comprobar los recursos',
+    conflict:'Conflictos o restricciones comprobadas'
+  })[value]||'Sin evaluar';
   const calculate=Boolean(plan?.ready&&connected&&adapterReady);
   return '<section class="card operations-joint" data-joint-absence-panel>'+
     '<div class="card-header"><div><h2>Ausencias simultáneas del calendario</h2>'+
@@ -83,6 +96,35 @@ export function renderJointAbsencePanel({
       ' sin verificar.</p>'+
       (assessment.hasSupportNeeds?'<p>Esta evaluación NO certifica los apoyos PT/AL '+
         'como aplicados, ni comprueba cobertura individual de todos sus participantes.</p>':'')+
+      (sessionAudit?.available?'<section data-joint-session-audit>'+
+      '<h4>Sesiones PT/AL completas · comprobación local</h4>'+
+      '<p>Sesiones afectadas: '+sessionAudit.summary.total+
+        ' · mismo especialista en todas las franjas: '+
+        sessionAudit.summary.continuous+' · fragmentadas: '+
+        sessionAudit.summary.fragmented+' · sin cubrir: '+
+        sessionAudit.summary.uncovered+' · indeterminadas: '+
+        sessionAudit.summary.unknown+'.</p>'+
+      (sessions.length?'<div class="table-wrap"><table data-joint-session-table>'+
+      '<thead><tr><th>Servicio y horario</th><th>Continuidad</th>'+
+      '<th>Recursos y agrupamiento</th><th>Revisión necesaria</th></tr></thead><tbody>'+
+      sessions.map(row=>'<tr data-joint-session-status="'+esc(row.status)+'">'+
+        '<th scope="row">'+esc(row.kind)+' · '+esc(row.start)+'–'+esc(row.end)+
+        ' · '+row.slotCount+' franja(s)</th>'+
+        '<td>'+esc(sessionStatus(row.status))+'</td>'+
+        '<td>'+esc(reviewStatus(row.reviewStatus))+' · '+
+        (row.roomId?'Sala '+esc(row.roomId):'Sin sala registrada')+' · '+
+        (row.participantCount===null?'Asistentes desconocidos':
+          row.participantCount+' asistente(s)')+
+        (row.mixedClassCount>1?' · '+row.mixedClassCount+' clases de origen':'')+'</td>'+
+        '<td>'+(row.issues.length?
+          '<ul>'+row.issues.map(issue=>'<li>'+esc(issue.message)+'</li>').join('')+'</ul>':
+          'Sin conflicto estructural detectado; falta confirmar atención individual.')+
+        '</td></tr>').join('')+'</tbody></table></div>':
+        '<p>Sin sesiones PT/AL identificadas para auditar.</p>')+
+      '<p>'+esc(sessionAudit.note)+'</p></section>':
+      '<p data-joint-session-unavailable>No hay metadatos locales suficientes para verificar '+
+      'la continuidad de las sesiones originales. Las franjas individuales '+
+      'no certifican una sesión completa.</p>')+
       (coverageDetails.length?'<div class="table-wrap"><table data-joint-coverage-details>'+
       '<thead><tr><th>Tipo</th><th>Franja</th><th>Clase / agrupamiento</th><th>Estado propuesto</th><th>Sustituto</th></tr></thead><tbody>'+
       coverageDetails.map(item=>'<tr>'+

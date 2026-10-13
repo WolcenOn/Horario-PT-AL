@@ -51,6 +51,9 @@ export function buildGestorEscuelaConfiguration(state) {
   if (!timeSlots.length) errors.push('No hay franjas horarias suficientes para construir la configuración del backend.');
 
   const activities = [];
+  // Session-level references remain LOCAL to the frontend report. Never
+  // serialize pupil identifiers or group membership to GestorEscuela.
+  const supportSessions = [];
   const occupiedTeacherSlots = new Set();
   const occupiedGroupSlots = new Set();
 
@@ -111,17 +114,41 @@ export function buildGestorEscuelaConfiguration(state) {
       .filter(Boolean)
       .map(value => normalize(value)))];
     const classId = studentClasses.length === 1 ? groupIdByClass.get(studentClasses[0]) || null : null;
-    for (const slot of slotsInside(session.inicio, session.fin, timeSlots)) {
-      const weekday = WEEKDAY.get(session.dia);
-      if (weekday == null) continue;
+    const weekday = WEEKDAY.get(session.dia);
+    if (weekday == null) continue;
+    const kind = supportGroup.tipo === 'PT' ? 'PT' : 'AL';
+    const slotList = slotsInside(session.inicio, session.fin, timeSlots);
+    const excluded = new Set(session.excludedStudentIds || []);
+    const enrolled = Array.isArray(supportGroup.studentIds)
+      ? supportGroup.studentIds.filter(id => studentById.has(id) && !excluded.has(id))
+      : null;
+    const classes = enrolled
+      ? new Set(enrolled.map(id => studentById.get(id)?.grupoClase).filter(Boolean))
+      : null;
+    const generation = state.centerPlanningSettings?.generation || {};
+    const roomId = String(session.aula || supportGroup.roomId ||
+      professional.supportRoomId || generation.supportRoomId || '').trim().slice(0,64);
+    supportSessions.push({
+      id:session.id,teacherId,weekday,kind,start:session.inicio,end:session.fin,
+      roomId,participantCount:enrolled?.length ?? null,
+      mixedClassCount:classes?.size ?? null,
+      requiredFeatures:Array.isArray(generation.supportRoomRequirements?.[kind])
+        ? [...generation.supportRoomRequirements[kind]] : [],
+      slots:slotList.map(slot=>({
+        slotId:slot.id,
+        activityId:activityId(kind==='PT'?'P':'A',session.id,weekday,slot.id),
+        start:slot.start,end:slot.end
+      }))
+    });
+    for (const slot of slotList) {
       const teacherSlotKey = `${teacherId}|${weekday}|${slot.id}`;
       if (occupiedTeacherSlots.has(teacherSlotKey)) warnings.push(`${professional.nombre} tiene un solapamiento local el ${session.dia} en ${slot.label}; se enviará al backend tal como está.`);
       occupiedTeacherSlots.add(teacherSlotKey);
       activities.push({
-        id:activityId(supportGroup.tipo === 'PT' ? 'P' : 'A', session.id, weekday, slot.id),
+        id:activityId(kind==='PT'?'P':'A', session.id, weekday, slot.id),
         weekday,
         slot_id:slot.id,
-        activity_type:supportGroup.tipo === 'PT' ? 'PT' : 'AL',
+        activity_type:kind,
         teacher_id:teacherId,
         group_id:classId,
         subject_id:null,
@@ -171,6 +198,8 @@ export function buildGestorEscuelaConfiguration(state) {
   return {
     configuration:{ groups, subjects, time_slots:timeSlots.map(({ start, end, ...slot }) => slot), teachers, activities },
     report:{
+      // Local-only metadata: not in configuration and not sent to the solver.
+      supportSessions,
       ready:dedupedErrors.length === 0,
       errors:dedupedErrors,
       warnings:dedupedWarnings,

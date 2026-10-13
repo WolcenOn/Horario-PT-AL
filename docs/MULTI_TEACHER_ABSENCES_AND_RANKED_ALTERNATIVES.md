@@ -3,7 +3,9 @@
 **Estado:** cálculo conjunto de clases y PT/AL incorporado en ramas de
 integración; la ampliación backend **no está desplegada**. La respuesta de
 servidores anteriores sigue marcando como desconocidos los apoyos que no
-resuelven. Ranking, verificación individual y aprobación pendientes.  
+resuelven. Se audita también **cada sesión completa**, con continuidad
+del especialista y recursos locales configurados. Ranking, verificación
+por participante, desplazamientos y aprobación pendientes.  
 **Fecha:** 13 de octubre de 2026.  
 **Ramas objetivo:** Horario-PT-AL/`integracion-gestor-escuela` y
 GestorEscuela/`integracion-horario-pt-al`, sin tocar `main`.
@@ -181,8 +183,13 @@ ya generada ni una regla legal universal.
 - [x] Clasificación conservadora por franja en frontend: PT/AL propuesto
       por especialista compatible, sin cubrir o sin verificar si la respuesta
       antigua omite el apoyo. Sin aplicar horarios ni cambiar estados.
-- [ ] Comprobar legalidad, aforo, desplazamientos y atención individual
-      PT/AL antes de declarar cobertura aplicada.
+- [x] Auditoría PT/AL **por sesión original completa**: continuidad de
+      sustituto entre franjas, cortes, dobles asignaciones, aforo,
+      equipamiento, horario y solapes de salas, donde los datos existen.
+      Se usan conteos agregados, no identidades de alumnado; el vínculo
+      local entre sesión y franjas no se envía al motor.
+- [ ] Comprobar la extracción individual, asistencia real, itinerarios
+      de especialistas y autorizaciones antes de declarar cobertura aplicada.
 - [ ] Confirmar/aplicar cada franja con control de versiones y trazabilidad
       diferenciada de la simple propuesta.
 - [ ] Probar escenarios de más semanas, vacaciones y zona horaria en E2E.
@@ -231,8 +238,9 @@ autorización. Cada paso requiere pruebas unitarias y navegador, privacidad,
 CI verde y comprobación de que `main` permanece intacta.
 
 **Orden recomendado desde el estado actual:** probar en centros ficticios
-el cálculo conjunto con PT/AL, varias clases, faltas y grupos mixtos;
-verificar cobertura individual, salas y desplazamientos. El backend ampliado
-solo se desplegará tras autorización expresa. Después: generar alternativas
-reales diferentes, construir un ranking explicable y abordar la aprobación
+varias ausencias simultáneas y PT/AL de grupos mixtos, aprovechando la
+auditoría ya implementada de sesiones completas y salas configuradas.
+Faltan controles por participante, extracción y desplazamientos.
+El backend ampliado solo se desplegará tras autorización expresa.
+Después: generar alternativas diferentes, ranking explicable y aprobación
 segura. Las propuestas no resuelven ausencias ni alteran el horario base.

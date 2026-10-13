@@ -19,7 +19,7 @@
 | 3 | Aprobación y aplicación controlada | **Pendiente** | Versiones, comprobación previa, confirmación, auditoría y recuperación |
 | 4 | Pruebas de centros completos | **Parcial** | Centros ficticios realistas y E2E de extremo a extremo |
 | 5 | Optimización y preparación de producción | **Pendiente** | Medición, equidad, recursos, seguridad y despliegue expresamente autorizado |
-| Transversal | Ausencias simultáneas y ranking | **Solver PT/AL y clases ampliado en integración; ranking pendiente** | Verificar sesiones y alumnado, despliegue backend autorizado y ranking de alternativas reales |
+| Transversal | Ausencias simultáneas y ranking | **Auditoría de sesiones PT/AL y solver ampliado en integración** | Cobertura individual y desplazamientos, backend sin desplegar, ranking y aprobación pendientes |
 
 ## Fase 1 — Consolidación de validación y corrección
 
@@ -125,8 +125,12 @@ sesiones vigentes. No duplicar sin más el calendario existente.
    grupo-clase único. **Este backend no se ha desplegado**: el frontend
    marca los apoyos omitidos por una versión anterior como «sin verificar».
    Una sustitución propuesta no certifica atención individual, desplazamientos,
-   aforos ni aplicación. Sigue pendiente obtener múltiples escenarios y su
-   ranking explicable sin compensar restricciones obligatorias.
+   aforos ni aplicación. El frontend ahora reconstruye **sesiones completas**
+   desde sus franjas atómicas, exige un mismo especialista durante toda la
+   sesión y audita sala, aforo, ventanas y equipamiento con datos locales.
+   Los datos faltantes se marcan «sin verificar», sin transmitir identidades
+   de alumnos a GestorEscuela. Siguen pendientes cobertura individual,
+   desplazamientos y ranking de alternativas auténticas.
    Diseño y pruebas previstas en
    [ausencias simultáneas y ranking](MULTI_TEACHER_ABSENCES_AND_RANKED_ALTERNATIVES.md).
 
@@ -203,9 +207,12 @@ asignaciones. En el frontend, cada franja de clase y apoyo se clasifica como
 propuesta, sin cubrir o sin verificar (también frente a servidores antiguos).
 **No se ha desplegado el nuevo backend** ni se aplica ninguna sustitución.
 Los planes remotos se calculan solo tras confirmación y quedan como borrador;
-las ausencias siguen pendientes hasta decisión humana. Próximos pasos:
-verificación de cobertura individual PT/AL, ensayos de centro completo,
-diversificación y ranking explicable.
+las ausencias siguen pendientes hasta decisión humana. Además, la vista
+ahora detecta sesiones PT/AL fragmentadas entre especialistas y problemas
+comprobables de sala, aforo, horario o equipamiento; no presupone recursos
+desconocidos. Sigue pendiente comprobar atención individual y
+desplazamientos. Próximos pasos: centros ficticios de prueba, cobertura
+por participante, diversificación y ranking explicable.
 
 **En paralelo:** verificar el primer anexo autonómico curricular e incluirlo
 sin inventar cargas horarias.
