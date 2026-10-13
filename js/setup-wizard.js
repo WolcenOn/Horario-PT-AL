@@ -154,7 +154,7 @@ export function renderSetupWizard(root, { state, onNavigate, onEditRecesses, onA
         <p class="eyebrow">Configuración inicial rápida</p>
         <h2>Comunidad y líneas del colegio</h2>
         <p>Genera una base editable: guarda el territorio, activa la planificación de centro completo y, si todavía no has configurado clases, crea Infantil y Primaria con el número general de líneas indicado.</p>
-        <small>La jornada, el currículo, los recreos y la referencia normativa quedan marcados para revisión. No se presentan como datos legales de la comunidad hasta disponer de un pack territorial versionado y verificado.</small>
+        <small>Elegir la comunidad no importa automáticamente las horas legales. Para aplicarlas, abre «Planificación académica» e importa un perfil curricular contrastado con su norma. La jornada y los recreos siguen pendientes de revisión.</small>
       </div>
       <div class="setup-quick-start-fields">
         <label><span>Comunidad / territorio</span><select name="territory" required><option value="">Seleccionar…</option>${TERRITORY_OPTIONS.map(option => `<option value="${escapeHtml(option)}" ${option === selectedTerritory ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select></label>

@@ -3,6 +3,7 @@ import { curriculumCoverage, curriculumForCourse, curriculumSubjectsForCourse, n
 import { buildGlobalReadiness } from './global-scheduler.js';
 import { correctionForMessage } from './preview-diagnostics.js';
 import { saveCenterPlanningSettings } from './repository.js';
+import { applyCurriculumProfile, parseCurriculumProfile } from './curriculum-profile-import.js';
 import {
   formatRoomResources, parseRoomResources, parseTravelRules, ROOM_FEATURES
 } from './weekly-location-rules.js';
@@ -37,6 +38,27 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
         <div class="form-field"><label for="territory">Territorio / administración</label><input id="territory" name="territory" value="${escapeHtml(settings.territory)}" placeholder="Comunidad autónoma / administración"></div>
         <div class="form-field"><label for="academicYear">Curso escolar</label><input id="academicYear" name="academicYear" value="${escapeHtml(settings.academicYear)}" placeholder="2026/27"></div>
         <div class="form-field"><label for="legalReference">Referencia normativa</label><input id="legalReference" name="legalReference" value="${escapeHtml(settings.legalReference)}" placeholder="Orden / decreto / resolución"></div>
+        <div class="form-field full">
+          <strong>Carga normativa de horas</strong>
+          <p class="field-hint">Elegir una comunidad o escribir una norma no introduce horas automáticamente: el proyecto no incluye todavía tablas legales verificadas para todos los territorios. Puedes importar un perfil contrastado con el anexo horario oficial y aplicarlo aquí. Las cifras se expresan en horas semanales, con cuartos de hora, y se convierten a minutos exactos.</p>
+          <details data-curriculum-import>
+            <summary>Importar y aplicar carga curricular de una norma</summary>
+            <div class="form-field">
+              <label for="curriculumProfileFile">Seleccionar archivo JSON (opcional)</label>
+              <input id="curriculumProfileFile" type="file" accept=".json,application/json">
+            </div>
+            <div class="form-field">
+              <label for="curriculumProfileJson">Perfil JSON: territorio, norma, cursos y horas</label>
+              <textarea id="curriculumProfileJson" rows="7" spellcheck="false" placeholder='{"territory":"Andalucía","legalReference":"Indica aquí la norma y anexo consultados","weeklyHours":{"1º":{"Matemáticas":1}}}'></textarea>
+              <small class="field-hint">El ejemplo solo muestra el formato; no son horas oficiales. Admite profileName, academicYear y sourceUrl (HTTPS). Usa exactamente los nombres de materias del formulario. Solo se guarda localmente tras pulsar «Aplicar».</small>
+            </div>
+            <div class="button-row">
+              <button type="button" class="button button-primary" data-apply-curriculum-profile>Validar y aplicar perfil</button>
+            </div>
+            <p data-curriculum-import-error role="alert" aria-live="polite"></p>
+          </details>
+          ${settings.curriculumSource?.kind==='imported'? `<small class="field-hint">Perfil importado: ${escapeHtml(settings.curriculumSource.territory)} · ${escapeHtml(settings.curriculumSource.legalReference)}. Puedes editar las horas manualmente; la normativa debe verificarse con su texto oficial.</small>` : ''}
+        </div>
       </div>
     </section>
 
@@ -100,6 +122,35 @@ export function renderCenterPlanning(root, { state, centerPlanningSettings, glob
     <div class="center-planning-actions"><button class="button button-primary" type="submit">Guardar configuración global</button></div>
   </form>`;
 
+  root.querySelector('#curriculumProfileFile')?.addEventListener('change', async event => {
+    const file=event.currentTarget.files?.[0];
+    if(!file)return;
+    const target=root.querySelector('#curriculumProfileJson');
+    const error=root.querySelector('[data-curriculum-import-error]');
+    if(file.size>60000){
+      error.textContent='El archivo supera el límite de 60 KB.';
+      return;
+    }
+    try { target.value=await file.text(); error.textContent=''; }
+    catch { error.textContent='No se ha podido leer el archivo seleccionado.'; }
+  });
+  root.querySelector('[data-apply-curriculum-profile]')?.addEventListener('click',async()=>{
+    const form=root.querySelector('#centerPlanningForm');
+    const error=root.querySelector('[data-curriculum-import-error]');
+    error.textContent='';
+    try{
+      const current=readSettings(form,settings);
+      const profile=parseCurriculumProfile(
+        root.querySelector('#curriculumProfileJson').value,current.territory
+      );
+      const existingCount=Object.values(current.curriculum).reduce(
+        (total,subjects)=>total+Object.keys(subjects).length,0
+      );
+      const message=`Se aplicarán ${profile.subjectCount} cargas de ${profile.courseCount} cursos de ${profile.territory}. ${existingCount?'Se sustituirá toda la carga curricular existente; ':' '}Los horarios de aula y sesiones PT/AL no cambiarán. Verifica la norma y sus cifras. ¿Continuar?`;
+      if(!window.confirm(message))return;
+      await onSave(normalizeCenterPlanningSettings(applyCurriculumProfile(current,profile)));
+    }catch(cause){error.textContent=cause.message||'No se ha podido aplicar el perfil.';}
+  });
   root.querySelectorAll('input[name="mode"]').forEach(input => input.addEventListener('change', () => {
     root.querySelectorAll('.center-mode-option').forEach(label => label.classList.toggle('is-selected', label.querySelector('input')?.checked));
   }));

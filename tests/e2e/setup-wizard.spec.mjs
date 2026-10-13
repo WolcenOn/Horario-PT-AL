@@ -50,3 +50,59 @@ test('la configuración rápida crea una base editable por comunidad y líneas s
   expect(saved.planning.territory).toBe('Andalucía');
   expect(saved.planning.curriculum).toEqual({});
 });
+
+
+test('la carga curricular importada se aplica a planificación y se conserva en IndexedDB',async({page})=>{
+  await page.goto('/');
+  await page.evaluate(async()=>{
+    const {resetDatabase}=await import('/js/db.js');
+    await resetDatabase();
+    localStorage.setItem('horario-user-cleared','true');
+  });
+  await page.reload();
+  await page.locator('.nav-item[data-view="setupWizard"]').click();
+  const quick=page.locator('[data-quick-start-form]');
+  await quick.locator('select[name="territory"]').selectOption('Andalucía');
+  await quick.getByRole('button',{name:'Crear base editable'}).click();
+  await page.locator('.nav-item[data-view="centerPlanning"]').click();
+  await expect(page.locator('#territory')).toHaveValue('Andalucía');
+  await expect(page.locator('[data-curriculum-course="1º"][data-curriculum-subject="Matemáticas"]')).toHaveValue('');
+  await page.locator('[data-curriculum-import] summary').click();
+  const sample={
+    territory:'Andalucía',
+    legalReference:'Norma de prueba · anexo contrastado (no oficial)',
+    profileName:'Perfil de ensayo',
+    academicYear:'2026/27',
+    weeklyHours:{'1º':{'Matemáticas':4.5,'Lengua Castellana y Literatura':5}}
+  };
+  await page.locator('#curriculumProfileJson').fill(JSON.stringify(sample));
+  page.once('dialog',dialog=>dialog.accept());
+  await page.locator('[data-apply-curriculum-profile]').click();
+  await expect(page.locator('[data-curriculum-course="1º"][data-curriculum-subject="Matemáticas"]')).toHaveValue('4.5');
+  await expect(page.locator('#legalReference')).toHaveValue(sample.legalReference);
+  const saved=await page.evaluate(async()=>{
+    const {get}=await import('/js/db.js');
+    return get('settings','centerPlanning');
+  });
+  expect(saved.curriculum['1º'].Matemáticas).toBe(270);
+  expect(saved.curriculum['1º']['Lengua Castellana y Literatura']).toBe(300);
+  expect(saved.curriculumSource.kind).toBe('imported');
+  expect(saved.legalReference).toBe(sample.legalReference);
+  await page.reload();
+  await page.locator('.nav-item[data-view="centerPlanning"]').click();
+  await expect(page.locator('[data-curriculum-course="1º"][data-curriculum-subject="Matemáticas"]')).toHaveValue('4.5');
+});
+
+test('un perfil territorial distinto no se aplica ni modifica la configuración local',async({page})=>{
+  await page.goto('/');
+  await page.locator('.nav-item[data-view="centerPlanning"]').click();
+  await page.locator('#territory').fill('Galicia');
+  await page.locator('[data-curriculum-import] summary').click();
+  await page.locator('#curriculumProfileJson').fill(JSON.stringify({
+    territory:'Andalucía',legalReference:'Referencia de ensayo',
+    weeklyHours:{'2º':{Matemáticas:3}}
+  }));
+  await page.locator('[data-apply-curriculum-profile]').click();
+  await expect(page.locator('[data-curriculum-import-error]')).toContainText('no coincide');
+  await expect(page.locator('[data-curriculum-course="2º"][data-curriculum-subject="Matemáticas"]')).toHaveValue('');
+});

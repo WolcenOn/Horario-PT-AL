@@ -69,6 +69,14 @@ export function normalizeCenterPlanningSettings(value) {
     territory:String(source.territory || '').trim(),
     academicYear:String(source.academicYear || '').trim(),
     legalReference:String(source.legalReference || '').trim(),
+    curriculumSource:source.curriculumSource?.kind==='imported'
+      ? {
+          kind:'imported',
+          territory:String(source.curriculumSource.territory||'').trim(),
+          legalReference:String(source.curriculumSource.legalReference||'').trim(),
+          sourceUrl:String(source.curriculumSource.sourceUrl||'').trim()
+        }
+      : null,
     generation:normalizeGlobalGeneration(source.generation),
     curriculum,
     subjectPatterns:normalizeSubjectPatterns(source.subjectPatterns),
