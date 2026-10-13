@@ -29,6 +29,7 @@ const issue=(message,severity,key)=>({message,severity,action:route(key)});
 export function correctionForMessage(message) {
   const text=normalize(message);
   // Specific diagnoses before more general class/professional hints.
+  if (/^.+\s\/\s.+:\srequiere\s\d+\smin/.test(text))return route('curriculum');
   if (/sala|room|aforo|equipamiento|accesib|espacio compartido/.test(text))return route('rooms');
   if (/desplazamiento|trayecto|ruta entre|ubicacion|ubicación/.test(text))return route('travel');
   if (/patr[oó]n|duraci[oó]n|d[ií]as permitidos|franja permitida|extracci[oó]n|asignaturas bloqueadas/.test(text))
