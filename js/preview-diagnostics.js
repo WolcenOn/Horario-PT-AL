@@ -89,6 +89,10 @@ export function analyzeWeeklyReadiness(state) {
     'error','curriculum'
   ));
   const roomById=new Map(generation.roomResources.map(room=>[room.roomId,room]));
+  const professionals=new Map(people.map(person=>[person.id,person]));
+  const activeGroups=(state.groups||[]).filter(group=>
+    group.activo!==false&&(group.tipo==='PT'||group.tipo==='AL')
+  );
   for(const service of ['PT','AL']){
     const required=generation.supportRoomRequirements?.[service]||[];
     if(!required.length)continue;
@@ -101,10 +105,41 @@ export function analyzeWeeklyReadiness(state) {
         'error','rooms'
       ));
     }
+    for(const group of activeGroups.filter(item=>item.tipo===service)){
+      const professional=professionals.get(group.professionalId);
+      const fixed=group.roomId||professional?.supportRoomId
+        ||(!generation.autoAssignSupportRooms?generation.supportRoomId:'');
+      if(!fixed)continue;
+      const room=roomById.get(fixed);
+      if(!room){
+        issues.push(issue(
+          `Apoyos ${service}: la sala obligatoria «${fixed}» no tiene ficha de equipamiento y aforo; debes inventariarla.`,
+          'error','rooms'
+        ));
+      }else if(!required.every(feature=>(room.features||[]).includes(feature))){
+        issues.push(issue(
+          `Apoyos ${service}: la sala «${fixed}» carece de alguna característica obligatoria. Revisa su ficha o la asignación del grupo.`,
+          'error','rooms'
+        ));
+      }
+    }
   }
   if(generation.autoAssignSupportRooms&&!generation.roomResources.length){
     issues.push(issue(
       'La asignación automática de salas está activa pero no hay salas con aforo configurado.',
+      'warning','rooms'
+    ));
+  }
+  if(generation.autoAssignSupportRooms&&generation.roomResources.length>8){
+    issues.push(issue(
+      'El motor solo recibe hasta ocho salas candidatas por apoyo; revisa la lista de salas y sus características para priorizar las adecuadas.',
+      'warning','rooms'
+    ));
+  }
+  if(generation.travelMinutes>0&&!generation.supportRoomId
+    &&!activeGroups.some(group=>group.roomId||professionals.get(group.professionalId)?.supportRoomId)){
+    issues.push(issue(
+      'Hay tiempo de desplazamiento configurado, pero ninguna ubicación PT/AL conocida. Indica la sala del centro, grupo o profesional para comprobar los traslados.',
       'warning','rooms'
     ));
   }
