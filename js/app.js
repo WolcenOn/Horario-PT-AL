@@ -383,9 +383,28 @@ function discardGlobalSchedule() {
   renderCurrentView();
 }
 
-function navigateFromCenterPlanning(target) {
-  currentView = target;
-  renderCurrentView();
+function navigateFromCenterPlanning(target,focusId='') {
+  // Dedicated sections are controlled by their own navigation handlers.
+  // Clicking the existing menu item preserves those controllers' state.
+  const menu=document.querySelector(`.nav-item[data-view="${target}"]`);
+  if(menu)menu.click();
+  else {
+    currentView=target;
+    renderCurrentView();
+  }
+  if(target!=='centerPlanning'||!focusId)return;
+  const selectors={
+    mode:'input[name="mode"]',
+    globalStart:'#globalStart',
+    curriculum:'.curriculum-course-list'
+  };
+  const selector=selectors[focusId];
+  if(!selector)return;
+  requestAnimationFrame(()=>{
+    const element=viewRoot.querySelector(selector);
+    element?.scrollIntoView({behavior:'smooth',block:'center'});
+    if(element?.matches('input,select,textarea'))element.focus({preventScroll:true});
+  });
 }
 
 async function generateAutomaticSchedule() {
