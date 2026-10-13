@@ -116,8 +116,9 @@ export function analyzeWeeklyPreviewAudit(state,payload,result,projection){
   const individualResults=sumBy(
     (result.supports||[]).map(row=>{
       const start=minutes(row.start_time),end=minutes(row.end_time);
-      return {request_id:row.request_id,duration:start!==null&&end!==null&&end>start
-        ?end-start:0};
+      const validSlot=Number.isInteger(row.weekday)&&row.weekday>=0&&row.weekday<=4&&
+        start!==null&&end!==null&&end>start&&start%15===0&&end%15===0;
+      return {request_id:row.request_id,duration:validSlot?end-start:0};
     }),
     row=>row.request_id
   );
@@ -160,7 +161,7 @@ export function analyzeWeeklyPreviewAudit(state,payload,result,projection){
   }
   const shortSubjects=curriculum.filter(x=>x.missing||x.surplus);
   const shortSupport=individual.filter(x=>x.missing||x.surplus);
-  const unknown=room.unknownRooms||room.unknownUnits||groupedRequests||
+  const unknown=!targets.size||room.unknownRooms||room.unknownUnits||groupedRequests||
     withoutTargets.length||unexpected.length||orphanIndividual||
     (payload.supports||[]).length!==individual.length;
   return {
