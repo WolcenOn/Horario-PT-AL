@@ -198,3 +198,22 @@ test('las entradas de clase, materia y sala se escapan y no se modifica el estad
   assert.ok(html.includes('&lt;script&gt;'));
   assert.equal(JSON.stringify(f),before);
 });
+
+
+test('un apoyo individual con franja inválida no se contabiliza como cubierto',()=>{
+  const f=fixture();
+  f.result.supports[0].start_time='10:07';
+  f.result.supports[0].end_time='10:37';
+  const p=inspect(f);
+  assert.equal(p.audit.individual.missingMinutes,30);
+  assert.equal(p.audit.summary.exactIndividual,0);
+});
+
+test('una solicitud sin demandas curriculares no certifica cobertura del centro',()=>{
+  const f=fixture();
+  f.payload.lessons=[];
+  f.result.lessons=[];
+  const p=inspect(f);
+  assert.equal(p.audit.summary.requestedSubjects,0);
+  assert.equal(p.audit.state,'partial');
+});
