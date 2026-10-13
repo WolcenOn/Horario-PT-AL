@@ -33,6 +33,16 @@ export function parseCurriculumProfile(raw,selectedTerritory='') {
   const sourceUrl=String(data.sourceUrl||'').trim();
   if(sourceUrl&&(sourceUrl.length>500||!/^https:\/\//i.test(sourceUrl)))
     throw new Error('El enlace de origen debe ser una dirección HTTPS.');
+  // Optional provenance: old hand-written JSON without versions remains valid.
+  const profileId=data.profileId===undefined?'':String(data.profileId).trim();
+  const version=data.version===undefined?'':String(data.version).trim();
+  if(Boolean(profileId)!==Boolean(version)||
+    (profileId&&!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(profileId))||
+    (version&&!/^\d{4}\.\d{1,3}$/.test(version)))
+    throw new Error('Indica un profileId y una version (AAAA.N) válidos.');
+  const effectiveFrom=data.effectiveFrom===undefined?'':String(data.effectiveFrom).trim();
+  if(effectiveFrom&&!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom))
+    throw new Error('effectiveFrom debe estar en formato AAAA-MM-DD.');
   const curriculum={};
   let totalSubjects=0;
   for(const [course,subjects] of Object.entries(data.weeklyHours)){
@@ -53,7 +63,7 @@ export function parseCurriculumProfile(raw,selectedTerritory='') {
   if(totalSubjects===0)throw new Error('El perfil no contiene cargas horarias.');
   return {
     territory,legalReference:reference,profileName:profileName||`Perfil importado · ${territory}`,
-    academicYear,sourceUrl,curriculum,courseCount:Object.keys(curriculum).length,
+    academicYear,sourceUrl,profileId,version,effectiveFrom,curriculum,courseCount:Object.keys(curriculum).length,
     subjectCount:totalSubjects
   };
 }
@@ -71,7 +81,11 @@ export function applyCurriculumProfile(settings,profile) {
     curriculum:profile.curriculum,
     curriculumSource:{
       kind:'imported',territory:profile.territory,legalReference:profile.legalReference,
-      sourceUrl:profile.sourceUrl||''
+      sourceUrl:profile.sourceUrl||'',
+      profileId:profile.profileId||'',
+      version:profile.version||'',
+      effectiveFrom:profile.effectiveFrom||'',
+      modified:false
     }
   };
 }

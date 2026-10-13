@@ -76,3 +76,35 @@ test('admite materias y cursos de infantil con nombres de catálogo',()=>{
   }});
   assert.equal(profile.curriculum['Infantil 3 años']['Crecimiento en Armonía'],135);
 });
+
+
+test('conserva procedencia normada y estado personalizado tras normalizar',()=>{
+  const versioned={...example(),profileId:'es-example-primaria',
+    version:'2026.1',effectiveFrom:'2026-09-01'};
+  const saved=normalizeCenterPlanningSettings(applyCurriculumProfile(
+    normalizeCenterPlanningSettings({}),parse(versioned)
+  ));
+  assert.equal(saved.curriculumSource.version,'2026.1');
+  assert.equal(saved.curriculumSource.profileId,'es-example-primaria');
+  const modified=normalizeCenterPlanningSettings({
+    ...saved,curriculum:{'1º':{Matemáticas:240}},
+    curriculumSource:{...saved.curriculumSource,modified:true}
+  });
+  assert.equal(modified.curriculumSource.modified,true);
+  assert.equal(modified.curriculumSource.version,'2026.1');
+});
+
+test('los perfiles manuales antiguos no necesitan ID ni versión',()=>{
+  const saved=normalizeCenterPlanningSettings(applyCurriculumProfile(
+    normalizeCenterPlanningSettings({}),parse(example())
+  ));
+  assert.equal(saved.curriculumSource.kind,'imported');
+  assert.equal(saved.curriculumSource.version,'');
+});
+
+test('rechaza IDs o versiones incompletos o malformados',()=>{
+  assert.throws(()=>parse({...example(),profileId:'test'}),/profileId/);
+  assert.throws(()=>parse({...example(),version:'2026.1'}),/profileId/);
+  assert.throws(()=>parse({...example(),profileId:'../escape',version:'2026.1'}),/profileId/);
+  assert.throws(()=>parse({...example(),profileId:'es-example',version:'latest'}),/profileId/);
+});

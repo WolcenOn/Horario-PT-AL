@@ -74,7 +74,11 @@ export function normalizeCenterPlanningSettings(value) {
           kind:'imported',
           territory:String(source.curriculumSource.territory||'').trim(),
           legalReference:String(source.curriculumSource.legalReference||'').trim(),
-          sourceUrl:String(source.curriculumSource.sourceUrl||'').trim()
+          sourceUrl:String(source.curriculumSource.sourceUrl||'').trim(),
+          profileId:String(source.curriculumSource.profileId||'').trim(),
+          version:String(source.curriculumSource.version||'').trim(),
+          effectiveFrom:String(source.curriculumSource.effectiveFrom||'').trim(),
+          modified:source.curriculumSource.modified===true
         }
       : null,
     generation:normalizeGlobalGeneration(source.generation),
