@@ -4,7 +4,8 @@
 const sameSlot=(before,after)=>before.context===after.context&&
   before.label===after.label&&before.day===after.day&&
   before.start===after.start&&before.end===after.end&&
-  (!before.teacherId||!after.teacherId||before.teacherId===after.teacherId);
+  (!before.teacherId||!after.teacherId||before.teacherId===after.teacherId)&&
+  (!before.room||!after.room||before.room===after.room);
 
 const sameSubject=(before,after)=>before.context&&before.label&&
   before.context===after.context&&before.label===after.label;

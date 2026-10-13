@@ -9,7 +9,7 @@ import {
   analyzeWeeklyReadiness, correctionForMessage, issuesFromMessages
 } from './preview-diagnostics.js';
 import { escapeHtml } from './utils.js';
-import { renderWeeklyPreviewCalendar } from './weekly-preview-calendar.js';
+import { bindWeeklyPreviewCalendarFilters,renderWeeklyPreviewCalendar } from './weekly-preview-calendar.js';
 
 export function renderIntegrationView(root, {
   state,
@@ -532,6 +532,7 @@ function renderWeeklyPreviewResult(node,report,onNavigateCorrection) {
     +renderIssues('Errores que debes corregir',report?.issues?.filter(item=>item.severity==='error'),'error')
     +renderIssues('Avisos y posibles ajustes',report?.issues?.filter(item=>item.severity!=='error'),'warning');
   bindCorrectionLinks(node,onNavigateCorrection);
+  bindWeeklyPreviewCalendarFilters(node,report?.calendar);
 }
 
 function scenarioStatusLabel(value) {

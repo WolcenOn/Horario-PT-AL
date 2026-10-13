@@ -97,8 +97,14 @@ sesiones vigentes. No duplicar sin más el calendario existente.
    Incluye minutos de sesiones por clase y de PT/AL (fijos y adicionales),
    sin confundir minutos del profesional con minutos por alumno.
    No equivale todavía a verificar la cobertura curricular exigida.
-3. **Filtros y vistas**: clase, docente, especialista, recursos y
-   alumnado anonimizado (nunca identificación personal en datos remotos).
+3. **Filtros y vistas — primer incremento implementado**: filtros combinables
+   por clase, docente y sala en el calendario y en sus resúmenes, sin nuevas
+   llamadas al backend ni escrituras en IndexedDB. Los apoyos propuestos se
+   vinculan a su docente y clases mediante las referencias anónimas de
+   `payload`, sin mostrar tokens de alumnado. Las franjas sin una asignación
+   conocida no se atribuyen a un docente, clase o sala de forma especulativa.
+   Quedan pendientes vistas avanzadas por recurso y revisión individual
+   anonimizada de coberturas, sin identidad del menor.
 4. **Revisión accionable**: conflictos, ocupación de salas, cobertura,
    pendientes y mensajes `feasible`, `infeasible` o `unknown`
    claramente diferenciados.

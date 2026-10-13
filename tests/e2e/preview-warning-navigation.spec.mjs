@@ -142,3 +142,71 @@ test('muestra diferencias y minutos sin modificar los horarios guardados',async(
   await expect(view).not.toContainText('private-token');
   expect(result.after).toBe(result.before);
 });
+
+
+test('los filtros de clase, profesional y sala cambian solo la vista; limpiar restaura minutos',async({page})=>{
+  await page.goto('/');
+  const result=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    const {buildWeeklyPreviewCalendar,renderWeeklyPreviewCalendar,
+      bindWeeklyPreviewCalendarFilters}=await import('/js/weekly-preview-calendar.js');
+    const snapshot=JSON.stringify(await loadState());
+    const sample={
+      professionals:[{id:'teacher-1',nombre:'Docente A'},
+        {id:'teacher-2',nombre:'Docente B'}],
+      students:[{id:'secret-child',nombre:'Nombre reservado',grupoClase:'1A'}],
+      groups:[{id:'group-pt',tipo:'PT',professionalId:'teacher-2',
+        studentIds:['secret-child'],roomId:'Sala PT'}],
+      sessions:[{groupId:'group-pt',dia:'lunes',inicio:'10:00',fin:'10:30'}],
+      classSchedules:[
+        {grupoClase:'1A',materia:'Matemáticas',professionalId:'teacher-1',
+          aula:'Aula 1',dia:'lunes',inicio:'09:00',fin:'10:00'},
+        {grupoClase:'2B',materia:'Inglés',professionalId:'teacher-2',
+          aula:'Aula 2',dia:'martes',inicio:'09:00',fin:'09:45'}
+      ]
+    };
+    const payload={lessons:[
+      {group_id:'1A',subject_id:'Matemáticas',teacher_id:'teacher-1',room_id:'Aula 1'},
+      {group_id:'2B',subject_id:'Inglés',teacher_id:'teacher-2',room_id:'Aula 2'}
+    ],supports:[{request_id:'req-1',group_id:'1A',teacher_id:'teacher-2',
+      pupil_token:'private-token'}]};
+    const response={status:'feasible',preview_only:true,lessons:[
+      {group_id:'1A',subject_id:'Matemáticas',teacher_id:'teacher-1',
+        weekday:0,start_time:'09:00',end_time:'10:00'},
+      {group_id:'2B',subject_id:'Inglés',teacher_id:'teacher-2',
+        weekday:1,start_time:'10:00',end_time:'10:45'}
+    ],supports:[{service:'PT',request_id:'req-1',weekday:1,
+      start_time:'11:00',end_time:'11:30',room_id:'Sala PT'}],group_supports:[]};
+    const projection=buildWeeklyPreviewCalendar(sample,response,payload);
+    const fixture=document.createElement('div');
+    fixture.id='filters-preview-fixture';
+    fixture.innerHTML=renderWeeklyPreviewCalendar(projection);
+    document.body.append(fixture);
+    bindWeeklyPreviewCalendarFilters(fixture,projection);
+    return {snapshot,after:JSON.stringify(await loadState())};
+  });
+  const view=page.locator('#filters-preview-fixture');
+  await expect(view.locator('[data-weekly-filter="classGroup"]')).toHaveCount(1);
+  await expect(view.locator('[data-weekly-filter="teacherId"]')).toContainText('Docente A');
+  await expect(view.locator('[data-weekly-filter="room"]')).toContainText('Sala PT');
+  await expect(view.locator('[data-weekly-review-block]')).toHaveCount(7);
+  await view.locator('[data-weekly-filter="classGroup"]').selectOption('1A');
+  await expect(view.locator('[data-weekly-review-block]')).toHaveCount(5);
+  await view.locator('[data-weekly-filter="teacherId"]').selectOption('teacher-2');
+  await expect(view.locator('[data-weekly-review-block]')).toHaveCount(3);
+  await view.locator('[data-weekly-filter="room"]').selectOption('Sala PT');
+  await expect(view.locator('[data-weekly-review-block]')).toHaveCount(3);
+  await expect(view.locator('[data-weekly-review-classes]')).toContainText('Sin materias para comparar');
+  await expect(view.locator('[data-weekly-review-supports]')).toContainText('60 min');
+  await expect(view).not.toContainText('Nombre reservado');
+  await expect(view).not.toContainText('private-token');
+  await view.locator('[data-weekly-filter-reset]').click();
+  await expect(view.locator('[data-weekly-review-block]')).toHaveCount(7);
+  await expect(view.locator('[data-weekly-review-classes]')).toContainText('2B');
+  expect(result.snapshot).toBe(result.after);
+  const saved=await page.evaluate(async()=>{
+    const {loadState}=await import('/js/repository.js');
+    return JSON.stringify(await loadState());
+  });
+  expect(saved).toBe(result.snapshot);
+});
