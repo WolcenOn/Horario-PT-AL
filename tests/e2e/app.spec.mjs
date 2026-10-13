@@ -115,7 +115,7 @@ test('guarda y restaura una copia compartida de un escenario', async ({ page }) 
   await expect(page.getByText(/Versión 1 guardada en PostgreSQL/)).toBeVisible();
   await expect(page.locator('[data-restore-scenario-snapshot]')).toBeEnabled();
   expect(storedSnapshot?.payload?.format).toBe('horario-pt-al');
-  expect(storedSnapshot?.payload?.schemaVersion).toBe(5);
+  expect(storedSnapshot?.payload?.schemaVersion).toBe(6);
 
   await page.locator('[data-restore-scenario-snapshot]').click();
   await expect(page.locator('#toastRoot')).toContainText('Escenario cargado:');
