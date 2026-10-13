@@ -77,7 +77,8 @@ test('sin sala no presume la ubicación de las sesiones PT',()=>{
   state.centerPlanningSettings.generation.supportRoomId='';
   const {payload,warnings}=buildWeeklyPreviewRequest(state);
   assert.equal(payload.supports[0].room_id,undefined);
-  assert.ok(warnings.some(w=>w.includes('no se conoce la sala')));
+  assert.equal(payload.supports[0].location_id,undefined);
+  assert.ok(warnings.some(w=>w.includes('sin ubicación conocida')));
 });
 
 
