@@ -19,7 +19,7 @@
 | 3 | Aprobación y aplicación controlada | **Pendiente** | Versiones, comprobación previa, confirmación, auditoría y recuperación |
 | 4 | Pruebas de centros completos | **Parcial** | Centros ficticios realistas y E2E de extremo a extremo |
 | 5 | Optimización y preparación de producción | **Pendiente** | Medición, equidad, recursos, seguridad y despliegue expresamente autorizado |
-| Transversal | Ausencias simultáneas y ranking | **Calendario local inicial; cálculo y ranking pendientes** | Simulaciones temporales verificadas, varias alternativas comparables y clasificación explicable |
+| Transversal | Ausencias simultáneas y ranking | **Cálculo conjunto diario de clases en borrador; ranking pendiente** | Simulaciones temporales verificadas, varias alternativas comparables y clasificación explicable |
 
 ## Fase 1 — Consolidación de validación y corrección
 
@@ -193,12 +193,15 @@ No subir límites sin pruebas de rendimiento y memoria.
 conflictos/cobertura y su recalculado no destructivo. Conservar y comparar
 la propuesta semanal actual antes de permitir aplicación alguna.
 
-**Siguiente bloque transversal:** ya existe el calendario global y registro
-local de ausencias de varios docentes por fechas y horas, compatible con
-copias JSON. La marca «resuelta» exige confirmación humana: no indica cobertura
-verificada por el solver. A continuación: escenarios conjuntos de sustitución,
-cobertura parcial/total por franja y alternativas reales para ranking. La
-Operativa diaria actual solo acepta un docente por solicitud.
+**Siguiente bloque transversal:** el calendario global permite seleccionar
+una fecha y preparar el cálculo conjunto de todos los docentes ausentes,
+incluidos los marcados manualmente «resueltos» (siguen estando ausentes).
+GestorEscuela ya admite múltiples ausencias y genera un borrador de cobertura
+de **clases ordinarias** con desglose de sustituciones propuestas, sin cubrir
+y no verificables. La sincronización académica y el plan diario se actualizan
+en el backend solo con confirmación expresa; no se aplica ninguna propuesta,
+ni se modifica la cobertura manual. Queda pendiente cubrir también PT/AL,
+comparar alternativas auténticas y construir su ranking.
 
 **En paralelo:** verificar el primer anexo autonómico curricular e incluirlo
 sin inventar cargas horarias.

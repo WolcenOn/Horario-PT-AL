@@ -1,6 +1,6 @@
 # Ausencias simultáneas de profesorado y ranking de alternativas
 
-**Estado:** registro local y calendario mensual de ausencias múltiples implementados; simulación conjunta, ranking de alternativas y aplicación pendientes.  
+**Estado:** calendario global, cálculo conjunto diario de clases ordinarias y revisión de borradores implementados. PT/AL, ranking y aplicación segura pendientes.  
 **Fecha:** 13 de octubre de 2026.  
 **Ramas objetivo:** Horario-PT-AL/`integracion-gestor-escuela` y
 GestorEscuela/`integracion-horario-pt-al`, sin tocar `main`.
@@ -26,7 +26,7 @@ profesorado ni del alumnado.
 |---|---|---|
 | Disponibilidad semanal del personal | Existe `disponibilidad`, `bloqueosExternos` y `professionalCanWork` | Reutilizar para el control de disponibilidad permanente, no representar ahí una baja de fechas concretas |
 | Generador semanal | `buildWeeklyPreviewRequest` deriva materias y apoyo PT/AL de asignaciones y metas | Extender mediante una capa temporal validada, manteniendo la plantilla base |
-| GestorEscuela | La API semanal devuelve una respuesta `feasible`/`infeasible`/`unknown`, con una propuesta si la encuentra | No ofrece aún un conjunto de soluciones alternativas ni puntaje comparativo |
+| GestorEscuela | La API diaria `solve-academic` ya admite **varias ausencias** en una petición y evita asignar simultáneamente el mismo sustituto a dos clases | Actualmente trata como demanda de sustitución solo `CLASS` con grupo identificado. PT/AL no se cubre con esta respuesta. Devuelve una solución, no un ranking de varias soluciones |
 | Comparación y auditoría | Existen calendarios, filtros y diferencias de minutos, salas y docentes en modo vista previa | Reutilizar la revisión para mostrar cada escenario con idénticos criterios |
 | Aplicación de escenarios | La aplicación conjunta de un resultado del solver sigue pendiente de Fase 3 | No confundir el ranking con una aprobación |
 
@@ -164,9 +164,18 @@ ya generada ni una regla legal universal.
 - [x] Calendario mensual global con filtros pendiente/resuelta, vista por día,
       confirmación manual, reapertura, eliminación y respaldo JSON de ausencias.
 - [x] Pruebas de fechas imposibles, bisiestos, solapes, simultaneidad y límites.
-- [ ] Simulación de cobertura **conjunta** para todas las ausencias activas,
-      sin cambiar la disponibilidad semanal; capacidad de sustitución real.
-- [ ] Mostrar cobertura parcial y confirmación verificable por cada franja.
+- [x] Preparar una petición conjunta por fecha de todos los ausentes
+      registrados, con franjas según jornada completa/parcial y agrupación
+      de indisponibilidades por docente (incluidas ausencias con cobertura
+      confirmada manualmente: siguen estando ausentes).
+- [x] Calcular sustitución de clases ordinarias con el contrato diario ya
+      existente y mostrar propuesta, sin cubrir, desconocido y detalle por
+      franja. La ejecución requiere aceptación del usuario y guarda un
+      borrador remoto, nunca una aplicación automática.
+- [ ] Resolver PT/AL mediante contrato especializado, sin dar por cubiertas
+      sesiones que el solver diario excluye.
+- [ ] Confirmar/aplicar cada franja con control de versiones y trazabilidad
+      diferenciada de la simple propuesta.
 - [ ] Probar escenarios de más semanas, vacaciones y zona horaria en E2E.
 
 ### Paso B — Escenarios temporales sobre instantáneas
@@ -212,8 +221,8 @@ Trabajar en ramas de integración; nunca desplegar cambios del backend sin
 autorización. Cada paso requiere pruebas unitarias y navegador, privacidad,
 CI verde y comprobación de que `main` permanece intacta.
 
-**Orden recomendado desde el estado actual:** utilizar el calendario global
-(Paso A inicial), conectar el cálculo conjunto real de sustituciones y el
-estado por franja (Paso B); después generar alternativas múltiples,
-construir el ranking y abordar la aprobación segura. Nunca marcar como
-resuelta automáticamente una ausencia a partir de una simple propuesta.
+**Orden recomendado desde el estado actual:** probar el cálculo conjunto de
+clases en centros ficticios, extender cobertura a PT/AL y habilitar varias
+alternativas reales. Después añadir ranking explicable y aprobación segura.
+Las propuestas se guardan como borradores remotos tras confirmación previa,
+pero jamás resuelven ausencias ni alteran el horario base por sí solas.

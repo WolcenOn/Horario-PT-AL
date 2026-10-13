@@ -1,7 +1,12 @@
 import { backendConfigured } from './backend-service.js';
 import { escapeHtml } from './utils.js';
+import {renderJointAbsencePanel,bindJointAbsencePanel} from './joint-absence-view.js';
 
-export function renderOperationsView(root, { state, settings, adapter, status, result, onSolve }) {
+export function renderOperationsView(root, {
+  state,settings,adapter,status,result,onSolve,
+  jointDate='',jointPlan=null,jointStatus=null,jointResult=null,jointAssessment=null,
+  onJointDate=()=>{},onJointSolve=()=>{}
+}) {
   const configured = backendConfigured(settings);
   const ready = configured && adapter.report.ready;
   const activeProfessionals = (state.professionals || []).filter(item => item.activo !== false);
@@ -35,9 +40,15 @@ export function renderOperationsView(root, { state, settings, adapter, status, r
       </form>
     </section>
 
+    ${renderJointAbsencePanel({
+      date:jointDate,plan:jointPlan,assessment:jointAssessment,
+      result:jointResult,status:jointStatus,state,adapter,
+      connected:configured,adapterReady:adapter.report.ready
+    })}
     ${result ? renderResult(result, state, adapter) : `<section class="card"><div class="empty-state"><strong>Sin cálculo todavía</strong>El resultado del solver aparecerá aquí con cobertura, sustituto y alternativas.</div></section>`}
   </div>`;
 
+  bindJointAbsencePanel(root,{onDate:onJointDate,onSolve:onJointSolve});
   root.querySelector('#absenceSolveForm')?.addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.currentTarget;

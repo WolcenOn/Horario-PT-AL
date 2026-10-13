@@ -43,7 +43,7 @@ function absenceMarkup(row,days){
 }
 
 export function renderStaffAbsences(root,{
-  state,month,filter='all',selectedDay='',onMonth,onFilter,onDay,onSave,onStatus,onDelete
+  state,month,filter='all',selectedDay='',onMonth,onFilter,onDay,onSave,onStatus,onDelete,onJoint=()=>{}
 }){
   const overview=buildAbsenceCalendar(month,state.staffAbsences||[],state);
   const calendar=buildAbsenceCalendar(month,state.staffAbsences||[],state,{filter,selectedDay});
@@ -102,9 +102,14 @@ export function renderStaffAbsences(root,{
     '</div><div class="absence-entries" data-absence-entries>'+
     (entries.length?entries.map(row=>absenceMarkup(row,calendar.days)).join(''):
       '<div class="empty-state">No hay ausencias para esta selección.</div>')+
-    '</div></div></section>'+
-    '<section class="card"><div class="card-body"><h3>Próximo paso: sustituciones conjuntas</h3>'+
-    '<p>Este registro no genera ni aprueba sustituciones. La Operativa diaria actual calcula un docente por petición. Un resultado del solver no marca ausencias como resueltas automáticamente.</p>'+
+    '</div>'+
+    (calendar.selectedDay&&entries.length?
+      '<div class="absence-joint-action"><p>Estas ausencias se evaluarán juntas. Los apoyos PT/AL necesitan revisión separada.</p>'+
+      '<button type="button" class="button button-primary" data-absence-prepare-joint>'+
+      'Revisar cobertura conjunta de este día</button></div>':'')+
+    '</div></section>'+
+    '<section class="card"><div class="card-body"><h3>Simulación conjunta sin aplicación</h3>'+
+    '<p>El calendario permite preparar un cálculo conjunto de ausencias de la fecha. La Operativa diaria calcula solo sustituciones de clases ordinarias; el resultado no se aplica ni marca las ausencias como resueltas automáticamente.</p>'+
     '</div></section></div>';
 
   root.querySelector('#staffAbsenceForm')?.addEventListener('submit',async event=>{
@@ -115,6 +120,9 @@ export function renderStaffAbsences(root,{
       fromDate:String(data.get('fromDate')||''),toDate:String(data.get('toDate')||''),
       startTime:String(data.get('startTime')||''),endTime:String(data.get('endTime')||'')
     });
+  });
+  root.querySelector('[data-absence-prepare-joint]')?.addEventListener('click',()=>{
+    onJoint(calendar.selectedDay);
   });
   root.querySelector('[data-absence-prev]')?.addEventListener('click',()=>onMonth(-1));
   root.querySelector('[data-absence-next]')?.addEventListener('click',()=>onMonth(1));

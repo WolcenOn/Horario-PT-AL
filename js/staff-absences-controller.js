@@ -42,6 +42,9 @@ async function openCalendar(){
         void openCalendar();
       },
       onDay:date=>{selectedDay=date;void openCalendar();},
+      onJoint:date=>document.dispatchEvent(new CustomEvent(
+        'horario:joint-absences-date',{detail:{date}}
+      )),
       onSave:async input=>{
         if(working)return;
         working=true;

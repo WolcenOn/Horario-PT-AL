@@ -42,3 +42,15 @@
 .absence-status.is-resolved{color:#067647}
 @media(max-width:750px){.absence-day{min-height:70px}.absence-day-count{display:none}.absence-calendar-chip{font-size:.57rem}.absence-entry{align-items:stretch;flex-direction:column}.absence-entry-actions{justify-content:flex-start;justify-items:start}}
 @media(max-width:480px){.absence-calendar-chip{display:none}.absence-day{min-height:47px}.absence-day-number{font-size:.76rem}.absence-day.has-pending{border-color:#f79009}.absence-day.is-selected{outline-offset:-1px}}
+
+/* Joint daily cover review: all results are unapproved and read-only. */
+.absence-joint-action{margin:1rem 0 0;padding:1rem;border:1px solid var(--line,#dde2e8);border-radius:.7rem;background:#f5f8fc}
+.absence-joint-action p{font-size:.83rem;margin:0 0 .65rem;line-height:1.4}
+.operations-joint .card-body{display:grid;gap:.8rem}
+.operations-joint-date{display:flex;gap:.8rem;align-items:end;flex-wrap:wrap}
+.operations-joint-date label{display:grid;gap:.3rem;font-weight:650;font-size:.82rem}
+.operations-joint-date input{border:1px solid var(--line,#dde2e8);border-radius:.5rem;padding:.52rem}
+.operations-joint [data-joint-support-warning]{border:1px solid #e5ac51;border-radius:.6rem;background:#fffbeb;padding:.65rem;font-size:.82rem}
+.operations-joint [data-joint-assessment]{border:1px solid var(--line,#dde2e8);padding:.9rem;border-radius:.7rem;background:#f8fafc}
+.operations-joint [data-joint-assessment] p{font-size:.83rem;line-height:1.5}
+.operations-joint table{min-width:660px}
