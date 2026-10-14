@@ -84,6 +84,7 @@ export function buildJointAbsenceRequest(state,adapter,date){
     ? state.centerPlanningSettings.generation.roomResources : [];
   const localAudit=buildJointLocalAuditContext(state,adapter,date);
   return {date,details,request,teacherCapabilities,supportSessions,
+    slots:slots.map(slot=>({id:slot.id,start:slot.start,end:slot.end,label:slot.label})),
     roomResources,localAudit,errors:[...new Set(errors)],
     count:source.length,
     classCount:allClassActivities.size,

@@ -67,3 +67,33 @@
 [data-absence-planned-slots]:not([hidden]){display:grid;gap:.75rem}
 .staff-absences-view [hidden]{display:none!important}
 .staff-absences-view #staffAbsenceForm .button-row{display:flex;gap:.55rem;flex-wrap:wrap}
+
+/* Unified absence editing and local review of substitute choices */
+.absence-entry{flex-wrap:wrap}
+.absence-entry-actions{grid-template-columns:repeat(2,max-content);gap:.4rem}
+.absence-inline-edit{width:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.6rem;border-top:1px solid var(--line,#dde2e8);padding-top:.85rem}
+.absence-inline-edit[hidden]{display:none!important}
+.absence-inline-edit p{grid-column:1/-1;font-size:.82rem;margin:0}
+.absence-inline-edit label{display:grid;gap:.25rem;font-size:.8rem}
+.absence-inline-edit input{padding:.4rem;border:1px solid var(--line,#dde2e8);border-radius:.4rem;min-width:0}
+[data-draft-review] select{padding:.42rem;min-width:190px;max-width:100%;border:1px solid var(--line,#dde2e8);border-radius:.4rem}
+[data-draft-review] td small{display:block;margin-top:.3rem;color:var(--muted,#667085)}
+[data-draft-review] .absence-review-issue{color:#9a3412}
+[data-draft-approved]{padding:.6rem 0}
+#absence-print-sheet{display:none}
+@media print{
+  @page{size:A4 portrait;margin:13mm}
+  body.printing-absences{background:#fff!important;color:#111!important}
+  body.printing-absences > :not(#absence-print-sheet){display:none!important}
+  body.printing-absences #absence-print-sheet{display:block!important;font:11pt Arial,sans-serif!important;color:#111!important}
+  #absence-print-sheet h1{font-size:18pt;margin:0 0 10mm}
+  #absence-print-sheet p{font-size:9pt;margin:0 0 5mm}
+  #absence-print-sheet table{border-collapse:collapse;width:100%;table-layout:fixed}
+  #absence-print-sheet td,#absence-print-sheet th{border:1px solid #999;padding:6px;overflow-wrap:anywhere;text-align:left;vertical-align:top}
+  #absence-print-sheet thead{display:table-header-group}
+  #absence-print-sheet tr{break-inside:avoid}
+  #absence-print-sheet tr.absence-print-replacement td{border-top:3px solid #111;border-bottom:3px solid #111;background:#eee!important}
+  #absence-print-sheet tr.absence-print-replacement td:first-child{border-left:3px solid #111}
+  #absence-print-sheet tr.absence-print-replacement td:last-child{border-right:3px solid #111}
+  #absence-print-sheet tr.absence-print-replacement strong{font-weight:900;font-size:11.5pt}
+}

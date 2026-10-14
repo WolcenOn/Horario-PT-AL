@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-test('calendario global registra varias ausencias y muestra cobertura pendiente o confirmada manualmente',async({page})=>{
+test('calendario global registra varias ausencias, edita franjas y no confirma en la lista',async({page})=>{
   await page.addInitScript(()=>localStorage.setItem('horario-user-cleared','true'));
   await page.goto('/');
   await expect(page.locator('#viewRoot > *').first()).toBeVisible();
@@ -42,17 +42,29 @@ test('calendario global registra varias ausencias y muestra cobertura pendiente 
   const selectDay=page.locator('[data-absence-day="'+date+'"]');
   await selectDay.click();
   await expect(page.locator('[data-absence-entries] [data-absence-entry]')).toHaveCount(2);
+  await expect(page.locator('[data-absence-resolve]')).toHaveCount(0);
+  await expect(page.locator('[data-absence-reopen]')).toHaveCount(0);
+  await expect(page.locator('[data-absence-edit]')).toHaveCount(2);
+  await expect(page.locator('[data-absence-delete]')).toHaveCount(2);
+  await page.locator('[data-absence-edit]').first().click();
+  const edit=page.locator('[data-absence-edit-form]').first();
+  await expect(edit).toBeVisible();
+  await edit.locator('[name="startTime"]').fill('09:00');
+  await edit.locator('[name="endTime"]').fill('10:00');
   page.once('dialog',dialog=>dialog.accept());
-  await page.locator('[data-absence-resolve]').first().click();
-  await expect(page.locator('[data-absence-summary]')).toContainText('Sin resolver: 1');
-  await expect(page.locator('[data-absence-summary]')).toContainText('Resueltas manualmente: 1');
+  await edit.getByRole('button',{name:'Guardar corrección'}).click();
+  await expect(page.locator('[data-absence-summary]')).toContainText('Sin resolver: 2');
   await page.locator('[data-absence-filter]').selectOption('pending');
-  await expect(page.locator('[data-absence-entry]')).toHaveCount(1);
-  await page.locator('[data-absence-filter]').selectOption('all');
   await expect(page.locator('[data-absence-entry]')).toHaveCount(2);
   await page.reload();
   await page.locator('[data-view="staffAbsences"]').click();
-  await expect(page.locator('[data-absence-summary]')).toContainText('Resueltas manualmente: 1');
+  await expect(page.locator('[data-absence-summary]')).toContainText('Sin resolver: 2');
+  const corrected=await page.evaluate(async()=>{
+    const {getAll}=await import('/js/db.js');
+    return (await getAll('staffAbsences')).filter(x=>x.startTime==='09:00');
+  });
+  expect(corrected).toHaveLength(1);
+  expect(corrected[0].status).toBe('pending');
   const packageResult=await page.evaluate(async()=>{
     const {loadState}=await import('/js/repository.js');
     const {createSharePackage,validateSharePackage}=await import('/js/sharing.js');

@@ -258,3 +258,24 @@ certificación individual. El backend ampliado permanece sin desplegar hasta
 autorización expresa. Después: alternativas realmente distintas, ranking
 explicable y aprobación segura. Las propuestas no resuelven ausencias ni
 alteran el horario base.
+
+## Revisión interactiva del borrador e impresión
+
+La evaluación diaria permite escoger candidatos adicionales **solo si**
+el motor los ha evaluado como `SELECTED` o `VALID_ALTERNATIVE`,
+sin desplazar actividades y con los requisitos locales conocidos.
+Se compara su penalización como orientación, **no hay todavía un ranking
+de soluciones globales diferentes**. Los candidatos rechazados o con
+advertencia no son selecciones manuales ordinarias.
+
+La persona usuaria confirma cada franja, y cuando todas las coberturas
+son compatibles, confirma **localmente** el borrador para habilitar
+la hoja imprimible con horario completo del día. Los segmentos
+sustituidos se marcan con **borde grueso** y el nombre del sustituto.
+La revisión vive solo en memoria de la pestaña; no escribe en
+el horario de aula/PT/AL, no confirma un plan remoto, no actualiza
+estados de ausencias ni acredita la asistencia del alumnado.
+
+En la lista de ausencias del día quedan **Editar** y **Eliminar**.
+La edición de un registro de varios días modifica todo ese intervalo,
+revalida solapamientos y devuelve la cobertura a pendiente.

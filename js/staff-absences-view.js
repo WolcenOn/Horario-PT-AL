@@ -37,15 +37,25 @@ function absenceMarkup(row,days){
     (row.resolvedAt?'<small>Confirmación local del '+esc(row.resolvedAt.slice(0,10))+'</small>':'')+
     '</div><div class="absence-entry-actions">'+
     '<span class="absence-status '+badge(row)+'">'+label(row)+'</span>'+
-    (row.status==='pending'
-      ?'<button type="button" class="button" data-absence-resolve="'+esc(row.id)+'">Confirmar cobertura</button>'
-      :'<button type="button" class="button" data-absence-reopen="'+esc(row.id)+'">Reabrir</button>')+
-    '<button type="button" class="button button-danger" data-absence-delete="'+esc(row.id)+'">Eliminar</button>'+
-    '</div></article>';
+    '<button type="button" class="button" data-absence-edit="'+esc(row.id)+'">Editar ausencia</button>'+
+    '<button type="button" class="button button-danger" data-absence-delete="'+esc(row.id)+'">Eliminar ausencia</button>'+
+    '</div>'+
+    '<form class="absence-inline-edit" data-absence-edit-form="'+esc(row.id)+'" hidden>'+
+    '<p>Cambia la fecha o las franjas. Si este registro abarca varios días, se modifica todo el intervalo. '+
+    'Al editar se devuelve la cobertura a pendiente y se descarta la revisión anterior.</p>'+
+    '<label>Desde <input type="date" name="fromDate" value="'+esc(row.fromDate)+'" required></label>'+
+    '<label>Hasta <input type="date" name="toDate" value="'+esc(row.toDate)+'" required></label>'+
+    '<label>Desde la hora (vacío: jornada completa) <input type="time" name="startTime" step="900" value="'+esc(row.startTime||'')+'"></label>'+
+    '<label>Hasta la hora <input type="time" name="endTime" step="900" value="'+esc(row.endTime||'')+'"></label>'+
+    '<button class="button button-primary" type="submit">Guardar corrección</button>'+
+    '<button class="button" type="button" data-absence-cancel-edit>Cancelar</button>'+
+    '</form></article>';
 }
 
 export function renderStaffAbsences(root,{
-  state,month,filter='all',selectedDay='',onMonth,onFilter,onDay,onSave,onStatus,onDelete,onJoint=()=>{},joint=null,onCalculate=()=>{}
+  state,month,filter='all',selectedDay='',onMonth,onFilter,onDay,onSave,onDelete,
+  onEdit=()=>{},onJoint=()=>{},joint=null,onCalculate=()=>{},
+  onChoose=()=>{},onConfirm=()=>{},onApprove=()=>{},onPrint=()=>{}
 }){
   const overview=buildAbsenceCalendar(month,state.staffAbsences||[],state);
   const calendar=buildAbsenceCalendar(month,state.staffAbsences||[],state,{filter,selectedDay});
@@ -131,7 +141,7 @@ export function renderStaffAbsences(root,{
         date:calendar.selectedDay,plan:joint.plan,assessment:joint.assessment,
         status:joint.status,result:joint.result,state,adapter:joint.adapter,
         connected:joint.connected,adapterReady:joint.adapterReady,
-        embedded:true
+        embedded:true,draftReview:joint.draftReview
       }):'')+
     '<section class="card"><div class="card-body"><h3>Cobertura provisional y sin aplicación</h3>'+
     '<p>Al guardar y calcular se pide confirmación antes de sincronizar el centro y crear un borrador remoto. Solo se calcula el primer día seleccionado, aunque se registren varios días. Las propuestas nunca se aplican ni marcan ausencias como resueltas.</p>'+
@@ -192,7 +202,9 @@ export function renderStaffAbsences(root,{
       calculate:event.submitter?.value==='calculate'
     });
   });
-  bindJointAbsencePanel(root,{onDate:onDay,onSolve:onCalculate});
+  bindJointAbsencePanel(root,{
+    onDate:onDay,onSolve:onCalculate,onChoose,onConfirm,onApprove,onPrint
+  });
   root.querySelector('[data-absence-prepare-joint]')?.addEventListener('click',()=>{
     onJoint(calendar.selectedDay);
     root.querySelector('[data-joint-absence-panel]')?.scrollIntoView({behavior:'smooth',block:'start'});
@@ -203,10 +215,28 @@ export function renderStaffAbsences(root,{
   root.querySelectorAll('[data-absence-day]').forEach(b=>
     b.addEventListener('click',()=>onDay(b.dataset.absenceDay)));
   root.querySelector('[data-absence-clear-day]')?.addEventListener('click',()=>onDay(''));
-  root.querySelectorAll('[data-absence-resolve]').forEach(b=>
-    b.addEventListener('click',()=>onStatus(b.dataset.absenceResolve,'resolved')));
-  root.querySelectorAll('[data-absence-reopen]').forEach(b=>
-    b.addEventListener('click',()=>onStatus(b.dataset.absenceReopen,'pending')));
+  root.querySelectorAll('[data-absence-edit]').forEach(button=>
+    button.addEventListener('click',()=>{
+      const article=button.closest('[data-absence-entry]');
+      const form=article?.querySelector('[data-absence-edit-form]');
+      if(form)form.hidden=false;
+    }));
+  root.querySelectorAll('[data-absence-cancel-edit]').forEach(button=>
+    button.addEventListener('click',()=>{
+      const form=button.closest('[data-absence-edit-form]');
+      if(form)form.hidden=true;
+    }));
+  root.querySelectorAll('[data-absence-edit-form]').forEach(form=>
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();
+      const data=new FormData(form);
+      await onEdit(form.dataset.absenceEditForm,{
+        fromDate:String(data.get('fromDate')||''),
+        toDate:String(data.get('toDate')||''),
+        startTime:String(data.get('startTime')||''),
+        endTime:String(data.get('endTime')||'')
+      });
+    }));
   root.querySelectorAll('[data-absence-delete]').forEach(b=>
     b.addEventListener('click',()=>onDelete(b.dataset.absenceDelete)));
 }

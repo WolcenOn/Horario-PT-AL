@@ -1,7 +1,7 @@
 // One calendar-first workflow for one or many simultaneous staff absences.
 import {bulkPut} from './db.js';
 import {deleteStaffAbsence,loadState,saveStaffAbsence} from './repository.js';
-import {changeAbsenceCoverage,dateNumber,monthShift} from './staff-absences.js';
+import {dateNumber,monthShift,normalizeStaffAbsence,validateAbsenceCollection} from './staff-absences.js';
 import {createSelectedStaffAbsences} from './absence-flow.js';
 import {renderStaffAbsences} from './staff-absences-view.js';
 import {buildGestorEscuelaConfiguration} from './gestor-adapter.js';
@@ -14,10 +14,25 @@ import {
 } from './backend-service.js';
 import {showToast} from './ui.js';
 import {applyViewShell} from './view-shell.js';
+import {prepareDraftReview,selectDraftSubstitute,confirmDraftSlot,approveDraftForPrint}
+  from './absence-draft-review.js';
+import {renderReviewedDayPrint} from './absence-reviewed-print.js';
 
 const root=document.querySelector('#viewRoot');
 let month='',filter='all',selectedDay='',working=false,solving=false;
-let assessment=null,result=null,jointStatus=null;
+let assessment=null,result=null,jointStatus=null,review={},reviewSnapshot='';
+const fingerprint=plan=>JSON.stringify([
+  plan?.date,plan?.request,plan?.details,plan?.teacherCapabilities,
+  plan?.supportSessions,plan?.roomResources,plan?.localAudit
+]);
+function resetReview(){
+  assessment=null;result=null;jointStatus=null;review={};reviewSnapshot='';
+}
+async function refreshReview(){
+  const scroll=window.scrollY;
+  await openCalendar();
+  window.scrollTo(0,scroll);
+}
 const today=()=>{
   const d=new Date();
   return [String(d.getFullYear()).padStart(4,'0'),
@@ -27,7 +42,7 @@ const today=()=>{
 function openDay(date){
   if(dateNumber(date)===null)return;
   selectedDay=date;month=date.slice(0,7);filter='all';
-  assessment=null;result=null;jointStatus=null;
+  resetReview();
   void openCalendar();
 }
 document.addEventListener('click',event=>{
@@ -56,16 +71,18 @@ async function openCalendar(){
     const adapter=buildGestorEscuelaConfiguration(state);
     const settings=loadBackendSettings();
     const jointPlan=selectedDay?buildJointAbsenceRequest(state,adapter,selectedDay):null;
+    if(result&&fingerprint(jointPlan)!==reviewSnapshot)resetReview();
+    const draftReview=result?prepareDraftReview(jointPlan,result,review):null;
+    if(result)assessment=draftReview?.assessment||assessment;
     applyViewShell({view:'staffAbsences',title:'Calendario y cobertura de ausencias'});
     renderStaffAbsences(root,{
       state,month,filter,selectedDay,
       joint:{
-        plan:jointPlan,adapter,assessment,result,status:jointStatus,
+        plan:jointPlan,adapter,assessment,result,status:jointStatus,draftReview,
         connected:backendConfigured(settings),adapterReady:adapter.report.ready
       },
       onMonth:delta=>{
-        try{month=monthShift(month,delta);selectedDay='';assessment=null;
-          result=null;jointStatus=null;void openCalendar();}
+        try{month=monthShift(month,delta);selectedDay='';resetReview();void openCalendar();}
         catch(error){showToast(error.message,'error');}
       },
       onFilter:value=>{
@@ -73,13 +90,56 @@ async function openCalendar(){
         void openCalendar();
       },
       onDay:date=>{
-        if(!date){selectedDay='';assessment=null;result=null;jointStatus=null;void openCalendar();}
+        if(!date){selectedDay='';resetReview();void openCalendar();}
         else openDay(date);
       },
       onJoint:date=>{
         if(!selectedDay||selectedDay!==date)openDay(date);
       },
       onCalculate:()=>calculateJoint(),
+      onChoose:async(activityId,teacherId)=>{
+        if(!result||review.approved)return;
+        try{
+          review=selectDraftSubstitute(jointPlan,result,review,activityId,teacherId);
+          await refreshReview();
+        }catch(error){showToast(error.message,'error');await refreshReview();}
+      },
+      onConfirm:async activityId=>{
+        if(!result||review.approved)return;
+        try{
+          review=confirmDraftSlot(jointPlan,result,review,activityId);
+          await refreshReview();
+        }catch(error){showToast(error.message,'error');}
+      },
+      onApprove:async()=>{
+        if(!result||review.approved)return;
+        try{
+          const proposal=approveDraftForPrint(jointPlan,result,review);
+          if(!confirm('¿Confirmar esta revisión LOCAL del borrador para imprimir el horario? '+
+            'No se aplican sustituciones ni se marcan ausencias como resueltas. '+
+            'Comprueba por separado la atención individual de los apoyos PT/AL.'))return;
+          review=proposal;
+          await refreshReview();
+          showToast('Borrador revisado localmente y preparado para imprimir.');
+        }catch(error){showToast(error.message,'error');}
+      },
+      onPrint:()=>{
+        if(!result||!review.approved)return;
+        try{
+          const ready=prepareDraftReview(jointPlan,result,review);
+          if(!ready?.approved)throw Error('El borrador ya no es válido.');
+          document.querySelector('#absence-print-sheet')?.remove();
+          document.body.insertAdjacentHTML('beforeend',
+            renderReviewedDayPrint({date:selectedDay,state,adapter,plan:jointPlan,
+              review:ready}));
+          document.body.classList.add('printing-absences');
+          window.addEventListener('afterprint',()=>{
+            document.body.classList.remove('printing-absences');
+            document.querySelector('#absence-print-sheet')?.remove();
+          },{once:true});
+          window.print();
+        }catch(error){showToast(error.message,'error');}
+      },
       onSave:async input=>{
         if(working||solving)return;
         working=true;
@@ -90,29 +150,31 @@ async function openCalendar(){
           await bulkPut('staffAbsences',values);
           const date=input.fromDate;
           selectedDay=date;month=date.slice(0,7);filter='all';
-          assessment=null;result=null;jointStatus=null;
+          resetReview();
           await openCalendar();
           showToast(values.length+' registro(s) de ausencia guardados.');
           if(input.calculate)await calculateJoint();
         }catch(error){showToast(error.message||'No se pudo registrar la ausencia.','error');}
         finally{working=false;}
       },
-      onStatus:async(id,status)=>{
+      onEdit:async(id,changes)=>{
         if(working||solving)return;
-        const old=state.staffAbsences.find(row=>row.id===id);
-        if(!old)return;
-        if(status==='resolved'&&!confirm(
-          '¿Has comprobado personalmente que la cobertura de esta ausencia está resuelta? '+
-          'El motor no la ha verificado. Solo se actualiza el registro local.'
-        ))return;
-        if(status==='pending'&&!confirm('¿Volver a dejar pendiente esta ausencia?'))return;
+        const current=state.staffAbsences.find(row=>row.id===id);
+        if(!current)return;
         working=true;
         try{
-          await saveStaffAbsence(changeAbsenceCoverage(old,status));
+          const corrected=normalizeStaffAbsence({
+            ...current,...changes,status:'pending',resolvedAt:''
+          },{professionals:state.professionals});
+          validateAbsenceCollection(state.staffAbsences.filter(row=>row.id!==id)
+            .concat(corrected),{professionals:state.professionals});
+          if(!confirm('¿Guardar la corrección de la ausencia? La revisión del '+
+            'borrador quedará anulada y la cobertura volverá a pendiente.'))return;
+          await saveStaffAbsence(corrected);
+          resetReview();
           await openCalendar();
-          showToast(status==='resolved'?'Cobertura declarada resuelta manualmente.':
-            'Ausencia reabierta, pendiente de cobertura.');
-        }catch(error){showToast(error.message||'No se pudo actualizar.','error');}
+          showToast('Ausencia corregida. Revisa otra vez la cobertura.');
+        }catch(error){showToast(error.message||'No se pudo corregir.','error');}
         finally{working=false;}
       },
       onDelete:async id=>{
@@ -122,7 +184,7 @@ async function openCalendar(){
         working=true;
         try{
           await deleteStaffAbsence(id);
-          assessment=null;result=null;jointStatus=null;
+          resetReview();
           await openCalendar();
           showToast('Ausencia eliminada del registro.');
         }catch(error){showToast(error.message||'No se pudo eliminar.','error');}
@@ -156,7 +218,7 @@ async function calculateJoint(){
       'configuración académica con GestorEscuela y crear o actualizar un BORRADOR '+
       'de sustituciones para el día '+selectedDay+'? No se aplica ninguna '+
       'propuesta ni se cambia el estado de cobertura.'))return;
-    assessment=null;result=null;
+    resetReview();
     jointStatus={kind:'pending',message:'Calculando las ausencias conjuntas…'};
     await openCalendar();
     await pushAcademicConfiguration(settings,toJsonCompatible(adapter.configuration));
@@ -173,6 +235,7 @@ async function calculateJoint(){
       ...plan.request,expected_version:Number(existing.version)||undefined
     });
     assessment=assessJointAbsenceResult(plan,result);
+    review={};reviewSnapshot=fingerprint(plan);
     jointStatus={kind:'ok',message:'Borrador conjunto disponible para revisar, sin aplicar.'};
     showToast('Cálculo conjunto terminado. Revisa las clases y apoyos no cubiertos.');
   }catch(error){

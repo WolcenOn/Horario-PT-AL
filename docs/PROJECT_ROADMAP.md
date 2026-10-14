@@ -199,6 +199,29 @@ representativos de centros completos:
 calculables, hasta 500 ocupaciones y ocho salas candidatas por necesidad.
 No subir límites sin pruebas de rendimiento y memoria.
 
+## Revisión manual de alternativas y hoja imprimible diaria
+
+- Evaluación del borrador diario con **alternativas por actividad y franja**
+  ofrecidas por el motor, ordenadas por penalización. El selector muestra
+  el elegido y candidatos `VALID_ALTERNATIVE` compatibles; jamás permite
+  candidatos `REJECTED`, `WARNING_ALTERNATIVE`, con desplazamiento fijo o
+  no disponibles. No supone que sean distintas soluciones globales/ranking.
+- **Confirmar cobertura** junto a cada selector; revalida que ningún
+  sustituto cubre actividades simultáneas, exige compatibilidad PT/AL
+  y anula confirmaciones si se modifica la selección. Una aprobación
+  posterior del borrador permite la **impresión del horario diario**,
+  con bordes gruesos y nombres de sustitutos en las franjas afectadas.
+- Esta revisión y aprobación son **temporales en memoria del navegador**,
+  no se guardan ni se envían como cambios a GestorEscuela. No implican
+  cobertura aplicada, alumnado atendido ni ausencia marcada resuelta.
+  Al salir/recalcular o corregir ausencias se invalida la aprobación.
+- La lista «Ausencias del día» solo ofrece **Editar** (fechas y horas,
+  con validación y vuelta a pendiente) y **Eliminar**. Se retira
+  «Confirmar cobertura» de esa lista; las confirmaciones pertenecen
+  a la revisión de sustituciones.
+- La hoja de impresión incluye clases y apoyos registrados para la fecha,
+  no identidades de alumnado. La planificación oficial permanece intacta.
+
 ## UX unificada del calendario de ausencias
 
 - Fecha en calendario mensual antes de seleccionar profesorado.
