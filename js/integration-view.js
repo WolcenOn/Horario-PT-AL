@@ -297,7 +297,7 @@ function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured,
         <button class="button" type="submit">Crear centro y entrar</button>
       </form>
       <form id="backendPasswordResetRequestForm" class="integration-auth-panel">
-        <div><strong>Recuperar contraseña</strong><small>Te enviaremos un enlace de un solo uso si el correo corresponde a una cuenta.</small></div>
+        <div><strong>Recuperar contraseña</strong><small>Solo para cuentas registradas en GestorEscuela. El correo del perfil local de profesorado no crea ni vincula una cuenta. Si el envío de correo está configurado, recibirás un enlace temporal de un solo uso.</small></div>
         <div class="form-field"><label for="resetRequestEmail">Correo</label><input id="resetRequestEmail" name="email" type="email" autocomplete="email" required maxlength="320" placeholder="correo@centro.es"></div>
         <button class="button" type="submit">Enviar enlace de recuperación</button>
         <div class="integration-status" data-password-reset-request-status>La respuesta no revelará si el correo existe.</div>

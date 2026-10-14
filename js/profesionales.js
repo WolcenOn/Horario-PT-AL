@@ -16,10 +16,14 @@ import { showModal, setModalMessage } from './ui.js';
 import { sessionDuration } from './hours.js';
 import { effectiveAvailability, externalBlocksForDay, normalizeExternalBlocks } from './professional-availability.js';
 import {normalizeTeacherEmail} from './absence-email.js';
+import {auditTeacherAccountContacts,staffContactLabel} from './teacher-account-contacts.js';
 
 export function renderProfessionals(root, { state, onEdit, onDelete }) {
+  const accountContacts=auditTeacherAccountContacts(state.professionals);
+  const contactById=new Map(accountContacts.entries.map(row=>[row.id,row]));
   const rows = [...state.professionals].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(raw => {
     const prof = normalizeProfessionalProfile(raw);
+    const contact=contactById.get(prof.id);
     const profSessions = state.sessions.filter(s => (s.professionalId || state.groups.find(g=>g.id===s.groupId)?.professionalId) === prof.id);
     const used = profSessions.reduce((sum,s)=>sum+sessionDuration(s),0);
     const external = DAYS.flatMap(day => externalBlocksForDay(prof, day.id).map(block => `${day.label.slice(0,3)} ${block.centro} ${block.inicio}–${block.fin}`));
@@ -38,10 +42,11 @@ export function renderProfessionals(root, { state, onEdit, onDelete }) {
       <td>${functions.length ? `<div class="professional-external-summary">${functions.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : '—'}</td>
       <td>${formatDuration(prof.maxWeeklyMinutes || 0)}</td>
       <td>${external.length ? `<div class="professional-external-summary">${external.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : '—'}</td>
+      <td data-teacher-account-contact="${escapeHtml(contact?.status||'missing')}">${contact?.email?escapeHtml(contact.email):'—'}<small>${escapeHtml(staffContactLabel(contact?.status))}</small></td>
       <td class="table-actions"><button class="button" data-edit="${prof.id}" type="button">Editar</button><button class="button button-danger" data-delete="${prof.id}" type="button">Eliminar</button></td>
     </tr>`;
   }).join('');
-  root.innerHTML = `<section class="card"><div class="card-header"><div><h2>Profesorado del centro</h2><small>Perfiles, tutorías, especialidades, materias habilitadas, docencia fijada, funciones y disponibilidad.</small></div><span class="badge badge-neutral">${state.professionals.length} profesionales</span></div><div class="table-wrap"><table><thead><tr><th>Profesional</th><th>Tipo</th><th>Tutoría</th><th>Especialidad principal</th><th>Puede impartir</th><th>Docencia fijada</th><th>Funciones</th><th>Capacidad semanal</th><th>Otros centros</th><th>Acciones</th></tr></thead><tbody>${rows || `<tr><td colspan="10"><div class="empty-state"><strong>No hay profesorado</strong>Utiliza “Nuevo profesor” para comenzar.</div></td></tr>`}</tbody></table></div></section>`;
+  root.innerHTML = `<section class="card"><div class="card-header"><div><h2>Profesorado del centro</h2><small>Perfiles, tutorías, especialidades, materias habilitadas, docencia fijada, funciones y disponibilidad.</small></div><span class="badge badge-neutral">${state.professionals.length} profesionales</span></div><p class="absence-guidance" data-teacher-account-summary>Correos individuales registrados: ${accountContacts.summary.contactOnly} de ${accountContacts.summary.total}. Sin correo: ${accountContacts.summary.missing}; formato incorrecto: ${accountContacts.summary.invalid}; compartidos: ${accountContacts.summary.shared}. <strong>El correo de contacto no constituye una cuenta de acceso verificada.</strong> Es necesario activar una cuenta remota y acreditar el control del buzón antes de recuperar contraseñas.</p><div class="table-wrap"><table><thead><tr><th>Profesional</th><th>Tipo</th><th>Tutoría</th><th>Especialidad principal</th><th>Puede impartir</th><th>Docencia fijada</th><th>Funciones</th><th>Capacidad semanal</th><th>Otros centros</th><th>Correo y futuro acceso</th><th>Acciones</th></tr></thead><tbody>${rows || `<tr><td colspan="11"><div class="empty-state"><strong>No hay profesorado</strong>Utiliza “Nuevo profesor” para comenzar.</div></td></tr>`}</tbody></table></div></section>`;
   root.onclick = event => { const e=event.target.closest('[data-edit]'); const d=event.target.closest('[data-delete]'); if(e)onEdit(e.dataset.edit); if(d)onDelete(d.dataset.delete); };
 }
 
@@ -68,7 +73,7 @@ export function openProfessionalForm(professional, { state, onSave }) {
     title: professional ? 'Editar profesional' : 'Nuevo profesional',
     bodyHtml:`<div class="form-grid">
       <div class="form-field"><label for="nombre">Nombre *</label><input id="nombre" name="nombre" required value="${escapeHtml(current.nombre || '')}"></div>
-      <div class="form-field"><label for="teacherEmail">Correo electrónico profesional (opcional)</label><input id="teacherEmail" name="teacherEmail" type="email" autocomplete="email" maxlength="254" value="${escapeHtml(current.email||'')}" placeholder="nombre@centro.es"><small class="field-hint">Se guarda en los datos locales y en las copias JSON del proyecto. Sirve para preparar correos; no se envía al motor de sustituciones.</small></div>
+      <div class="form-field"><label for="teacherEmail">Correo electrónico profesional (opcional)</label><input id="teacherEmail" name="teacherEmail" type="email" autocomplete="email" maxlength="254" value="${escapeHtml(current.email||'')}" placeholder="nombre@centro.es"><small class="field-hint">Se guarda localmente y en las copias JSON para avisos. Puede reutilizarse para una cuenta personal solo cuando se cree la cuenta y se verifique el buzón. Modificarlo aquí NO crea, verifica ni cambia una cuenta ni habilita recuperar contraseñas.</small></div>
       <div class="form-field"><label for="tipo">Tipo *</label><select id="tipo" name="tipo">${PROFESSIONAL_TYPES.map(type => `<option value="${type}" ${current.tipo===type?'selected':''}>${type === 'DOCENTE' ? 'Docente ordinario' : type}</option>`).join('')}</select></div>
       <div class="form-field"><label for="supportRoomId">Sala habitual de apoyos (opcional)</label><input id="supportRoomId" name="supportRoomId" maxlength="64" value="${escapeHtml(current.supportRoomId||'')}" placeholder="Ej.: Sala AL"><small class="field-hint">La sala del grupo o de una sesión puede tener prioridad. Se usa solo para la vista previa semanal.</small></div>
       <div class="form-field"><label for="especialidad">Especialidad / puesto</label><input id="especialidad" name="especialidad" value="${escapeHtml(current.especialidad || '')}" placeholder="Primaria, Inglés, Música, PT…"></div>

@@ -199,6 +199,24 @@ representativos de centros completos:
 calculables, hasta 500 ocupaciones y ocho salas candidatas por necesidad.
 No subir límites sin pruebas de rendimiento y memoria.
 
+## Correo para futura recuperación de cuentas
+
+- Ya existe recuperación de contraseña en las ramas de integración de
+  **GestorEscuela** para cuentas remotas; su entrega efectiva requiere
+  servidor desplegado y proveedor de correo configurado.
+- Los correos guardados en **Profesorado** son contactos locales para
+  notificaciones. **No constituyen identidades verificadas** y editar
+  este dato no crea, vincula ni modifica ninguna cuenta.
+- Se muestra ahora en la tabla el estado local de contacto (sin correo,
+  formato no válido, correo compartido, contacto disponible sin cuenta
+  vinculada). Correos repetidos se advierten para evitar asociarlos
+  automáticamente a varias identidades personales.
+- Para poder usar el correo en recuperación: alta/invitación autorizada,
+  comprobación real de control del buzón, vínculo seguro entre docente
+  y cuenta, y cambio de correo remoto con reverificación.
+  La recuperación nunca puede autorizarse desde IndexedDB.
+- Detalle: [Correo docente y recuperación de cuentas](TEACHER_EMAIL_AND_ACCOUNT_RECOVERY.md).
+
 ## Preparación de correos del horario de sustituciones
 
 - La ficha de **Profesorado** permite registrar un correo profesional
