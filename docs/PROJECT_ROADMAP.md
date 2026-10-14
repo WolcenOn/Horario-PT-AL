@@ -199,6 +199,27 @@ representativos de centros completos:
 calculables, hasta 500 ocupaciones y ocho salas candidatas por necesidad.
 No subir límites sin pruebas de rendimiento y memoria.
 
+## Usuarios, invitaciones y permisos por centro
+
+- La rama de integración del backend incorpora un **directorio ADMIN
+  autenticado con Bearer** (`/schools/{school_id}/access-overview`)
+  con los miembros del centro, roles existentes y estados de invitación,
+  sin devolver tokens ni hashes. No se despliega todavía.
+- «Cuenta y sincronización» muestra «Usuarios y permisos»:
+  permisos propios para usuarios conectados, y el directorio solo para
+  Dirección si el servidor compatible está disponible. No crea invitaciones
+  ni altera roles o cuentas. Se conserva el funcionamiento offline.
+- Se define el alta posterior: Dirección autoriza → invitación remitida
+  exclusivamente al buzón → token de un solo uso → contraseña nueva →
+  verificación del correo → vinculación segura a ficha docente.
+  El token de invitación **actual** visible a Dirección no demuestra
+  titularidad del buzón: por eso no se ha habilitado aún.
+- **VIEWER no equivale a docente**: actualmente lee configuración y planes
+  del centro. Queda pendiente un rol DOCENTE nuevo, autorizado por el servidor
+  para ver **únicamente su propio horario publicado** y sin acceso a los
+  datos de otros docentes o alumnado.
+- Diseño: [Invitaciones y permisos docentes](INVITATIONS_TEACHER_PERMISSIONS_ROADMAP.md).
+
 ## Correo para futura recuperación de cuentas
 
 - Ya existe recuperación de contraseña en las ramas de integración de

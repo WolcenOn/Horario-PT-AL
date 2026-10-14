@@ -249,3 +249,76 @@ test('una conexión Actor ID existente sigue visible solo como compatibilidad', 
   await expect(page.locator('#backendBootstrapForm')).toHaveCount(0);
   await expect(page.getByRole('button', { name:'Crear vínculo legacy' })).toHaveCount(0);
 });
+
+test('Dirección consulta usuarios y roles sin revelar tokens de invitación',async({page})=>{
+  await page.addInitScript(({settings,token})=>{
+    localStorage.setItem('horario-gestor-escuela-backend',JSON.stringify({
+      ...settings,enabled:true,schoolId:'school-test'
+    }));
+    sessionStorage.setItem('horario-gestor-escuela-access-token',token);
+  },{settings:backendSettings(),token:'test-session-value'});
+  let calls=0;
+  await page.route('https://gestor.test/**',async route=>{
+    const req=route.request(),path=new URL(req.url()).pathname;
+    if(path==='/auth/me')return route.fulfill({
+      status:200,contentType:'application/json',
+      body:JSON.stringify({...auth,access_token:''})
+    });
+    if(path==='/auth/sessions')return route.fulfill({
+      status:200,contentType:'application/json',body:'[]'
+    });
+    if(path==='/schools/school-test/access-overview'){
+      calls++;
+      expect(req.headers().authorization).toBe('Bearer test-session-value');
+      return route.fulfill({status:200,contentType:'application/json',
+        body:JSON.stringify({
+          school_id:'school-test',
+          members:[
+            {name:'Dirección',email:'direccion@example.test',
+              role:'ADMIN',access_status:'account_active',email_verified:false},
+            {name:'Coordinación',email:'coordinacion@example.test',
+              role:'PLANNER',access_status:'account_active',email_verified:false}
+          ],
+          invitations:[{id:'inv1',email:'docente@example.test',
+            role:'VIEWER',status:'pending',token:'SECRET_NEVER_RENDER'}]
+        })
+      });
+    }
+    return route.fulfill({status:200,contentType:'application/json',body:'[]'});
+  });
+  await openApp(page);
+  await page.locator('[data-view="integration"]').click();
+  await expect(page.locator('[data-access-users] tbody tr')).toHaveCount(2);
+  await expect(page.locator('[data-access-users]')).toContainText('Dirección');
+  await expect(page.locator('[data-access-invitations]')).toContainText('docente@example.test');
+  await expect(page.locator('[data-access-permissions]')).toContainText('NO es adecuado');
+  await expect(page.locator('[data-access-permissions]')).not.toContainText('SECRET_NEVER_RENDER');
+  expect(calls).toBeGreaterThan(0);
+});
+
+test('un usuario de planificación ve sus permisos pero no consulta datos de los demás',async({page})=>{
+  const planner={...auth,memberships:[{
+    school_id:'school-test',school_name:'CEIP Horizonte',
+    user_id:'user-test',role:'PLANNER'
+  }]};
+  await page.addInitScript(({settings,token})=>{
+    localStorage.setItem('horario-gestor-escuela-backend',JSON.stringify({
+      ...settings,enabled:true,schoolId:'school-test'
+    }));
+    sessionStorage.setItem('horario-gestor-escuela-access-token',token);
+  },{settings:backendSettings(),token:'planner-session'});
+  let requestedDirectory=false;
+  await page.route('https://gestor.test/**',async route=>{
+    const p=new URL(route.request().url()).pathname;
+    if(p==='/schools/school-test/access-overview')requestedDirectory=true;
+    if(p==='/auth/me')return route.fulfill({status:200,
+      contentType:'application/json',body:JSON.stringify(planner)});
+    return route.fulfill({status:200,contentType:'application/json',body:'[]'});
+  });
+  await openApp(page);
+  await page.locator('[data-view="integration"]').click();
+  await expect(page.locator('[data-current-account-permissions]')).toContainText(
+    'Coordinación / planificación');
+  await expect(page.locator('[data-access-users]')).toHaveCount(0);
+  expect(requestedDirectory).toBe(false);
+});

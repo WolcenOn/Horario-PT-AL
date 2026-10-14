@@ -4,6 +4,7 @@ import {
   requestBackendPasswordReset
 } from './account-auth-service.js';
 import { backendConfigured, normalizeBackendSettings } from './backend-service.js';
+import { renderSchoolAccessDirectory } from './account-access-directory.js';
 import { buildGestorEscuelaConfiguration } from './gestor-adapter.js';
 import {
   analyzeWeeklyReadiness, correctionForMessage, issuesFromMessages
@@ -62,6 +63,11 @@ export function renderIntegrationView(root, {
     </section>
 
     ${renderAccountCard(normalized, auth, { hasBearerSession, legacyConfigured, resetToken })}
+    ${hasBearerSession && auth.session?.memberships?.some(item=>String(item.school_id)===normalized.schoolId)
+      ?renderSchoolAccessDirectory(auth.accessOverview,
+        auth.session.memberships.find(item=>String(item.school_id)===normalized.schoolId)?.role,
+        {error:auth.accessOverviewError||''})
+      :''}
 
     ${renderAcademicContextCard(normalized, configured, context, localAcademicYear)}
 

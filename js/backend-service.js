@@ -116,6 +116,15 @@ export async function fetchCurrentAuth(settings) {
   return request(value, '/auth/me', { timeoutMs:15000 });
 }
 
+export async function fetchSchoolAccessOverview(settings) {
+  const value = requireBearer(settings);
+  if (!value.schoolId) throw new Error('Selecciona un centro de tu cuenta.');
+  return request(value,
+    `/schools/${encodeURIComponent(value.schoolId)}/access-overview`,
+    { timeoutMs:15000 }
+  );
+}
+
 export async function listAuthSessions(settings) {
   const value = requireBearer(settings);
   return request(value, '/auth/sessions', { timeoutMs:15000 });

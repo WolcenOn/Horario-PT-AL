@@ -5,6 +5,7 @@ import {
   createAcademicYear,
   createPlanningScenario,
   fetchCurrentAuth,
+  fetchSchoolAccessOverview,
   fetchPlanningScenarioSnapshot,
   listAcademicYears,
   listAuthSessions,
@@ -373,7 +374,22 @@ async function resolveAuthContext(settings) {
       if (error?.status === 401) throw error;
       sessionsError = error.message || 'No se pudieron consultar las sesiones de la cuenta.';
     }
-    return { settings:saved, context:{ session, sessions, sessionsError, error:'' } };
+    const selectedMembership=(session.memberships||[]).find(item=>
+      String(item.school_id)===String(saved.schoolId));
+    let accessOverview=null,accessOverviewError='';
+    if(selectedMembership?.role==='ADMIN'&&saved.schoolId){
+      try{
+        accessOverview=await fetchSchoolAccessOverview(saved);
+      }catch(error){
+        if(error?.status===401)throw error;
+        accessOverviewError=error?.status===404?
+          'Este servidor aún no incluye el listado seguro de permisos.':
+          (error.message||'No se pudieron consultar los usuarios del centro.');
+      }
+    }
+    return { settings:saved, context:{
+      session,sessions,sessionsError,accessOverview,accessOverviewError,error:''
+    } };
   } catch (error) {
     if (error?.status === 401) {
       const cleared = clearLocalAuth(settings);
