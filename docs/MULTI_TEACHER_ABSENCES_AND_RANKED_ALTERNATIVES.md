@@ -279,3 +279,22 @@ estados de ausencias ni acredita la asistencia del alumnado.
 En la lista de ausencias del día quedan **Editar** y **Eliminar**.
 La edición de un registro de varios días modifica todo ese intervalo,
 revalida solapamientos y devuelve la cobertura a pendiente.
+
+## Contacto con profesorado y preparación de mensajes
+
+Cada ficha de profesorado admite ahora un correo profesional opcional.
+Los correos se mantienen en IndexedDB junto al perfil, se exportan
+en los respaldos JSON y nunca forman parte de la petición al solver.
+
+Tras la revisión local **completa** del borrador del día, la interfaz puede
+preparar mensajes personalizados separados: el docente ausente ve las
+franjas que han sido cubiertas por otras personas; cada sustituto ve
+únicamente las sesiones que debe asumir. Los mensajes excluyen identidades
+y notas del alumnado y los motivos de ausencia. Se avisa de correos
+sin configurar o con formato incorrecto.
+
+El botón abre un borrador del cliente de correo (`mailto:`). **No envía
+automáticamente**, no requiere credenciales en la web y no registra
+falsas confirmaciones de envío. El PDF de la impresión se adjunta
+manualmente si se desea. Un servicio de mensajería autenticado y
+confirmaciones reales quedan expresamente pendientes.

@@ -199,6 +199,25 @@ representativos de centros completos:
 calculables, hasta 500 ocupaciones y ocho salas candidatas por necesidad.
 No subir límites sin pruebas de rendimiento y memoria.
 
+## Preparación de correos del horario de sustituciones
+
+- La ficha de **Profesorado** permite registrar un correo profesional
+  opcional; se valida antes de guardar. Se almacena localmente junto con
+  los demás datos del centro y **se incluye en las copias JSON**.
+  No se envía a GestorEscuela en la configuración de resolución.
+- Tras confirmar localmente el borrador, «Preparar correos a los docentes»
+  lista los implicados que tienen email y avisa de los que carecen de él.
+  Cada **«Abrir correo»** crea un borrador `mailto:` personalizado, con
+  fecha, actividades y franjas que afectan a ese docente, sin nombres ni
+  identificadores de alumnos ni detalles sobre el motivo de la ausencia.
+- El correo no se envía automáticamente: el centro comprueba y pulsa
+  «Enviar» en su cliente. El PDF imprimible se puede adjuntar **manualmente**;
+  `mailto:` no permite adjuntar el PDF generado. No se escribe ninguna
+  confirmación ni traza de envío en IndexedDB o GestorEscuela.
+- Es una etapa de preparación segura; envío automático real y seguimiento
+  de entrega requerirán una integración autenticada, consentimiento del
+  centro y política de datos.
+
 ## Revisión manual de alternativas y hoja imprimible diaria
 
 - Evaluación del borrador diario con **alternativas por actividad y franja**

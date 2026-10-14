@@ -15,6 +15,7 @@ import { escapeHtml, formatDuration, minutesParts, targetFromParts, uid } from '
 import { showModal, setModalMessage } from './ui.js';
 import { sessionDuration } from './hours.js';
 import { effectiveAvailability, externalBlocksForDay, normalizeExternalBlocks } from './professional-availability.js';
+import {normalizeTeacherEmail} from './absence-email.js';
 
 export function renderProfessionals(root, { state, onEdit, onDelete }) {
   const rows = [...state.professionals].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(raw => {
@@ -67,6 +68,7 @@ export function openProfessionalForm(professional, { state, onSave }) {
     title: professional ? 'Editar profesional' : 'Nuevo profesional',
     bodyHtml:`<div class="form-grid">
       <div class="form-field"><label for="nombre">Nombre *</label><input id="nombre" name="nombre" required value="${escapeHtml(current.nombre || '')}"></div>
+      <div class="form-field"><label for="teacherEmail">Correo electrónico profesional (opcional)</label><input id="teacherEmail" name="teacherEmail" type="email" autocomplete="email" maxlength="254" value="${escapeHtml(current.email||'')}" placeholder="nombre@centro.es"><small class="field-hint">Se guarda en los datos locales y en las copias JSON del proyecto. Sirve para preparar correos; no se envía al motor de sustituciones.</small></div>
       <div class="form-field"><label for="tipo">Tipo *</label><select id="tipo" name="tipo">${PROFESSIONAL_TYPES.map(type => `<option value="${type}" ${current.tipo===type?'selected':''}>${type === 'DOCENTE' ? 'Docente ordinario' : type}</option>`).join('')}</select></div>
       <div class="form-field"><label for="supportRoomId">Sala habitual de apoyos (opcional)</label><input id="supportRoomId" name="supportRoomId" maxlength="64" value="${escapeHtml(current.supportRoomId||'')}" placeholder="Ej.: Sala AL"><small class="field-hint">La sala del grupo o de una sesión puede tener prioridad. Se usa solo para la vista previa semanal.</small></div>
       <div class="form-field"><label for="especialidad">Especialidad / puesto</label><input id="especialidad" name="especialidad" value="${escapeHtml(current.especialidad || '')}" placeholder="Primaria, Inglés, Música, PT…"></div>
@@ -123,6 +125,9 @@ export function openProfessionalForm(professional, { state, onSave }) {
     onSubmit: async (data, form, message) => {
       const nombre=data.get('nombre')?.trim();
       const tipo=data.get('tipo');
+      let email='';
+      try{email=normalizeTeacherEmail(data.get('teacherEmail'));}
+      catch(error){setModalMessage(message,error.message);return false;}
       const maxMinutes=targetFromParts(data.get('maxHours'),data.get('maxMinutes'));
       const minimumTutorMinutes=targetFromParts(data.get('minTutorHours'),data.get('minTutorMinutes'));
       if(!nombre){setModalMessage(message,'El nombre es obligatorio.');return false;}
@@ -163,6 +168,7 @@ export function openProfessionalForm(professional, { state, onSave }) {
         id:current.id||uid('prof'),
         nombre,
         tipo,
+        email,
         especialidad:data.get('especialidad')?.trim(),
         supportRoomId:String(data.get('supportRoomId')||'').trim().slice(0,64),
         teacherRole:data.get('teacherRole'),

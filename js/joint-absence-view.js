@@ -1,6 +1,7 @@
 // Read-only summary of simultaneous absence simulation. No change to local
 // coverage status, teaching assignments or PT/AL timetable is performed here.
 import {escapeHtml as esc} from './utils.js';
+import {prepareReviewedTeacherEmails,teacherMailtoLink} from './absence-email.js';
 const caption=date=>date.slice(8,10)+'/'+date.slice(5,7)+'/'+date.slice(0,4);
 function statusText(status){
   return ({
@@ -24,6 +25,8 @@ export function renderJointAbsencePanel({
     .map(([local,backend])=>[backend,professors.get(local)||local]));
   const coverageDetails=(assessment?.rows||[]).flatMap(row=>[
     ...(row.classDetails||[]),...(row.supportDetails||[])]);
+  const emailDrafts=draftReview?.approved?
+    prepareReviewedTeacherEmails({date,state,adapter,review:draftReview}):null;
   const sessionAudit=assessment?.sessionAudit;
   const sessions=sessionAudit?.entries||[];
   const sessionStatus=value=>({
@@ -164,11 +167,33 @@ export function renderJointAbsencePanel({
         'data-review-approve'+(draftReview.allConfirmed&&!draftReview.approved?
           '':' disabled')+'>Confirmar borrador para impresión</button>'+
         (draftReview.approved?'<button type="button" class="button button-primary" '+
-          'data-review-print>🖨 Imprimir horario del día</button>':'')+
+          'data-review-print>🖨 Imprimir horario del día</button>'+
+          '<button type="button" class="button" data-review-email-toggle '+
+          'aria-expanded="false">✉ Preparar correos a los docentes</button>':'')+
       '</div>'+
       (draftReview.approved?'<p data-draft-approved><strong>Borrador revisado '+
         'localmente para impresión.</strong> No se ha publicado ni aplicado '+
-        'en GestorEscuela, ni modificado el estado de las ausencias.</p>':'')+
+        'en GestorEscuela, ni modificado el estado de las ausencias.</p>'+
+        '<div data-review-email-list hidden>'+
+        '<h5>Correos personalizados del horario · '+esc(caption(date))+'</h5>'+
+        '<p>Abre un borrador por docente en tu aplicación de correo. '+
+        'El mensaje recoge exclusivamente las franjas que le afectan. '+
+        '<strong>No se envía automáticamente:</strong> revisa cada borrador '+
+        'y pulsa Enviar en tu correo. Puedes adjuntar por separado '+
+        'el calendario impreso como PDF.</p>'+
+        (emailDrafts.drafts.length?'<div class="absence-email-entries">'+
+          emailDrafts.drafts.map(item=>'<div class="absence-email-entry">'+
+            '<div><strong>'+esc(item.name)+'</strong><small>'+
+            esc(item.role)+' · '+esc(item.email)+'</small></div>'+
+            '<a class="button" data-review-email-open href="'+
+            esc(teacherMailtoLink(item))+'">Abrir correo</a></div>').join('')+
+          '</div>':'<p>No hay correos profesionales disponibles para los implicados.</p>')+
+        (emailDrafts.missing.length?
+          '<p data-review-email-missing><strong>Faltan correos:</strong> '+
+          emailDrafts.missing.map(item=>esc(item.name)+' ('+
+            esc(item.reason)+')').join('; ')+
+          '. Regístralos en Profesorado → Editar antes de preparar los mensajes.</p>':'')+
+        '</div>':'')+
       '</section>':
       (coverageDetails.length?'<div class="table-wrap"><table data-joint-coverage-details>'+
       '<thead><tr><th>Tipo</th><th>Franja</th><th>Clase / agrupamiento</th><th>Estado propuesto</th><th>Sustituto</th></tr></thead><tbody>'+
@@ -207,4 +232,10 @@ export function bindJointAbsencePanel(root,{
     button.addEventListener('click',()=>onConfirm(button.dataset.reviewConfirm)));
   node?.querySelector('[data-review-approve]')?.addEventListener('click',onApprove);
   node?.querySelector('[data-review-print]')?.addEventListener('click',onPrint);
+  node?.querySelector('[data-review-email-toggle]')?.addEventListener('click',event=>{
+    const panel=node.querySelector('[data-review-email-list]');
+    if(!panel)return;
+    panel.hidden=!panel.hidden;
+    event.currentTarget.setAttribute('aria-expanded',String(!panel.hidden));
+  });
 }

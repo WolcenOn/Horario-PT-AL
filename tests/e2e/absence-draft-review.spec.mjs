@@ -37,8 +37,9 @@ test('el borrador muestra selector de alternativas, confirma cada franja e impri
     }}};
     const state={
       professionals:[
-        {id:'t1',nombre:'Docente titular'},{id:'a',nombre:'Sustituto A'},
-        {id:'b',nombre:'Sustituto B'}],
+        {id:'t1',nombre:'Docente titular',email:'titular@centro.es'},
+        {id:'a',nombre:'Sustituto A'},
+        {id:'b',nombre:'Sustituto B',email:'sustituto.b@centro.es'}],
       staffAbsences:[{id:'abs',professionalId:'t1',
         fromDate:'2026-10-12',toDate:'2026-10-12',status:'pending'}],
       classSchedules:[{id:'original',professionalId:'t1',dia:'lunes',
@@ -82,12 +83,24 @@ test('el borrador muestra selector de alternativas, confirma cada franja e impri
   await expect(fixture.locator('[data-review-choice] option')).toHaveCount(3);
   await expect(fixture.locator('[data-review-approve]')).toBeDisabled();
   await expect(fixture.locator('[data-review-print]')).toHaveCount(0);
+  await expect(fixture.locator('[data-review-email-toggle]')).toHaveCount(0);
   await fixture.locator('[data-review-choice]').selectOption('SUB-B');
   await expect(fixture.locator('[data-review-choice]')).toHaveValue('SUB-B');
   await fixture.locator('[data-review-confirm]').click();
   await expect(fixture.locator('[data-draft-review-progress]')).toContainText('1 de 1');
   await fixture.locator('[data-review-approve]').click();
   await expect(fixture.locator('[data-review-print]')).toBeVisible();
+  await fixture.locator('[data-review-email-toggle]').click();
+  const mailLinks=fixture.locator('[data-review-email-open]');
+  await expect(mailLinks).toHaveCount(2);
+  const mailData=await mailLinks.evaluateAll(els=>els.map(el=>el.getAttribute('href')));
+  const decoded=mailData.map(x=>decodeURIComponent(x));
+  expect(decoded.join(' ')).toContain('sustituto.b@centro.es');
+  expect(decoded.join(' ')).toContain('titular@centro.es');
+  expect(decoded.join(' ')).not.toContain('child-secret');
+  expect(decoded.join(' ')).not.toContain('Menor privado');
+  expect(decoded.join(' ')).not.toContain('Sustituto A');
+  expect(decoded.some(x=>x.includes('09:00–09:45'))).toBe(true);
   await fixture.locator('[data-review-print]').click();
   await expect(fixture.locator('#absence-print-sheet')).toContainText('Sustituto B');
   await expect(fixture.locator('.absence-print-replacement')).toHaveCount(1);
