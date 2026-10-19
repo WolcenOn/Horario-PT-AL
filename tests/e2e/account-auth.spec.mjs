@@ -322,3 +322,64 @@ test('un usuario de planificación ve sus permisos pero no consulta datos de los
   await expect(page.locator('[data-access-users]')).toHaveCount(0);
   expect(requestedDirectory).toBe(false);
 });
+
+
+test('demo requiere URL staging explícita y crea cuenta solo en el backend elegido',async({page})=>{
+  await page.addInitScript(()=>{
+    localStorage.setItem('horario-gestor-escuela-backend',JSON.stringify({
+      enabled:true,baseUrl:'https://gestorescuela-production.up.railway.app',
+      schoolId:'legacy-demo-school',actorId:'old-id',autoSync:true
+    }));
+  });
+  const calls=[];
+  const stagingAuth={...auth,user:{...auth.user,email:'test@example.test'},
+    school:{id:'school-test',name:'Centro ficticio staging'}};
+  await page.route('https://gestor-staging.up.railway.app/**',async route=>{
+    const req=route.request(),path=new URL(req.url()).pathname;
+    calls.push({path,headers:req.headers()});
+    if(path==='/auth/register-school')return route.fulfill({
+      status:201,contentType:'application/json',body:JSON.stringify(stagingAuth)
+    });
+    if(path==='/auth/me')return route.fulfill({
+      status:200,contentType:'application/json',
+      body:JSON.stringify({...stagingAuth,access_token:''})
+    });
+    if(path==='/auth/sessions')return route.fulfill({
+      status:200,contentType:'application/json',body:'[]'
+    });
+    if(path==='/schools/school-test/academic-years')return route.fulfill({
+      status:200,contentType:'application/json',body:'[]'
+    });
+    return route.fulfill({status:404,contentType:'application/json',body:'{}'});
+  });
+  await page.goto('/');
+  await page.locator('[data-view="integration"]').click();
+  await expect(page.locator('[data-demo-staging-setup]')).toContainText('Servidor principal detectado');
+  await expect(page.locator('[data-register-backend-target]')).toContainText('SERVIDOR PRINCIPAL');
+  await page.locator('#backendDemoStagingUrl').fill('https://gestorescuela-production.up.railway.app');
+  await page.getByRole('button',{name:'Guardar URL de pruebas'}).click();
+  await expect(page.locator('[data-demo-staging-status]')).toContainText('Esta es la URL del servidor principal');
+  await page.locator('#backendDemoStagingUrl').fill('https://gestor-staging.up.railway.app/');
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'Guardar URL de pruebas'}).click();
+  await expect(page.locator('[data-register-backend-target]')).toContainText('gestor-staging.up.railway.app');
+  const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('horario-gestor-escuela-backend')));
+  expect(stored).toMatchObject({enabled:true,schoolId:'',actorId:'',
+    autoSync:false,baseUrl:'https://gestor-staging.up.railway.app'});
+  await page.locator('#registerSchoolName').fill('Centro ficticio staging');
+  await page.locator('#registerDisplayName').fill('Dirección de prueba');
+  await page.locator('#registerEmail').fill('test@example.test');
+  await page.locator('#registerPassword').fill('test-password-123');
+  await page.getByRole('button',{name:'Crear centro y entrar'}).click();
+  await expect(page.getByRole('heading',{name:'Sesión'})).toBeVisible();
+  expect(calls.some(x=>x.path==='/auth/register-school')).toBe(true);
+  expect(calls.filter(x=>x.path==='/auth/register-school')[0].headers.authorization).toBeUndefined();
+  const end=await page.evaluate(()=>{
+    return {settings:JSON.parse(localStorage.getItem('horario-gestor-escuela-backend')),
+      token:sessionStorage.getItem('horario-gestor-escuela-access-token')};
+  });
+  expect(end.settings.baseUrl).toBe('https://gestor-staging.up.railway.app');
+  expect(end.settings.schoolId).toBe('school-test');
+  expect(end.settings.actorId).toBe('');
+  expect(end.token).toBe('test-session-value');
+});

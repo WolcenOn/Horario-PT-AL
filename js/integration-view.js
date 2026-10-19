@@ -4,6 +4,7 @@ import {
   requestBackendPasswordReset
 } from './account-auth-service.js';
 import { backendConfigured, normalizeBackendSettings } from './backend-service.js';
+import {isKnownProductionBackendUrl,prepareDemoStagingConnection} from './staging-connection.js';
 import { renderSchoolAccessDirectory } from './account-access-directory.js';
 import { buildGestorEscuelaConfiguration } from './gestor-adapter.js';
 import {
@@ -62,6 +63,7 @@ export function renderIntegrationView(root, {
       <span class="integration-mode ${hasBearerSession || legacyConfigured ? 'is-hybrid' : 'is-offline'}">${escapeHtml(modeLabel)}</span>
     </section>
 
+    ${!hasBearerSession?renderDemoStagingSetup(normalized):''}
     ${renderAccountCard(normalized, auth, { hasBearerSession, legacyConfigured, resetToken })}
     ${hasBearerSession && auth.session?.memberships?.some(item=>String(item.school_id)===normalized.schoolId)
       ?renderSchoolAccessDirectory(auth.accessOverview,
@@ -112,6 +114,23 @@ export function renderIntegrationView(root, {
       </div>
     </section>
   </div>`;
+
+  const stagingForm=root.querySelector('#backendDemoStagingForm');
+  stagingForm?.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const notice=root.querySelector('[data-demo-staging-status]');
+    try{
+      const url=stagingForm.querySelector('#backendDemoStagingUrl').value;
+      const next=prepareDemoStagingConnection(normalized,url);
+      if(normalized.actorId && !confirm(
+        'Se desvincularán los identificadores legacy de la conexión online de este navegador. '+
+        'El centro ficticio y las ausencias guardadas en IndexedDB NO se borrarán. ¿Continuar?'
+      ))return;
+      await onSave(next);
+    }catch(error){
+      setInlineStatus(notice,error.message||'No se pudo configurar el entorno de pruebas.','error');
+    }
+  });
 
   const form = root.querySelector('#backendSettingsForm');
   form?.addEventListener('submit', async event => {
@@ -249,6 +268,35 @@ export function renderIntegrationView(root, {
   });
 }
 
+function renderDemoStagingSetup(settings){
+  const production=isKnownProductionBackendUrl(settings.baseUrl);
+  const activeUrl=production?'':settings.baseUrl;
+  return `<section class="card" data-demo-staging-setup>
+    <div class="card-header"><div><h2>Preparar el centro ficticio en Railway</h2>
+      <small>La demo local se mantiene intacta. No se crea ninguna cuenta hasta que completes y confirmes el registro.</small></div></div>
+    <div class="card-body integration-form">
+      <div class="integration-note">
+        <strong>${production?'Servidor principal detectado · no lo uses para probar':'Conexión de pruebas'}</strong>
+        <span>Primero crea en Railway un entorno staging con PostgreSQL independiente. Después pega su URL pública aquí. Nunca copies DATABASE_URL, contraseñas ni claves de Railway en este formulario.</span>
+      </div>
+      <form id="backendDemoStagingForm" class="integration-form">
+        <div class="form-field">
+          <label for="backendDemoStagingUrl">URL HTTPS del backend de pruebas</label>
+          <input id="backendDemoStagingUrl" name="stagingUrl" type="url"
+            placeholder="https://mi-staging.up.railway.app"
+            value="${escapeHtml(activeUrl)}" required>
+          <span class="field-hint">Guardar desvincula el Actor ID antiguo solo de la conexión, sin borrar el horario ni las ausencias locales.</span>
+        </div>
+        <div class="button-row"><button class="button button-primary" type="submit">Guardar URL de pruebas</button></div>
+        <div class="integration-status" role="status" data-demo-staging-status>
+          ${production?'Por seguridad, el registro inferior sigue apuntando al servidor principal hasta guardar una URL de pruebas.':
+            'Servidor configurado: '+escapeHtml(settings.baseUrl)+'. Comprueba su salud y su base de datos aislada antes de crear usuarios.'}
+        </div>
+      </form>
+    </div>
+  </section>`;
+}
+
 function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured, resetToken }) {
   if (hasBearerSession) {
     const session = auth.session;
@@ -295,7 +343,8 @@ function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured,
         <button class="button button-primary" type="submit">Iniciar sesión</button>
       </form>
       <form id="backendRegisterForm" class="integration-auth-panel">
-        <div><strong>Crear un centro</strong><small>Crea la primera cuenta administradora y deja el centro vinculado.</small></div>
+        <div><strong>Crear un centro</strong><small>Crea la primera cuenta administradora y deja el centro vinculado.</small>
+          <span class="field-hint" data-register-backend-target>Servidor de destino: ${escapeHtml(settings.baseUrl)}${isKnownProductionBackendUrl(settings.baseUrl)?' · SERVIDOR PRINCIPAL, no recomendado para la demo':''}.</span></div>
         <div class="form-field"><label for="registerSchoolName">Centro</label><input id="registerSchoolName" name="schoolName" required maxlength="160" placeholder="CEIP / centro educativo"></div>
         <div class="form-field"><label for="registerDisplayName">Nombre</label><input id="registerDisplayName" name="displayName" required maxlength="160" autocomplete="name"></div>
         <div class="form-field"><label for="registerEmail">Correo</label><input id="registerEmail" name="email" type="email" autocomplete="username" required maxlength="320"></div>

@@ -22,6 +22,7 @@ import {
   savePlanningScenarioSnapshot
 } from './backend-service.js';
 import { renderIntegrationView } from './integration-view.js';
+import {isKnownProductionBackendUrl} from './staging-connection.js';
 import { toJsonCompatible } from './gestor-serialization.js';
 import { requestWeeklyPreviewWithFallback } from './weekly-preview-client.js';
 import { buildWeeklyPreviewCalendar } from './weekly-preview-calendar.js';
@@ -80,6 +81,10 @@ async function openIntegration() {
         await openIntegration();
       },
       onRegister:async payload => {
+        if(isKnownProductionBackendUrl(payload.baseUrl) &&
+          !confirm('Estás a punto de crear un centro en el backend PRINCIPAL de Railway, '+
+            'no en un entorno de pruebas. Para la demo configura primero la URL de staging. '+
+            '¿Confirmas explícitamente que quieres registrar un centro en producción?'))return;
         authStatus = { kind:'pending', message:'Creando la cuenta administradora y el centro…' };
         await openIntegration();
         try {
