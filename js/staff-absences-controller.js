@@ -9,7 +9,7 @@ import {buildJointAbsenceRequest,assessJointAbsenceResult}
   from './joint-absence-coverage.js';
 import {toJsonCompatible} from './gestor-serialization.js';
 import {
-  loadBackendSettings,backendConfigured,pushAcademicConfiguration,
+  loadBackendSettings,backendConfigured,backendSessionReady,pushAcademicConfiguration,
   listDayPlans,createDayPlan,solveAcademicDay
 } from './backend-service.js';
 import {showToast} from './ui.js';
@@ -79,7 +79,8 @@ async function openCalendar(){
       state,month,filter,selectedDay,
       joint:{
         plan:jointPlan,adapter,assessment,result,status:jointStatus,draftReview,
-        connected:backendConfigured(settings),adapterReady:adapter.report.ready
+        connected:backendSessionReady(settings),needsLogin:backendConfigured(settings)&&
+          !backendSessionReady(settings),adapterReady:adapter.report.ready
       },
       onMonth:delta=>{
         try{month=monthShift(month,delta);selectedDay='';resetReview();void openCalendar();}
@@ -210,6 +211,8 @@ async function calculateJoint(){
     const settings=loadBackendSettings();
     if(!backendConfigured(settings))
       throw Error('Las ausencias están guardadas. Configura GestorEscuela para calcular cobertura.');
+    if(!backendSessionReady(settings))
+      throw Error('Las ausencias están guardadas localmente, pero el Actor ID antiguo ya no sirve para calcular. Abre Cuenta y sincronización e inicia sesión con una cuenta autorizada del centro. No crees otro centro para sustituir el actual.');
     if(!adapter.report.ready)throw Error(
       'El horario no está preparado para el cálculo: '+adapter.report.errors.slice(0,3).join(' ')
     );
@@ -241,7 +244,10 @@ async function calculateJoint(){
   }catch(error){
     console.error(error);
     assessment=null;result=null;
-    jointStatus={kind:'error',message:error.message||'No se pudo calcular la cobertura.'};
+    const authMessage=error?.status===401
+      ?'GestorEscuela rechazó la sesión. Abre Cuenta y sincronización y vuelve a iniciar sesión con permiso de planificación en este centro. Las ausencias locales se conservan.'
+      :error.message||'No se pudo calcular la cobertura.';
+    jointStatus={kind:'error',message:authMessage};
     showToast(jointStatus.message,'error');
   }finally{
     solving=false;

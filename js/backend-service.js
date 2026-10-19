@@ -51,6 +51,14 @@ export function backendConfigured(settings) {
   return Boolean(value.enabled && value.baseUrl && value.schoolId && (value.accessToken || value.actorId));
 }
 
+// El Actor ID anterior no demuestra autenticación en las APIs modernas.
+// No confundir una conexión legacy guardada con una sesión utilizable para
+// sincronizar y calcular borradores de ausencias.
+export function backendSessionReady(settings) {
+  const value = normalizeBackendSettings(settings);
+  return Boolean(value.enabled && value.baseUrl && value.schoolId && value.accessToken);
+}
+
 export function backendSettingsFromAuth(settings, auth, { schoolId = '' } = {}) {
   const base = normalizeBackendSettings(settings);
   const memberships = Array.isArray(auth?.memberships) ? auth.memberships : [];
@@ -372,7 +380,12 @@ async function request(settings, path, options = {}) {
     }
     if (!response.ok) {
       const detail = payload && typeof payload === 'object' ? payload.detail : payload;
-      const error = new Error(detail || `GestorEscuela respondió con HTTP ${response.status}.`);
+      const legacyDenied = response.status === 401 &&
+        !settings.accessToken && /Legacy actor headers are disabled/i.test(String(detail || ''));
+      const message = legacyDenied
+        ? 'GestorEscuela ya no admite el Actor ID antiguo. Abre Cuenta y sincronización e inicia sesión con una cuenta autorizada del centro. Las ausencias locales permanecen guardadas.'
+        : detail || `GestorEscuela respondió con HTTP ${response.status}.`;
+      const error = new Error(message);
       error.status = response.status;
       const retryAfter = Number(response.headers?.get?.('Retry-After'));
       error.retryAfter = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 0;

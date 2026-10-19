@@ -39,7 +39,7 @@ export function renderIntegrationView(root, {
   const normalized = normalizeBackendSettings(settings);
   const adapter = buildGestorEscuelaConfiguration(state);
   const configured = backendConfigured(normalized);
-  const canSync = configured && adapter.report.ready;
+  const canSync = configured && Boolean(normalized.accessToken) && adapter.report.ready;
   const context = academicContext && typeof academicContext === 'object'
     ? academicContext
     : { years:[], scenarios:[], snapshot:null, error:'', snapshotError:'' };
@@ -87,7 +87,7 @@ export function renderIntegrationView(root, {
         <details class="integration-details"><summary>Ver franjas que utilizará GestorEscuela</summary><div class="integration-slot-list">${adapter.report.slots.map(slot => `<span>${escapeHtml(slot.id)} · ${escapeHtml(slot.label)}</span>`).join('') || '<span>Sin franjas</span>'}</div></details>
         <div class="button-row integration-sync-actions">
           <button class="button button-primary" type="button" data-sync-backend ${canSync ? '' : 'disabled'}>Sincronizar configuración para operativa diaria</button>
-          <span class="field-hint">La sincronización requiere una sesión activa. Las conexiones Actor ID ya existentes se mantienen solo durante la transición y no se pueden crear desde esta pantalla.</span>
+          <span class="field-hint">La sincronización con GestorEscuela actualizado requiere sesión Bearer autorizada. Un Actor ID antiguo no da acceso.</span>
         </div>
         <div class="help-note">
           <strong>Vista previa semanal con duraciones por materia</strong>
@@ -315,7 +315,7 @@ function renderAccountCard(settings, auth, { hasBearerSession, legacyConfigured,
         <div class="integration-status" data-password-reset-confirm-status>Enlace de recuperación detectado.</div>
       </form>` : ''}
       ${auth.status ? renderAuthStatus(auth.status) : ''}
-      ${legacyConfigured ? '<div class="integration-note integration-wide"><strong>Conexión de transición activa</strong><span>Este navegador conserva una conexión Actor ID creada anteriormente. Puede seguir utilizándose durante la migración, pero las altas nuevas ya requieren una cuenta con contraseña.</span></div>' : ''}
+      ${legacyConfigured ? '<div class="integration-note integration-wide"><strong>Conexión de transición activa</strong><span>Este navegador conserva un Actor ID anterior, pero los servidores seguros ya no lo aceptan para calcular o sincronizar. Inicia sesión con una cuenta autorizada del centro. No crees un centro duplicado; los horarios locales se conservan.</span></div>' : ''}
     </div>
   </section>`;
 }
@@ -454,7 +454,7 @@ function renderAdvancedConnection(settings, status, { hasBearerSession, legacyCo
   const authHint = hasBearerSession
     ? 'El centro activo procede de las membresías de tu sesión y no se puede sustituir manualmente aquí.'
     : legacyConfigured
-      ? 'La conexión Actor ID se mantiene temporalmente para facilitar la migración a una cuenta.'
+      ? 'El Actor ID antiguo se conserva solo como referencia para la migración. No permite acceder al servidor seguro.'
       : 'Para conectar un centro nuevo usa Iniciar sesión o Crear un centro; no necesitas identificadores técnicos.';
 
   return `<section class="card">

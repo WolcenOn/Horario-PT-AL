@@ -191,3 +191,45 @@ test('una sola entrada de navegación abre calendario y no expone un segundo for
   await expect(page.locator('#absenceSolveForm')).toHaveCount(0);
   await expect(page.locator('[data-absence-calendar]')).toBeVisible();
 });
+
+
+test('Actor ID antiguo no intenta calcular online y conserva la ausencia en IndexedDB',async({page})=>{
+  const schoolRequests=[];
+  await page.addInitScript(()=>{
+    localStorage.setItem('horario-user-cleared','true');
+    localStorage.setItem('horario-gestor-escuela-backend',JSON.stringify({
+      enabled:true,baseUrl:'https://gestor.test',schoolId:'legacy-school',
+      actorId:'legacy-actor',academicYearId:'',scenarioId:'',autoSync:false
+    }));
+  });
+  page.on('request',req=>{
+    if(req.url().includes('gestor.test/schools/'))schoolRequests.push(req.url());
+  });
+  await page.goto('/');
+  const date=await page.evaluate(async()=>{
+    const {put}=await import('/js/db.js');
+    await put('professionals',{id:'teacher',nombre:'Docente',tipo:'DOCENTE',activo:true});
+    const now=new Date(),day=new Date(now.getFullYear(),now.getMonth(),1);
+    return [day.getFullYear(),String(day.getMonth()+1).padStart(2,'0'),'12'].join('-');
+  });
+  await page.reload();
+  await page.locator('[data-view="staffAbsences"]').click();
+  const form=page.locator('#staffAbsenceForm');
+  await form.locator('input[value="teacher"]').check();
+  await form.locator('[name="fromDate"]').fill(date);
+  await form.locator('[name="toDate"]').fill(date);
+  await form.getByRole('button',{name:'Guardar y calcular cobertura'}).click();
+  await expect(page.locator('[data-joint-status]')).toContainText('Actor ID antiguo');
+  await expect(page.locator('[data-joint-login-notice]')).toContainText('Inicio de sesión necesario');
+  await expect(page.locator('[data-joint-absence-solve]')).toBeDisabled();
+  expect(schoolRequests).toEqual([]);
+  const local=await page.evaluate(async()=>{
+    const {getAll}=await import('/js/db.js');
+    return {absence:await getAll('staffAbsences'),classes:await getAll('classSchedules')};
+  });
+  expect(local.absence).toHaveLength(1);
+  expect(local.absence[0].status).toBe('pending');
+  expect(local.classes).toHaveLength(0);
+  await page.locator('[data-joint-login]').click();
+  await expect(page.getByRole('heading',{name:'Acceso al centro'})).toBeVisible();
+});

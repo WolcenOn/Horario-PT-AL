@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  backendSessionReady,
   bootstrapBackendConnection,
   createAcademicYear,
   createPlanningScenario,
@@ -232,5 +233,43 @@ test('conserva Retry-After cuando el login queda bloqueado', async () => {
     );
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+
+test('Actor ID legacy no equivale a sesión para cálculo remoto', () => {
+  const legacy = { enabled:true, baseUrl:'https://example.test',
+    schoolId:'school-existing', actorId:'previous-actor' };
+  assert.equal(backendSessionReady(legacy), false);
+  assert.equal(backendSessionReady({ ...legacy, accessToken:'session-token' }), true);
+  assert.equal(backendSessionReady({ ...legacy, enabled:false, accessToken:'session-token' }), false);
+  assert.equal(backendSessionReady({ ...legacy, schoolId:'', accessToken:'session-token' }), false);
+  assert.equal(backendSessionReady({ ...legacy, accessToken:'' }), false);
+});
+
+test('la negativa a cabeceras legacy ofrece una explicación sin reenviar contraseñas', async () => {
+  const previous = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_url, options) => {
+    calls++;
+    assert.equal(options.headers['X-Actor-Id'], 'old-id');
+    assert.equal(options.headers.Authorization, undefined);
+    return {ok:false, status:401, headers:{get:()=>null}, async text(){
+      return JSON.stringify({detail:'Legacy actor headers are disabled'});
+    }};
+  };
+  try {
+    await assert.rejects(() => listAcademicYears({
+      enabled:true, baseUrl:'https://example.test', schoolId:'school',
+      actorId:'old-id'
+    }), error => {
+      assert.equal(error.status,401);
+      assert.match(error.message,/Cuenta y sincronización/);
+      assert.match(error.message,/ausencias locales/);
+      return true;
+    });
+    assert.equal(calls,1);
+  } finally {
+    globalThis.fetch=previous;
   }
 });

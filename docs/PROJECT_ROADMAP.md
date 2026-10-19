@@ -296,6 +296,20 @@ No subir límites sin pruebas de rendimiento y memoria.
   Tras guardar, el cálculo cubre solo la primera fecha; las restantes
   requieren revisión diaria.
 
+## Contención de conexión legacy en ausencias (2026-10-19)
+
+- El backend de integración rechaza `X-Actor-Id` si
+  `ALLOW_LEGACY_ROLE_BOOTSTRAP=false`. Las conexiones legacy que
+  conservaba IndexedDB/localStorage no demuestran una sesión autenticada.
+- El cálculo de ausencias exige sesión Bearer y centro seleccionado antes de
+  cualquier sincronización remota; sin sesión, la ausencia se conserva local
+  y se muestra un acceso dirigido a «Cuenta y sincronización».
+- No crear un segundo centro para solucionar el `401`; la migración de
+  identidades antiguas sin credenciales debe realizarse por un proceso
+  administrativo comprobable, sin autorizar por UUID de actor.
+- Sin despliegue backend autorizado. Verificar antes de dar por resuelta
+  la operativa de centros anteriores que pueden carecer de credenciales.
+
 ## Decisión de siguientes incrementos
 
 **Fase 2 actual:** completar correcciones guiadas de la revisión global de

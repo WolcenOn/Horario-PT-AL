@@ -15,7 +15,7 @@ function statusText(status){
 
 export function renderJointAbsencePanel({
   date='',plan=null,assessment=null,result=null,status=null,state,adapter=null,
-  connected=false,adapterReady=false,embedded=false,draftReview=null
+  connected=false,needsLogin=false,adapterReady=false,embedded=false,draftReview=null
 }){
   const professors=new Map((state?.professionals||[]).map(x=>[x.id,x.nombre||x.id]));
   const records=plan?.details||[];
@@ -46,6 +46,13 @@ export function renderJointAbsencePanel({
     '<small>GestorEscuela las evaluará juntas para no duplicar sustitutos. '+
     'La operación genera un borrador remoto, nunca aplica sustituciones.</small></div></div>'+
     '<div class="card-body">'+
+    (needsLogin?'<div class="integration-status is-error" data-joint-login-notice>'+
+      '<strong>Inicio de sesión necesario</strong>'+
+      '<span>Tu Actor ID anterior no autentica el cálculo en GestorEscuela. '+
+      'Las ausencias guardadas localmente no se pierden. Entra con una cuenta '+
+      'autorizada de tu centro, sin crear otro centro ni cambiar el horario.</span>'+
+      '<button type="button" class="button" data-view="integration" '+
+      'data-joint-login>Ir a Cuenta y sincronización</button></div>':'')+
     (embedded?'':'<form data-joint-absence-date class="operations-joint-date">'+
     '<label>Fecha <input type="date" name="jointDate" value="'+esc(date)+'" required></label>'+
     '<button class="button" type="submit">Ver ausencias registradas</button>'+
