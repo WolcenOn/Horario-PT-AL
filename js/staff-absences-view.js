@@ -140,7 +140,7 @@ export function renderStaffAbsences(root,{
       renderJointAbsencePanel({
         date:calendar.selectedDay,plan:joint.plan,assessment:joint.assessment,
         status:joint.status,result:joint.result,state,adapter:joint.adapter,
-        connected:joint.connected,adapterReady:joint.adapterReady,
+        connected:joint.connected,needsLogin:joint.needsLogin,adapterReady:joint.adapterReady,
         embedded:true,draftReview:joint.draftReview
       }):'')+
     '<section class="card"><div class="card-body"><h3>Cobertura provisional y sin aplicación</h3>'+
