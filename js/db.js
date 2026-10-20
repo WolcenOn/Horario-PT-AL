@@ -62,6 +62,33 @@ export async function put(storeName, value) {
   return transaction(storeName, 'readwrite', store => store.put(value));
 }
 
+// Compare and write in one IndexedDB transaction, preventing stale edits
+// from silently overwriting an updated or deleted record in another tab.
+export async function putIfUnchanged(storeName, value, original = null) {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    let conflict = null;
+    const request = store.get(value.id);
+    request.onsuccess = () => {
+      const persisted = request.result;
+      const matches = original === null
+        ? persisted === undefined
+        : JSON.stringify(persisted) === JSON.stringify(original);
+      if (!matches) {
+        conflict = new Error('La ficha cambió en otra pestaña o fue eliminada. No se han guardado tus cambios. Vuelve a abrirla para editar su última versión.');
+        tx.abort();
+        return;
+      }
+      store.put(value);
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(conflict || tx.error);
+    tx.onabort = () => reject(conflict || tx.error || new Error('No se pudo guardar la ficha.'));
+  });
+}
+
 export async function remove(storeName, id) {
   return transaction(storeName, 'readwrite', store => store.delete(id));
 }

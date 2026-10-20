@@ -1,4 +1,4 @@
-import { get, getAll, put, remove, replaceClassSubjectData, replaceStoreData } from './db.js';
+import { get, getAll, put, putIfUnchanged, remove, replaceClassSubjectData, replaceStoreData } from './db.js';
 import { normalizeSchoolSettings } from './education.js';
 import { normalizeAutomationSettings } from './automation-core.js';
 import { normalizeCenterPlanningSettings } from './center-planning.js';
@@ -33,6 +33,8 @@ export const saveStudent = student => put('students', student);
 export const saveStaffAbsence = absence => put('staffAbsences', normalizeStaffAbsence(absence));
 export const deleteStaffAbsence = id => remove('staffAbsences', id);
 export const saveProfessional = professional => put('professionals', professional);
+export const saveProfessionalIfUnchanged = (professional, original = null) =>
+  putIfUnchanged('professionals', professional, original);
 export const saveGroup = group => put('groups', group);
 export const saveSession = session => put('sessions', session);
 export const saveClassSchedule = entry => entry?.__weeklyBatch

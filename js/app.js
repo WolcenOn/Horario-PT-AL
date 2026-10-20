@@ -15,7 +15,7 @@ import { calculateStudentHours, totalsFromHours } from './hours.js';
 import { conflictStudentIds, detectConflicts } from './conflicts.js';
 import { configuredClassGroups } from './education.js';
 import { ensureSeedData, loadDemoData } from './seed.js';
-import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, replaceClassSchedules, replaceSessions, saveAutomationSettings, saveCenterPlanningSettings, saveClassSchedule, saveGroup, saveProfessional, saveSchoolSettings, saveSession, saveStudent } from './repository.js';
+import { deleteClassSchedule, deleteGroup, deleteProfessional, deleteSession, deleteStudent, loadState, replaceClassSchedules, replaceSessions, saveAutomationSettings, saveCenterPlanningSettings, saveClassSchedule, saveGroup, saveProfessionalIfUnchanged, saveSchoolSettings, saveSession, saveStudent } from './repository.js';
 import { put, resetDatabase } from './db.js';
 import { downloadSharePackage, importShareFile } from './sharing.js';
 import { printCalendar } from './print.js';
@@ -531,7 +531,13 @@ function editStudent(id) {
 function editProfessional(id) {
   const professional = id ? state.professionals.find(item => item.id === id) : null;
   openProfessionalForm(professional, { state, onSave: async value => {
-    await saveProfessional(value);
+    const latest = await loadState();
+    const linkedGroups = latest.groups.filter(group => group.professionalId === value.id);
+    const incompatible = linkedGroups.filter(group => group.tipo !== value.tipo);
+    if (incompatible.length) {
+      throw new Error('Este profesional tiene grupos PT/AL vinculados. Reasigna esos grupos antes de cambiar su tipo.');
+    }
+    await saveProfessionalIfUnchanged(value, professional || null);
     autoProposal = null;
     globalProposal = null;
     await refresh({ toast: professional ? 'Profesorado actualizado.' : 'Profesional creado.' });

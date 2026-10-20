@@ -224,7 +224,7 @@ export function normalizeProfessionalProfile(professional) {
     ...teachingAssignments.map(item => item.materia)
   ]);
   const specialtySubjects = normalizeAllowedSubjects(
-    Array.isArray(current.specialtySubjects) && current.specialtySubjects.length
+    Array.isArray(current.specialtySubjects)
       ? current.specialtySubjects
       : inferSpecialtySubjects(current.especialidad, allowedSubjects)
   ).filter(subject => allowedSubjects.some(allowed => normalizeText(allowed) === normalizeText(subject)));
