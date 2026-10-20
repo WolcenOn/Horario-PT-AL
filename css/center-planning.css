@@ -32,7 +32,21 @@
 .curriculum-coverage-card.is-unconfigured { opacity: .85; }
 .coverage-totals { display: flex; gap: 14px; flex-wrap: wrap; padding: 9px 13px; background: var(--surface-muted); font-size: .8rem; }
 .center-planning-actions { position: sticky; bottom: 12px; display: flex; justify-content: flex-end; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,.94); box-shadow: var(--shadow); z-index: 5; }
-.professional-edit-inline { display: inline-flex; margin-top: 6px; font-size: .82rem; }
+.professional-name-row { display: flex; gap: 8px; align-items: center; }
+.professional-name-row strong { display: inline; min-width: 0; }
+.professional-name-actions { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.professional-icon-action { display: inline-flex; align-items: center; justify-content: center; width: 29px; height: 29px; padding: 5px; border: 1px solid transparent; border-radius: 7px; color: var(--primary); background: transparent; }
+.professional-icon-action svg { display: block; width: 17px; height: 17px; }
+.professional-icon-action:hover { border-color: var(--border-strong); background: var(--surface-muted); }
+.professional-icon-action.is-danger { color: var(--danger); }
+.professional-icon-action.is-danger:hover { background: var(--danger-soft); border-color: #e5b9bb; }
+.professional-load-status { display: block; margin-top: 4px; font-size: .78rem; font-weight: 650; white-space: nowrap; }
+.professional-load-status.is-pending { color: var(--warning); }
+.professional-load-status.is-exceeded { color: var(--danger); }
+.professional-load-status.is-balanced { color: var(--success); }
+.professional-load-status.is-undefined { color: var(--muted); }
+.professional-form-load { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; padding: 9px 11px; background: var(--surface-muted); border-radius: 8px; font-size: .82rem; color: var(--muted); }
+.professional-form-load strong { color: var(--text); }
 .professional-day-list { display: grid; gap: 12px; margin-top: 8px; }
 .professional-day-entry { display: grid; grid-template-columns: minmax(80px, 115px) minmax(0, 1fr); align-items: start; gap: 8px 12px; padding: 10px; border: 1px solid var(--border); border-radius: 9px; }
 .professional-day-entry > strong { grid-row: span 2; padding-top: 8px; }

@@ -13,7 +13,7 @@ import {
 } from './center-planning.js';
 import { escapeHtml, formatDuration, minutesParts, targetFromParts, uid } from './utils.js';
 import { showModal, setModalMessage } from './ui.js';
-import { sessionDuration } from './hours.js';
+import { summarizeProfessionalWorkload } from './professional-schedule.js';
 import { effectiveAvailability, externalBlocksForDay, normalizeExternalBlocks } from './professional-availability.js';
 import {normalizeTeacherEmail} from './absence-email.js';
 import {auditTeacherAccountContacts,staffContactLabel} from './teacher-account-contacts.js';
@@ -24,8 +24,15 @@ export function renderProfessionals(root, { state, onEdit, onDelete }) {
   const rows = [...state.professionals].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(raw => {
     const prof = normalizeProfessionalProfile(raw);
     const contact=contactById.get(prof.id);
-    const profSessions = state.sessions.filter(s => (s.professionalId || state.groups.find(g=>g.id===s.groupId)?.professionalId) === prof.id);
-    const used = profSessions.reduce((sum,s)=>sum+sessionDuration(s),0);
+    const workload = summarizeProfessionalWorkload(state, prof.id);
+    const difference = workload?.differenceMinutes;
+    const differenceClass = difference === null ? 'is-undefined'
+      : difference < 0 ? 'is-exceeded' : difference === 0 ? 'is-balanced' : 'is-pending';
+    const differenceLabel = difference === null ? 'Sin capacidad definida'
+      : difference < 0 ? `Exceso ${formatDuration(-difference)}`
+      : difference === 0 ? 'Completa' : `Faltan ${formatDuration(difference)}`;
+    const capacityLabel = workload.capacitySource === 'undefined' ? 'Sin definir'
+      : formatDuration(workload.capacityMinutes);
     const external = DAYS.flatMap(day => externalBlocksForDay(prof, day.id).map(block => `${day.label.slice(0,3)} ${block.centro} ${block.inicio}–${block.fin}`));
     const typeBadge = prof.tipo === 'PT' ? 'badge-pt' : prof.tipo === 'AL' ? 'badge-al' : 'badge-neutral';
     const teaching = prof.teachingAssignments.map(item => `${item.grupoClase} · ${item.materia}`);
@@ -33,21 +40,45 @@ export function renderProfessionals(root, { state, onEdit, onDelete }) {
     const permissions = prof.allowedSubjects || [];
     const specialties = prof.specialtySubjects || [];
     return `<tr>
-      <td class="name-cell"><strong>${escapeHtml(prof.nombre)}</strong><small>${escapeHtml(prof.especialidad || (prof.tipo === 'DOCENTE' ? 'Docente' : prof.tipo))} · ${teacherRoleLabel(prof.teacherRole)} · ${prof.activo === false ? 'Inactivo' : 'Activo'}</small><button class="button button-ghost professional-edit-inline" type="button" data-edit-professional="${escapeHtml(prof.id)}" aria-label="Modificar ficha de ${escapeHtml(prof.nombre)}">Editar ficha</button></td>
+      <td class="name-cell">
+        <div class="professional-name-row">
+          <strong>${escapeHtml(prof.nombre)}</strong>
+          <div class="professional-name-actions">
+            <button class="professional-icon-action" type="button" data-edit="${escapeHtml(prof.id)}"
+              aria-label="Editar ficha de ${escapeHtml(prof.nombre)}" title="Editar ficha de ${escapeHtml(prof.nombre)}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg>
+            </button>
+            <button class="professional-icon-action is-danger" type="button" data-delete="${escapeHtml(prof.id)}"
+              aria-label="Eliminar ficha de ${escapeHtml(prof.nombre)}" title="Eliminar ficha de ${escapeHtml(prof.nombre)}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M5 6l1 14h12l1-14"/><path d="M10 10v7M14 10v7"/></svg>
+            </button>
+          </div>
+        </div>
+        <small>${escapeHtml(prof.especialidad || (prof.tipo === 'DOCENTE' ? 'Docente' : prof.tipo))} · ${teacherRoleLabel(prof.teacherRole)} · ${prof.activo === false ? 'Inactivo' : 'Activo'}</small>
+      </td>
       <td><span class="badge ${typeBadge}">${escapeHtml(prof.tipo)}</span></td>
       <td>${escapeHtml(prof.tutoriaGrupo || '—')}<small>${escapeHtml(tutorPreferenceLabel(prof.tutorPreference))}</small></td>
       <td>${specialties.length ? `<div class="professional-external-summary">${specialties.map(item => `<span><strong>★</strong> ${escapeHtml(item)}</span>`).join('')}</div>` : '—'}</td>
       <td>${permissions.length ? `<div class="professional-external-summary">${permissions.slice(0,5).map(item => `<span>${escapeHtml(item)}</span>`).join('')}${permissions.length > 5 ? `<span>+ ${permissions.length - 5} más</span>` : ''}</div>` : '—'}</td>
       <td>${teaching.length ? `<div class="professional-external-summary">${teaching.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : '—'}</td>
       <td>${functions.length ? `<div class="professional-external-summary">${functions.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : '—'}</td>
-      <td>${formatDuration(prof.maxWeeklyMinutes || 0)}</td>
+      <td data-capacity-id="${escapeHtml(prof.id)}">
+        <strong>${capacityLabel}</strong>
+        ${workload.capacitySource === 'availability' ? '<small>Según disponibilidad</small>' : ''}
+      </td>
+      <td data-programmed-id="${escapeHtml(prof.id)}">
+        <strong>${formatDuration(workload.scheduledMinutes)}</strong>
+        <small class="professional-load-status ${differenceClass}">${differenceLabel}</small>
+        ${workload.overlapMinutes ? `<small class="professional-load-status is-exceeded">Solapes: ${formatDuration(workload.overlapMinutes)}</small>` : ''}
+      </td>
       <td>${external.length ? `<div class="professional-external-summary">${external.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : '—'}</td>
       <td data-teacher-account-contact="${escapeHtml(contact?.status||'missing')}">${contact?.email?escapeHtml(contact.email):'—'}<small>${escapeHtml(staffContactLabel(contact?.status))}</small></td>
-      <td class="table-actions"><button class="button" data-edit="${prof.id}" type="button">Editar</button><button class="button button-danger" data-delete="${prof.id}" type="button">Eliminar</button></td>
-    </tr>`;
+     </tr>`;
   }).join('');
-  root.innerHTML = `<section class="card"><div class="card-header"><div><h2>Profesorado del centro</h2><small>Para modificar cualquier ficha, pulsa «Editar ficha» junto al nombre del profesional. Los cambios se guardan solo en este navegador, hasta una sincronización explícita.</small></div><span class="badge badge-neutral">${state.professionals.length} profesionales</span></div><p class="absence-guidance" data-teacher-account-summary>Correos individuales registrados: ${accountContacts.summary.contactOnly} de ${accountContacts.summary.total}. Sin correo: ${accountContacts.summary.missing}; formato incorrecto: ${accountContacts.summary.invalid}; compartidos: ${accountContacts.summary.shared}. <strong>El correo de contacto no constituye una cuenta de acceso verificada.</strong> Es necesario activar una cuenta remota y acreditar el control del buzón antes de recuperar contraseñas.</p><div class="table-wrap"><table><thead><tr><th>Profesional</th><th>Tipo</th><th>Tutoría</th><th>Especialidad principal</th><th>Puede impartir</th><th>Docencia fijada</th><th>Funciones</th><th>Capacidad semanal</th><th>Otros centros</th><th>Correo y futuro acceso</th><th>Acciones</th></tr></thead><tbody>${rows || `<tr><td colspan="11"><div class="empty-state"><strong>No hay profesorado</strong>Utiliza “Nuevo profesor” para comenzar.</div></td></tr>`}</tbody></table></div></section>`;
-  root.onclick = event => { const e=event.target.closest('[data-edit], [data-edit-professional]'); const d=event.target.closest('[data-delete]'); if(e)onEdit(e.dataset.edit || e.dataset.editProfessional); if(d)onDelete(d.dataset.delete); };
+  root.innerHTML = `<section class="card"><div class="card-header"><div><h2>Profesorado del centro</h2><small>Usa el lápiz junto al nombre para editar. «Programado» suma el tiempo ocupado en clases ordinarias, apoyos PT/AL y actividades con horario; no cuenta funciones sin franja ni asignaciones pendientes de colocar. El guardado sigue siendo local hasta sincronizar.</small></div><span class="badge badge-neutral">${state.professionals.length} profesionales</span></div><p class="absence-guidance" data-teacher-account-summary>Correos individuales registrados: ${accountContacts.summary.contactOnly} de ${accountContacts.summary.total}. Sin correo: ${accountContacts.summary.missing}; formato incorrecto: ${accountContacts.summary.invalid}; compartidos: ${accountContacts.summary.shared}. <strong>El correo de contacto no constituye una cuenta de acceso verificada.</strong> Es necesario activar una cuenta remota y acreditar el control del buzón antes de recuperar contraseñas.</p><div class="table-wrap"><table><thead><tr><th>Profesional</th><th>Tipo</th><th>Tutoría</th><th>Especialidad principal</th><th>Puede impartir</th><th>Docencia fijada</th><th>Funciones</th><th>Capacidad semanal</th><th>Programado</th><th>Otros centros</th><th>Correo y futuro acceso</th></tr></thead><tbody>${rows || `<tr><td colspan="11"><div class="empty-state"><strong>No hay profesorado</strong>Utiliza “Nuevo profesor” para comenzar.</div></td></tr>`}</tbody></table></div></section>`;
+  root.onclick = event => { const e=event.target.closest('[data-edit]'); const d=event.target.closest('[data-delete]'); if(e)onEdit(e.dataset.edit); if(d)onDelete(d.dataset.delete); };
 }
 
 function availabilityRow(day, interval = {}) {
@@ -80,6 +111,7 @@ function overlappingIntervals(intervals) {
 
 export function openProfessionalForm(professional, { state, onSave }) {
   const current = normalizeProfessionalProfile(professional || { tipo:'PT', activo:true, disponibilidad:{}, disponibilidadBase:{}, bloqueosExternos:{} });
+  const workload = professional?.id ? summarizeProfessionalWorkload(state, professional.id) : null;
   const max = minutesParts(current.maxWeeklyMinutes || 0);
   const minTutor = minutesParts(current.minimumTutorMinutes || 0);
   const baseAvailability = current.disponibilidadBase || current.disponibilidad || {};
@@ -128,7 +160,14 @@ export function openProfessionalForm(professional, { state, onSave }) {
       <fieldset class="full"><legend>Materias que puede impartir</legend><div class="subject-permission-grid">${permissionsHtml}</div><p class="field-hint">Marca todas las habilitaciones reales, no solo su especialidad. Las materias de especialidad y las asignaciones fijadas se incluyen automáticamente.</p></fieldset>
       <fieldset class="full"><legend>Asignaturas y clases ya fijadas</legend><div id="teachingAssignments" class="teaching-assignment-list"></div><button class="button" type="button" data-add-teaching>+ Fijar asignatura / clase</button><p class="field-hint">Una asignación aquí significa “este docente debe impartir esta materia a este grupo”. Déjala sin fijar si quieres que el solver pueda decidir.</p></fieldset>
       <fieldset class="full"><legend>Coordinaciones, planes y programas</legend><div id="responsibilities" class="responsibility-list"></div><button class="button" type="button" data-add-responsibility>+ Añadir función</button><p class="field-hint">Estas horas se descuentan de la capacidad disponible para docencia ordinaria.</p></fieldset>
-      <fieldset class="full"><legend>Capacidad lectiva semanal computable</legend><div class="duration-pair"><div class="form-field"><label>Horas</label><input name="maxHours" type="number" min="0" value="${max.hours}"></div><div class="form-field"><label>Minutos</label><input name="maxMinutes" type="number" min="0" max="59" value="${max.minutes}"></div></div><p class="field-hint">Si queda en 0, el Estudio de plantilla utilizará la suma de la disponibilidad semanal como capacidad provisional.</p></fieldset>
+      <fieldset class="full"><legend>Capacidad lectiva semanal computable</legend><div class="duration-pair"><div class="form-field"><label>Horas</label><input name="maxHours" type="number" min="0" value="${max.hours}"></div><div class="form-field"><label>Minutos</label><input name="maxMinutes" type="number" min="0" max="59" value="${max.minutes}"></div></div><p class="field-hint">Si queda en 0, el Estudio de plantilla utilizará la suma de la disponibilidad semanal como capacidad provisional.</p>
+        <div class="professional-form-load" data-professional-form-load>
+          <span>Programado en horarios: <strong>${formatDuration(workload?.scheduledMinutes || 0)}</strong></span>
+          <span>${workload?.differenceMinutes == null ? 'Sin capacidad definida para comparar' :
+            workload.differenceMinutes < 0 ? `Exceso de ${formatDuration(-workload.differenceMinutes)}` :
+            workload.differenceMinutes === 0 ? 'Capacidad cubierta' :
+            `Faltan ${formatDuration(workload.differenceMinutes)} por programar`}</span>
+        </div></fieldset>
       <fieldset class="full"><legend>Disponibilidad lectiva total</legend><p class="field-hint">Puedes tener varias franjas por día. Deja un día sin franjas para indicar que no tienes disponibilidad.</p><div class="professional-day-list">${availabilityHtml}</div></fieldset>
       <fieldset class="full"><legend>Presencia en otros centros</legend><p class="field-hint">Todos los tramos se conservan al editar la ficha; añade o quita los necesarios.</p><div class="professional-day-list">${externalHtml}</div></fieldset>
       <div class="form-field full"><label for="observaciones">Observaciones</label><textarea id="observaciones" name="observaciones">${escapeHtml(current.observaciones || '')}</textarea></div>

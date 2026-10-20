@@ -39,8 +39,8 @@ test('editar ficha conserva todos los tramos diarios, identidad y referencias',a
   });
   await page.reload();
   await page.locator('[data-view="professionals"]').click();
-  await expect(page.getByText('Para modificar cualquier ficha')).toBeVisible();
-  await page.getByRole('button',{name:'Modificar ficha de Profesora inicial'}).click();
+  await expect(page.getByText('Usa el lápiz junto al nombre')).toBeVisible();
+  await page.getByRole('button',{name:'Editar ficha de Profesora inicial'}).click();
   await expect(page.locator('#modalTitle')).toHaveText('Editar profesional');
   await expect(page.locator('[data-availability-day="lunes"] [data-availability-row]')).toHaveCount(2);
   await expect(page.locator('[data-external-day="lunes"] [data-external-row]')).toHaveCount(2);
@@ -80,7 +80,7 @@ test('editar ficha conserva todos los tramos diarios, identidad y referencias',a
   expect(result.absence.professionalId).toBe('prof-edit');
   await page.reload();
   await page.locator('[data-view="professionals"]').click();
-  await page.getByRole('button',{name:'Modificar ficha de Profesora actualizada'}).click();
+  await page.getByRole('button',{name:'Editar ficha de Profesora actualizada'}).click();
   await expect(page.locator('[data-availability-day="lunes"] [data-availability-row]')).toHaveCount(3);
   await expect(page.locator('[data-external-day="lunes"] [data-external-row]')).toHaveCount(2);
 });
@@ -180,4 +180,35 @@ test('alumnos, grupos, sesiones y horarios de aula permiten abrir edición',asyn
     await expect(page.locator('#modalTitle')).toContainText(title);
     await page.locator('#modalForm').getByRole('button',{name:'Cancelar'}).click();
   }
+});
+
+
+test('muestra lápiz compacto y carga horaria programada frente a capacidad',async({page})=>{
+  await page.evaluate(async()=>{
+    const {put}=await import('/js/db.js');
+    await put('professionals',{
+      id:'workload-prof',nombre:'Docente horario',tipo:'PT',activo:true,
+      maxWeeklyMinutes:180,disponibilidad:{lunes:[{inicio:'09:00',fin:'12:00'}]}
+    });
+    await put('groups',{id:'workload-grp',nombre:'Grupo PT',tipo:'PT',
+      professionalId:'workload-prof',studentIds:[]});
+    await put('sessions',{id:'workload-session',groupId:'workload-grp',
+      dia:'lunes',inicio:'09:00',fin:'10:00'});
+    await put('classSchedules',{id:'workload-class',grupoClase:'4ºA',materia:'Lengua',
+      professionalId:'workload-prof',dia:'lunes',inicio:'10:00',fin:'11:00'});
+  });
+  await page.reload();
+  await page.locator('[data-view="professionals"]').click();
+  const row=page.locator('tbody tr').filter({hasText:'Docente horario'});
+  const pencil=row.getByRole('button',{name:'Editar ficha de Docente horario'});
+  await expect(pencil).toBeVisible();
+  await expect(pencil.locator('svg')).toHaveCount(1);
+  await expect(row.locator('[data-edit="workload-prof"]')).toHaveCount(1);
+  await expect(row.locator('[data-delete="workload-prof"]')).toHaveCount(1);
+  await expect(row.locator('[data-capacity-id="workload-prof"]')).toContainText('3 h');
+  await expect(row.locator('[data-programmed-id="workload-prof"]')).toContainText('2 h');
+  await expect(row.locator('[data-programmed-id="workload-prof"]')).toContainText('Faltan 1 h');
+  await pencil.click();
+  await expect(page.locator('#modalTitle')).toHaveText('Editar profesional');
+  await expect(page.locator('[data-professional-form-load]')).toContainText('Programado en horarios: 2 h');
 });

@@ -82,6 +82,10 @@ export function buildProfessionalSchedule(state, professionalId) {
   const activityMinutes = sumKind(entries, 'activity');
   const responsibilityMinutes = (professional.responsibilities || []).reduce((sum, item) => sum + Math.max(0, Number(item.weeklyMinutes) || 0), 0);
   const scheduledMinutes = scheduled.reduce((sum, item) => sum + item.minutes, 0);
+  // Measure distinct occupied clock time, not the sum of overlapping blocks:
+  // simultaneous classes and supports must not inflate the programmed workload.
+  const scheduledOccupiedMinutes = occupiedMinutesByDay(scheduled);
+  const scheduledOverlapMinutes = scheduledMinutes - scheduledOccupiedMinutes;
   const modeledMinutes = scheduledMinutes + responsibilityMinutes;
   const capacity = Math.max(0, Number(professional.maxWeeklyMinutes) || 0);
 
@@ -95,11 +99,69 @@ export function buildProfessionalSchedule(state, professionalId) {
       activityMinutes,
       responsibilityMinutes,
       scheduledMinutes,
+      scheduledOccupiedMinutes,
+      scheduledOverlapMinutes,
       modeledMinutes,
       capacity,
       remaining:capacity ? capacity - modeledMinutes : null
     }
   };
+}
+
+// Used by the professionals table and form. Programmed time is actual
+// timetable blocks; unplaced teaching assignments and responsibilities are
+// deliberately excluded. An unconfigured capacity is not a 0-hour target.
+export function summarizeProfessionalWorkload(state, professionalId) {
+  const model = buildProfessionalSchedule(state, professionalId);
+  if (!model) return null;
+  const professional = model.professional;
+  const configured = Math.max(0, Math.round(Number(professional.maxWeeklyMinutes) || 0));
+  const availability = Object.values(professional.disponibilidad || {}).flat()
+    .reduce((sum, interval) => {
+      const start = timeToMinutes(interval?.inicio);
+      const end = timeToMinutes(interval?.fin);
+      return Number.isFinite(start) && Number.isFinite(end) && end > start
+        ? sum + end - start : sum;
+    }, 0);
+  const capacityMinutes = configured || availability;
+  const scheduledMinutes = model.metrics.scheduledOccupiedMinutes;
+  return {
+    capacityMinutes,
+    capacitySource:configured ? 'configured' : availability ? 'availability' : 'undefined',
+    scheduledMinutes,
+    differenceMinutes:capacityMinutes ? capacityMinutes - scheduledMinutes : null,
+    overlapMinutes:model.metrics.scheduledOverlapMinutes,
+    ordinaryMinutes:model.metrics.ordinaryMinutes,
+    supportMinutes:model.metrics.supportMinutes,
+    activityMinutes:model.metrics.activityMinutes
+  };
+}
+
+function occupiedMinutesByDay(entries) {
+  const byDay = new Map();
+  for (const item of entries) {
+    const start = timeToMinutes(item.inicio);
+    const end = timeToMinutes(item.fin);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    if (!byDay.has(item.dia)) byDay.set(item.dia, []);
+    byDay.get(item.dia).push({start,end});
+  }
+  let total = 0;
+  for (const intervals of byDay.values()) {
+    intervals.sort((a,b)=>a.start-b.start || a.end-b.end);
+    let from = -1, to = -1;
+    for (const item of intervals) {
+      if (item.start > to) {
+        if (to > from) total += to - from;
+        from = item.start;
+        to = item.end;
+      } else {
+        to = Math.max(to, item.end);
+      }
+    }
+    if (to > from) total += to - from;
+  }
+  return total;
 }
 
 export function renderProfessionalSchedule(root, { state, professionalId, onBack, onEdit }) {

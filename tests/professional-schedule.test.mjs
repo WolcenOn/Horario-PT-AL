@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildProfessionalSchedule } from '../js/professional-schedule.js';
+import { buildProfessionalSchedule, summarizeProfessionalWorkload } from '../js/professional-schedule.js';
 
 const professional={
   id:'doc',nombre:'Docente',tipo:'DOCENTE',activo:true,especialidad:'Primaria',
@@ -40,4 +40,49 @@ test('reúne en una ficha la docencia, PT/AL, actividades y otros centros',()=>{
   assert.equal(model.metrics.remaining,960);
   assert.equal(model.byDay.lunes.length,3);
   assert.equal(model.byDay.martes[0].kind,'external');
+});
+
+
+test('la tabla mide minutos realmente programados y el margen semanal',()=>{
+  const data=summarizeProfessionalWorkload(state,'doc');
+  assert.equal(data.capacitySource,'configured');
+  assert.equal(data.capacityMinutes,1200);
+  assert.equal(data.scheduledMinutes,180);
+  assert.equal(data.differenceMinutes,1020);
+  assert.equal(data.ordinaryMinutes,60);
+  assert.equal(data.supportMinutes,60);
+  assert.equal(data.activityMinutes,60);
+  assert.equal(data.overlapMinutes,0);
+});
+
+test('no cuenta dos veces las clases, apoyos y actividades solapados',()=>{
+  const withOverlap={
+    ...state,
+    classSchedules:[...state.classSchedules,{
+      id:'c2',grupoClase:'5ºA',materia:'Lengua',professionalId:'doc',
+      dia:'lunes',inicio:'09:30',fin:'10:30'
+    }]
+  };
+  const data=summarizeProfessionalWorkload(withOverlap,'doc');
+  assert.equal(data.scheduledMinutes,180);
+  assert.equal(data.overlapMinutes,60);
+});
+
+test('la capacidad sin fijar usa disponibilidad; sin ambas, no inventa margen',()=>{
+  const data={...state,professionals:[{...professional,maxWeeklyMinutes:0}]};
+  const workload=summarizeProfessionalWorkload(data,'doc');
+  assert.equal(workload.capacitySource,'availability');
+  assert.equal(workload.capacityMinutes,300);
+  assert.equal(workload.differenceMinutes,120);
+  const undefinedCapacity=summarizeProfessionalWorkload({
+    ...data,professionals:[{...professional,maxWeeklyMinutes:0,disponibilidad:{}}]
+  },'doc');
+  assert.equal(undefinedCapacity.capacitySource,'undefined');
+  assert.equal(undefinedCapacity.differenceMinutes,null);
+});
+
+test('el exceso se calcula usando los bloques únicos, no los duplicados',()=>{
+  const data={...state,professionals:[{...professional,maxWeeklyMinutes:120}]};
+  const workload=summarizeProfessionalWorkload(data,'doc');
+  assert.equal(workload.differenceMinutes,-60);
 });
