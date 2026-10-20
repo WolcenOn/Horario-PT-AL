@@ -33,7 +33,7 @@ export function renderProfessionals(root, { state, onEdit, onDelete }) {
     const permissions = prof.allowedSubjects || [];
     const specialties = prof.specialtySubjects || [];
     return `<tr>
-      <td class="name-cell"><strong>${escapeHtml(prof.nombre)}</strong><small>${escapeHtml(prof.especialidad || (prof.tipo === 'DOCENTE' ? 'Docente' : prof.tipo))} · ${teacherRoleLabel(prof.teacherRole)} · ${prof.activo === false ? 'Inactivo' : 'Activo'}</small><button class="button button-ghost professional-edit-inline" type="button" data-edit="${escapeHtml(prof.id)}" aria-label="Editar ficha de ${escapeHtml(prof.nombre)}">Editar ficha</button></td>
+      <td class="name-cell"><strong>${escapeHtml(prof.nombre)}</strong><small>${escapeHtml(prof.especialidad || (prof.tipo === 'DOCENTE' ? 'Docente' : prof.tipo))} · ${teacherRoleLabel(prof.teacherRole)} · ${prof.activo === false ? 'Inactivo' : 'Activo'}</small><button class="button button-ghost professional-edit-inline" type="button" data-edit-professional="${escapeHtml(prof.id)}" aria-label="Modificar ficha de ${escapeHtml(prof.nombre)}">Editar ficha</button></td>
       <td><span class="badge ${typeBadge}">${escapeHtml(prof.tipo)}</span></td>
       <td>${escapeHtml(prof.tutoriaGrupo || '—')}<small>${escapeHtml(tutorPreferenceLabel(prof.tutorPreference))}</small></td>
       <td>${specialties.length ? `<div class="professional-external-summary">${specialties.map(item => `<span><strong>★</strong> ${escapeHtml(item)}</span>`).join('')}</div>` : '—'}</td>
@@ -47,7 +47,7 @@ export function renderProfessionals(root, { state, onEdit, onDelete }) {
     </tr>`;
   }).join('');
   root.innerHTML = `<section class="card"><div class="card-header"><div><h2>Profesorado del centro</h2><small>Para modificar cualquier ficha, pulsa «Editar ficha» junto al nombre del profesional. Los cambios se guardan solo en este navegador, hasta una sincronización explícita.</small></div><span class="badge badge-neutral">${state.professionals.length} profesionales</span></div><p class="absence-guidance" data-teacher-account-summary>Correos individuales registrados: ${accountContacts.summary.contactOnly} de ${accountContacts.summary.total}. Sin correo: ${accountContacts.summary.missing}; formato incorrecto: ${accountContacts.summary.invalid}; compartidos: ${accountContacts.summary.shared}. <strong>El correo de contacto no constituye una cuenta de acceso verificada.</strong> Es necesario activar una cuenta remota y acreditar el control del buzón antes de recuperar contraseñas.</p><div class="table-wrap"><table><thead><tr><th>Profesional</th><th>Tipo</th><th>Tutoría</th><th>Especialidad principal</th><th>Puede impartir</th><th>Docencia fijada</th><th>Funciones</th><th>Capacidad semanal</th><th>Otros centros</th><th>Correo y futuro acceso</th><th>Acciones</th></tr></thead><tbody>${rows || `<tr><td colspan="11"><div class="empty-state"><strong>No hay profesorado</strong>Utiliza “Nuevo profesor” para comenzar.</div></td></tr>`}</tbody></table></div></section>`;
-  root.onclick = event => { const e=event.target.closest('[data-edit]'); const d=event.target.closest('[data-delete]'); if(e)onEdit(e.dataset.edit); if(d)onDelete(d.dataset.delete); };
+  root.onclick = event => { const e=event.target.closest('[data-edit], [data-edit-professional]'); const d=event.target.closest('[data-delete]'); if(e)onEdit(e.dataset.edit || e.dataset.editProfessional); if(d)onDelete(d.dataset.delete); };
 }
 
 function availabilityRow(day, interval = {}) {

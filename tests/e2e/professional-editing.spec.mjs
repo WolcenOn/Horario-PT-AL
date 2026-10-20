@@ -40,7 +40,7 @@ test('editar ficha conserva todos los tramos diarios, identidad y referencias',a
   await page.reload();
   await page.locator('[data-view="professionals"]').click();
   await expect(page.getByText('Para modificar cualquier ficha')).toBeVisible();
-  await page.getByRole('button',{name:'Editar ficha de Profesora inicial'}).click();
+  await page.getByRole('button',{name:'Modificar ficha de Profesora inicial'}).click();
   await expect(page.locator('#modalTitle')).toHaveText('Editar profesional');
   await expect(page.locator('[data-availability-day="lunes"] [data-availability-row]')).toHaveCount(2);
   await expect(page.locator('[data-external-day="lunes"] [data-external-row]')).toHaveCount(2);
@@ -80,7 +80,7 @@ test('editar ficha conserva todos los tramos diarios, identidad y referencias',a
   expect(result.absence.professionalId).toBe('prof-edit');
   await page.reload();
   await page.locator('[data-view="professionals"]').click();
-  await page.getByRole('button',{name:'Editar ficha de Profesora actualizada'}).click();
+  await page.getByRole('button',{name:'Modificar ficha de Profesora actualizada'}).click();
   await expect(page.locator('[data-availability-day="lunes"] [data-availability-row]')).toHaveCount(3);
   await expect(page.locator('[data-external-day="lunes"] [data-external-row]')).toHaveCount(2);
 });
@@ -171,7 +171,9 @@ test('alumnos, grupos, sesiones y horarios de aula permiten abrir edición',asyn
     ['classSchedules','edit-class','Editar']
   ]){
     await page.locator(`[data-view="${view}"]`).click();
-    const button=page.locator(`[data-edit="${id}"]`).first();
+    const button=page.locator(view==='classSchedules'
+      ? `[data-edit-week="${id}"]`
+      : `[data-edit="${id}"]`).first();
     await expect(button).toBeVisible();
     await button.click();
     await expect(page.locator('#modalForm')).toBeVisible();
